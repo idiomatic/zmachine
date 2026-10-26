@@ -19,8 +19,8 @@ zig build
 | `--plain` | Plain text output, without escape sequences |
 
 When stdout is a terminal, the interpreter draws full-screen with
-xterm-256color escape sequences: a coloured status line, a scrolling lower
-window, an upper window for version 4+ stories, text styles, colours and a
+xterm-256color escape sequences: a colored status line, a scrolling lower
+window, an upper window for version 4+ stories, text styles, colors and a
 `[MORE]` prompt. When input is piped in, commands are echoed so the output
 reads like a transcript, which makes scripted testing easy:
 
@@ -68,3 +68,11 @@ Inform stories use for the status line.
 | `src/inspector.html` | The inspector page, embedded in the binary |
 
 Run the unit tests with `zig build test`.
+
+## How it was made
+
+Biblio was written with [Claude Code](https://claude.com/claude-code).
+
+## License
+
+[BSD 3-Clause](LICENSE)

@@ -17,6 +17,7 @@ zig build
 | `--seed <n>` | Seed the random number generator for reproducible runs |
 | `-t`, `--transcript <file>` | Write a transcript from the start of the story |
 | `--plain` | Plain text output, without escape sequences |
+| `--version` | Show the version |
 
 When stdout is a terminal, the interpreter draws full-screen with
 xterm-256color escape sequences: a colored status line, a scrolling lower

@@ -1,8 +1,13 @@
 const std = @import("std");
+const manifest = @import("build.zig.zon");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const strip = b.option(bool, "strip", "Omit debug information");
+
+    const options = b.addOptions();
+    options.addOption([]const u8, "version", manifest.version);
 
     const exe = b.addExecutable(.{
         .name = "zmachine",
@@ -10,8 +15,10 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/main.zig"),
             .target = target,
             .optimize = optimize,
+            .strip = strip,
         }),
     });
+    exe.root_module.addOptions("build_options", options);
     b.installArtifact(exe);
 
     const run_step = b.step("run", "Run the interpreter");

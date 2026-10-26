@@ -8,6 +8,7 @@ const Machine = @import("Machine.zig");
 const Screen = @import("Screen.zig");
 const terminal = @import("terminal.zig");
 const web = @import("web.zig");
+const build_options = @import("build_options");
 
 const usage =
     \\Usage: zmachine [options] <story-file>
@@ -21,6 +22,7 @@ const usage =
     \\                     Write a transcript from the start of the story
     \\  --plain            Plain text output, without escape sequences
     \\  -h, --help         Show this help
+    \\  --version          Show the version
     \\
 ;
 
@@ -32,14 +34,22 @@ const Options = struct {
     plain: bool = false,
 };
 
-fn parseArgs(args: []const []const u8) !?Options {
+const Command = union(enum) {
+    run: Options,
+    usage,
+    version,
+};
+
+fn parseArgs(args: []const []const u8) !Command {
     var story_path: ?[]const u8 = null;
     var options: Options = .{ .story_path = "" };
     var i: usize = 1;
     while (i < args.len) : (i += 1) {
         const arg = args[i];
         if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
-            return null;
+            return .usage;
+        } else if (std.mem.eql(u8, arg, "--version")) {
+            return .version;
         } else if (std.mem.eql(u8, arg, "-w") or std.mem.eql(u8, arg, "--web")) {
             i += 1;
             if (i >= args.len) return error.MissingArgument;
@@ -60,8 +70,8 @@ fn parseArgs(args: []const []const u8) !?Options {
             return error.InvalidArgument;
         }
     }
-    options.story_path = story_path orelse return null;
-    return options;
+    options.story_path = story_path orelse return .usage;
+    return .{ .run = options };
 }
 
 /// Default save file name: the story's base name with a .qzl extension.
@@ -81,14 +91,22 @@ pub fn main(init: std.process.Init) !u8 {
     const stderr = &stderr_writer.interface;
 
     const args = try init.minimal.args.toSlice(arena);
-    const options = (parseArgs(args) catch |err| {
+    const command = parseArgs(args) catch |err| {
         try stderr.print("zmachine: {s}\n\n{s}", .{ @errorName(err), usage });
         try stderr.flush();
         return 2;
-    }) orelse {
-        try stderr.writeAll(usage);
-        try stderr.flush();
-        return 2;
+    };
+    const options = switch (command) {
+        .run => |options| options,
+        .usage => {
+            try stderr.writeAll(usage);
+            try stderr.flush();
+            return 2;
+        },
+        .version => {
+            try Io.File.stdout().writeStreamingAll(io, "zmachine " ++ build_options.version ++ "\n");
+            return 0;
+        },
     };
 
     const story = Io.Dir.cwd().readFileAlloc(io, options.story_path, gpa, .limited(1 << 20)) catch |err| {

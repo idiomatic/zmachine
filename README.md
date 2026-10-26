@@ -71,7 +71,7 @@ Run the unit tests with `zig build test`.
 
 ## How it was made
 
-Biblio was written with [Claude Code](https://claude.com/claude-code).
+zmachine was written with [Claude Code](https://claude.com/claude-code).
 
 ## License
 

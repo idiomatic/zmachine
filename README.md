@@ -9,6 +9,18 @@ zig build
 ./zig-out/bin/zmachine path/to/zork1.z3
 ```
 
+Prebuilt binaries for Linux, macOS and Windows are on the
+[releases page](https://github.com/idiomatic/zmachine/releases).
+
+> [!NOTE]
+> The macOS binaries are not yet code signed or notarized, so Gatekeeper
+> blocks one downloaded with a browser. Allow it under System Settings ›
+> Privacy & Security › Open Anyway, or clear the quarantine flag:
+>
+> ```
+> xattr -d com.apple.quarantine zmachine
+> ```
+
 ## Options
 
 | Option | Meaning |

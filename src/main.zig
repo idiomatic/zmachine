@@ -1,0 +1,177 @@
+//! zmachine: a Z-machine interpreter for the terminal.
+
+const std = @import("std");
+const Io = std.Io;
+
+const Inspector = @import("Inspector.zig");
+const Machine = @import("Machine.zig");
+const Screen = @import("Screen.zig");
+const web = @import("web.zig");
+
+const usage =
+    \\Usage: zmachine [options] <story-file>
+    \\
+    \\Options:
+    \\  -w, --web <port>   Serve the live object inspector and map on
+    \\                     http://127.0.0.1:<port>/
+    \\  --seed <n>         Seed the random number generator (the same
+    \\                     generator as Frotz, so `dfrotz -s <n>` matches)
+    \\  -t, --transcript <file>
+    \\                     Write a transcript from the start of the story
+    \\  --plain            Plain text output, without escape sequences
+    \\  -h, --help         Show this help
+    \\
+;
+
+const Options = struct {
+    story_path: []const u8,
+    web_port: ?u16 = null,
+    seed: ?u64 = null,
+    transcript: ?[]const u8 = null,
+    plain: bool = false,
+};
+
+fn parseArgs(args: []const []const u8) !?Options {
+    var story_path: ?[]const u8 = null;
+    var options: Options = .{ .story_path = "" };
+    var i: usize = 1;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+        if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
+            return null;
+        } else if (std.mem.eql(u8, arg, "-w") or std.mem.eql(u8, arg, "--web")) {
+            i += 1;
+            if (i >= args.len) return error.MissingArgument;
+            options.web_port = try std.fmt.parseInt(u16, args[i], 10);
+        } else if (std.mem.eql(u8, arg, "--seed")) {
+            i += 1;
+            if (i >= args.len) return error.MissingArgument;
+            options.seed = try std.fmt.parseInt(u64, args[i], 10);
+        } else if (std.mem.eql(u8, arg, "-t") or std.mem.eql(u8, arg, "--transcript")) {
+            i += 1;
+            if (i >= args.len) return error.MissingArgument;
+            options.transcript = args[i];
+        } else if (std.mem.eql(u8, arg, "--plain")) {
+            options.plain = true;
+        } else if (story_path == null and !std.mem.startsWith(u8, arg, "-")) {
+            story_path = arg;
+        } else {
+            return error.InvalidArgument;
+        }
+    }
+    options.story_path = story_path orelse return null;
+    return options;
+}
+
+/// Restores the terminal when interrupted, since the scroll region and
+/// colours would otherwise outlive the process.
+fn handleSignal(sig: std.posix.SIG) callconv(.c) void {
+    _ = sig;
+    const reset = "\x1b[0m\x1b[r\r\n";
+    _ = std.c.write(Io.File.stdout().handle, reset, reset.len);
+    std.process.exit(130);
+}
+
+fn installSignalHandlers() void {
+    const action: std.posix.Sigaction = .{
+        .handler = .{ .handler = handleSignal },
+        .mask = std.posix.sigemptyset(),
+        .flags = 0,
+    };
+    std.posix.sigaction(.INT, &action, null);
+    std.posix.sigaction(.TERM, &action, null);
+}
+
+/// Default save file name: the story's base name with a .qzl extension.
+fn saveName(arena: std.mem.Allocator, story_path: []const u8) ![]const u8 {
+    const base = std.fs.path.basename(story_path);
+    const stem = if (std.mem.lastIndexOfScalar(u8, base, '.')) |dot| base[0..dot] else base;
+    return std.fmt.allocPrint(arena, "{s}.qzl", .{stem});
+}
+
+pub fn main(init: std.process.Init) !u8 {
+    const arena = init.arena.allocator();
+    const gpa = init.gpa;
+    const io = init.io;
+
+    var stderr_buf: [1024]u8 = undefined;
+    var stderr_writer: Io.File.Writer = .init(.stderr(), io, &stderr_buf);
+    const stderr = &stderr_writer.interface;
+
+    const args = try init.minimal.args.toSlice(arena);
+    const options = (parseArgs(args) catch |err| {
+        try stderr.print("zmachine: {s}\n\n{s}", .{ @errorName(err), usage });
+        try stderr.flush();
+        return 2;
+    }) orelse {
+        try stderr.writeAll(usage);
+        try stderr.flush();
+        return 2;
+    };
+
+    const story = Io.Dir.cwd().readFileAlloc(io, options.story_path, gpa, .limited(1 << 20)) catch |err| {
+        try stderr.print("zmachine: cannot read {s}: {s}\n", .{ options.story_path, @errorName(err) });
+        try stderr.flush();
+        return 1;
+    };
+    defer gpa.free(story);
+
+    var stdout_buf: [8192]u8 = undefined;
+    var stdout_writer: Io.File.Writer = .initStreaming(.stdout(), io, &stdout_buf);
+    var stdin_buf: [4096]u8 = undefined;
+    var stdin_reader: Io.File.Reader = .initStreaming(.stdin(), io, &stdin_buf);
+
+    const tty_out = try Io.File.stdout().isTty(io);
+    const tty_in = try Io.File.stdin().isTty(io);
+    var screen: Screen = .init(
+        io,
+        &stdout_writer.interface,
+        &stdin_reader.interface,
+        story[0],
+        tty_out and !options.plain,
+        tty_in,
+    );
+
+    const machine = Machine.init(gpa, io, story, &screen, try saveName(arena, options.story_path)) catch |err| {
+        try stderr.print("zmachine: cannot load {s}: {s}\n", .{ options.story_path, @errorName(err) });
+        try stderr.flush();
+        return 1;
+    };
+    defer machine.deinit();
+    if (options.seed) |seed| machine.seedRandom(seed);
+    if (options.transcript) |name| machine.startTranscript(name);
+
+    var inspector: Inspector = .init(gpa, io);
+    defer inspector.deinit();
+    if (options.web_port) |port| {
+        const server = try arena.create(web.Server);
+        server.* = web.Server.listen(gpa, io, &inspector, port) catch |err| {
+            try stderr.print("zmachine: cannot listen on port {d}: {s}\n", .{ port, @errorName(err) });
+            try stderr.flush();
+            return 1;
+        };
+        const thread = try std.Thread.spawn(.{}, web.Server.serve, .{server});
+        thread.detach();
+        machine.observer = inspector.observer();
+        try stderr.print("Inspector running at http://127.0.0.1:{d}/\n", .{port});
+        try stderr.flush();
+    }
+
+    if (screen.ansi) installSignalHandlers();
+    const result = if (screen.start()) machine.run() else |err| err;
+    screen.finish() catch {};
+    result catch |err| {
+        // The reader went away (for example, a closed pipe).
+        if (err == error.WriteFailed) return 0;
+        try stderr.print("zmachine: {s} at pc 0x{x:0>5}\n", .{ @errorName(err), machine.instruction_pc });
+        try stderr.flush();
+        return 1;
+    };
+    return 0;
+}
+
+test {
+    _ = @import("zstring.zig");
+    _ = @import("Inspector.zig");
+    _ = @import("web.zig");
+}

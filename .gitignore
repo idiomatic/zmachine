@@ -1,0 +1,10 @@
+*~
+.zig-cache/
+zig-out/
+*.qzl
+transcript.txt
+.DS_Store
+copy-protection.md
+games/
+manuals/
+tests/walkthroughs/

@@ -1,0 +1,713 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Z-Machine Inspector</title>
+<style>
+:root {
+  --bg: #f6f5f1;
+  --panel: #ffffff;
+  --panel-2: #f0eee8;
+  --border: #dedbd2;
+  --text: #22211e;
+  --muted: #76726a;
+  --accent: #c2410c;
+  --accent-soft: #fde7d9;
+  --link: #1d4ed8;
+  --room: #ffffff;
+  --room-border: #9b968b;
+  --edge: #a8a397;
+  --flash: #fef08a;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15161a;
+    --panel: #1d1f24;
+    --panel-2: #24272d;
+    --border: #33363e;
+    --text: #e6e4df;
+    --muted: #9a978f;
+    --accent: #fb923c;
+    --accent-soft: #3d2516;
+    --link: #93b4ff;
+    --room: #23262c;
+    --room-border: #5d606a;
+    --edge: #5a5d66;
+    --flash: #5b4b0f;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 var(--sans);
+  display: flex;
+  flex-direction: column;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  flex-wrap: wrap;
+}
+header h1 { font-size: 15px; margin: 0; font-weight: 650; letter-spacing: .01em; }
+.meta { color: var(--muted); font-size: 13px; display: flex; gap: 14px; flex-wrap: wrap; }
+.meta b { color: var(--text); font-weight: 600; }
+.status { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; }
+.dot.live { background: #16a34a; box-shadow: 0 0 0 3px #16a34a33; }
+.dot.down { background: #dc2626; }
+main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr);
+  min-height: 0;
+}
+section { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+section + section { border-left: 1px solid var(--border); }
+.tabs { display: flex; gap: 2px; padding: 8px 12px 0; background: var(--panel); border-bottom: 1px solid var(--border); }
+.tab {
+  border: 0; background: none; color: var(--muted); font: inherit; font-weight: 550;
+  padding: 7px 12px; border-bottom: 2px solid transparent; cursor: pointer;
+}
+.tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.pane { flex: 1; min-height: 0; display: none; }
+.pane.active { display: flex; }
+#map-pane { position: relative; overflow: hidden; }
+#map { width: 100%; height: 100%; cursor: grab; touch-action: none; }
+#map.dragging { cursor: grabbing; }
+.map-tools { position: absolute; right: 12px; top: 12px; display: flex; gap: 6px; }
+.map-tools button, .toolbar button {
+  border: 1px solid var(--border); background: var(--panel); color: var(--text);
+  font: inherit; font-size: 12px; padding: 4px 9px; border-radius: 6px; cursor: pointer;
+}
+.map-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
+.room rect { fill: var(--room); stroke: var(--room-border); stroke-width: 1.2; rx: 8; }
+.room text { fill: var(--text); font: 12px var(--sans); text-anchor: middle; dominant-baseline: middle; }
+.room.here rect { stroke: var(--accent); stroke-width: 2.5; fill: var(--accent-soft); }
+.room { cursor: pointer; }
+.edge { stroke: var(--edge); stroke-width: 1.6; fill: none; }
+.edge.vertical { stroke-dasharray: 5 4; }
+.edge.unknown { stroke-dasharray: 2 4; }
+.edge-label { fill: var(--muted); font: 600 10px var(--mono); text-anchor: middle; dominant-baseline: middle; }
+#objects-pane { flex-direction: column; }
+.toolbar { display: flex; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--panel); }
+.toolbar input {
+  flex: 1; min-width: 0; font: inherit; padding: 5px 9px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+}
+.split { flex: 1; display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); min-height: 0; }
+#tree { overflow: auto; padding: 6px 0; font: 13px/1.6 var(--mono); border-bottom: 1px solid var(--border); }
+#tree ul { list-style: none; margin: 0; padding-left: 16px; }
+#tree > ul { padding-left: 6px; }
+.node { display: flex; align-items: baseline; gap: 6px; padding: 0 8px; cursor: pointer; border-radius: 4px; white-space: nowrap; }
+.node:hover { background: var(--panel-2); }
+.node.selected { background: var(--accent-soft); }
+.node .tw { width: 12px; color: var(--muted); flex: none; text-align: center; }
+.node .id { color: var(--muted); }
+.node.here .nm { color: var(--accent); font-weight: 700; }
+.node.flash { animation: flash 2.4s ease-out; }
+@keyframes flash { from { background: var(--flash); } to { background: transparent; } }
+#detail { overflow: auto; padding: 14px 16px; }
+#detail h2 { margin: 0 0 4px; font-size: 16px; }
+#detail .sub { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+#detail h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 16px 0 6px; }
+.links { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 13px; }
+.links span:nth-child(odd) { color: var(--muted); }
+a.obj { color: var(--link); text-decoration: none; cursor: pointer; }
+a.obj:hover { text-decoration: underline; }
+.attrs { display: flex; flex-wrap: wrap; gap: 3px; }
+.attr {
+  font: 11px var(--mono); width: 26px; text-align: center; padding: 2px 0; border-radius: 4px;
+  background: var(--panel-2); color: var(--muted);
+}
+.attr.on { background: var(--accent); color: #fff; font-weight: 700; }
+table { border-collapse: collapse; width: 100%; font: 12px var(--mono); }
+th, td { text-align: left; padding: 3px 8px 3px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+td.hex { word-break: break-all; }
+.placeholder { color: var(--muted); padding: 20px 4px; }
+#globals { overflow: auto; padding: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 4px; align-content: start; font: 12px var(--mono); }
+.g { background: var(--panel); border: 1px solid var(--border); border-radius: 5px; padding: 3px 7px; display: flex; justify-content: space-between; gap: 6px; }
+.g .k { color: var(--muted); }
+.g.flash { animation: flash 2.4s ease-out; }
+#history { overflow: auto; padding: 12px 16px; font: 13px/1.7 var(--mono); margin: 0; }
+#history li { color: var(--text); }
+#history li::marker { color: var(--muted); }
+@media (max-width: 860px) {
+  main { grid-template-columns: 1fr; grid-template-rows: minmax(320px, 1fr) minmax(420px, 1fr); }
+  section + section { border-left: 0; border-top: 1px solid var(--border); }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Z-Machine Inspector</h1>
+  <div class="meta">
+    <span>Story <b id="story">-</b></span>
+    <span>Turn <b id="turn">0</b></span>
+    <span>Location <b id="location">-</b></span>
+  </div>
+  <div class="status"><span class="dot" id="dot"></span><span id="conn">connecting</span></div>
+</header>
+<main>
+  <section>
+    <div class="tabs">
+      <button class="tab active" data-pane="map-pane">Map</button>
+      <button class="tab" data-pane="globals-pane">Globals</button>
+      <button class="tab" data-pane="history-pane">History</button>
+    </div>
+    <div class="pane active" id="map-pane">
+      <svg id="map"><g id="viewport"><g id="edges"></g><g id="rooms"></g></g></svg>
+      <div class="map-tools">
+        <button id="zoom-in" title="Zoom in">+</button>
+        <button id="zoom-out" title="Zoom out">&minus;</button>
+        <button id="recenter" title="Fit the map, or center on the current room">Fit</button>
+      </div>
+      <div class="map-empty" id="map-empty">The map fills in as you explore.</div>
+    </div>
+    <div class="pane" id="globals-pane"><div id="globals"></div></div>
+    <div class="pane" id="history-pane"><ol id="history"></ol></div>
+  </section>
+  <section>
+    <div class="tabs"><button class="tab active">Objects</button></div>
+    <div class="pane active" id="objects-pane">
+      <div class="toolbar">
+        <input id="search" type="search" placeholder="Filter by name or number" autocomplete="off">
+        <button id="follow" title="Select the current room">Here</button>
+      </div>
+      <div class="split">
+        <div id="tree"></div>
+        <div id="detail"><div class="placeholder">Select an object to see its attributes and properties.</div></div>
+      </div>
+    </div>
+  </section>
+</main>
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const svgNS = "http://www.w3.org/2000/svg";
+
+let state = null;
+let byId = new Map();
+let selected = 0;
+let expanded = new Set();
+let lastGlobals = null;
+let flashObjects = new Set();
+
+// Tabs
+
+for (const tab of document.querySelectorAll(".tab[data-pane]")) {
+  tab.addEventListener("click", () => {
+    const group = tab.parentElement;
+    for (const t of group.querySelectorAll(".tab")) t.classList.toggle("active", t === tab);
+    for (const p of group.parentElement.querySelectorAll(".pane")) p.classList.toggle("active", p.id === tab.dataset.pane);
+    if (tab.dataset.pane === "map-pane") applyView();
+  });
+}
+
+// Polling
+
+async function poll() {
+  let generation = 0;
+  for (;;) {
+    try {
+      const res = await fetch(`/state?since=${generation}`, { cache: "no-store" });
+      setConnection(true);
+      if (res.status === 200) {
+        const data = await res.json();
+        generation = data.generation;
+        update(data);
+      }
+    } catch (err) {
+      setConnection(false);
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+}
+
+function setConnection(up) {
+  $("dot").className = "dot " + (up ? "live" : "down");
+  $("conn").textContent = up ? "live" : "disconnected";
+}
+
+function update(data) {
+  const first = state === null;
+  state = data;
+  byId = new Map(data.objects.map((o) => [o.id, o]));
+  flashObjects = new Set(data.changed);
+
+  $("story").textContent = `v${data.version} r${data.release} ${data.serial}`;
+  $("turn").textContent = data.turn;
+  const here = byId.get(data.location);
+  $("location").textContent = here ? `${here.name || "(unnamed)"} (#${here.id})` : "-";
+
+  if (first && data.location) {
+    selected = data.location;
+    revealObject(data.location);
+  }
+  renderTree();
+  renderDetail();
+  renderGlobals();
+  renderHistory();
+  renderMap();
+}
+
+// Object tree
+
+function displayName(o) {
+  return o.name || "(unnamed)";
+}
+
+function childrenOf(o) {
+  const out = [];
+  let c = o.child;
+  const seen = new Set();
+  while (c && byId.has(c) && !seen.has(c)) {
+    seen.add(c);
+    out.push(byId.get(c));
+    c = byId.get(c).sibling;
+  }
+  return out;
+}
+
+function revealObject(id) {
+  let o = byId.get(id);
+  const seen = new Set();
+  while (o && o.parent && !seen.has(o.parent)) {
+    seen.add(o.parent);
+    expanded.add(o.parent);
+    o = byId.get(o.parent);
+  }
+  expanded.add(id);
+}
+
+function matches(o, q) {
+  return String(o.id) === q || displayName(o).toLowerCase().includes(q);
+}
+
+function renderTree() {
+  const q = $("search").value.trim().toLowerCase();
+  const roots = state.objects.filter((o) => !o.parent || !byId.has(o.parent));
+  // When filtering, keep matches and their ancestors.
+  let keep = null;
+  if (q) {
+    keep = new Set();
+    for (const o of state.objects) {
+      if (!matches(o, q)) continue;
+      let p = o;
+      const seen = new Set();
+      while (p && !seen.has(p.id)) {
+        seen.add(p.id);
+        keep.add(p.id);
+        p = byId.get(p.parent);
+      }
+    }
+  }
+  const tree = $("tree");
+  const scroll = tree.scrollTop;
+  tree.replaceChildren(buildList(roots, keep, q, 0));
+  tree.scrollTop = scroll;
+}
+
+function buildList(objects, keep, q, depth) {
+  const ul = document.createElement("ul");
+  for (const o of objects) {
+    if (keep && !keep.has(o.id)) continue;
+    const kids = childrenOf(o);
+    const open = q ? true : expanded.has(o.id);
+    const li = document.createElement("li");
+    const row = document.createElement("div");
+    row.className = "node";
+    if (o.id === selected) row.classList.add("selected");
+    if (o.id === state.location) row.classList.add("here");
+    if (flashObjects.has(o.id)) row.classList.add("flash");
+    const twisty = document.createElement("span");
+    twisty.className = "tw";
+    twisty.textContent = kids.length ? (open ? "▾" : "▸") : "";
+    const id = document.createElement("span");
+    id.className = "id";
+    id.textContent = `#${o.id}`;
+    const nm = document.createElement("span");
+    nm.className = "nm";
+    nm.textContent = displayName(o);
+    row.append(twisty, id, nm);
+    row.addEventListener("click", (ev) => {
+      if (ev.target === twisty && kids.length) {
+        if (expanded.has(o.id)) expanded.delete(o.id); else expanded.add(o.id);
+      } else {
+        select(o.id, false);
+        return;
+      }
+      renderTree();
+    });
+    li.append(row);
+    if (kids.length && open && depth < 64) li.append(buildList(kids, keep, q, depth + 1));
+    ul.append(li);
+  }
+  return ul;
+}
+
+function select(id, reveal) {
+  if (!byId.has(id)) return;
+  selected = id;
+  if (reveal) revealObject(id);
+  expanded.add(id);
+  renderTree();
+  renderDetail();
+  renderMap();
+}
+
+// Object detail
+
+function objLink(id) {
+  if (!id) return document.createTextNode("none");
+  const a = document.createElement("a");
+  a.className = "obj";
+  const o = byId.get(id);
+  a.textContent = o ? `#${id} ${displayName(o)}` : `#${id}`;
+  a.addEventListener("click", () => select(id, true));
+  return a;
+}
+
+function el(tag, text, cls) {
+  const e = document.createElement(tag);
+  if (text !== undefined) e.textContent = text;
+  if (cls) e.className = cls;
+  return e;
+}
+
+function renderDetail() {
+  const box = $("detail");
+  const o = byId.get(selected);
+  if (!o) return;
+  const frag = document.createDocumentFragment();
+  frag.append(el("h2", displayName(o)));
+  frag.append(el("div", `Object #${o.id}` + (o.id === state.location ? " · current location" : ""), "sub"));
+
+  const links = el("div", undefined, "links");
+  for (const [label, id] of [["Parent", o.parent], ["Sibling", o.sibling], ["Child", o.child]]) {
+    const v = el("span");
+    v.append(objLink(id));
+    links.append(el("span", label), v);
+  }
+  frag.append(links);
+
+  const kids = childrenOf(o);
+  if (kids.length) {
+    frag.append(el("h3", `Contents (${kids.length})`));
+    const list = el("div", undefined, "links");
+    list.style.gridTemplateColumns = "1fr";
+    for (const k of kids) {
+      const s = el("span");
+      s.append(objLink(k.id));
+      list.append(s);
+    }
+    frag.append(list);
+  }
+
+  frag.append(el("h3", "Attributes"));
+  const attrs = el("div", undefined, "attrs");
+  const count = state.version <= 3 ? 32 : 48;
+  const on = new Set(o.attrs);
+  for (let i = 0; i < count; i++) {
+    const a = el("span", String(i), "attr" + (on.has(i) ? " on" : ""));
+    a.title = `attribute ${i}` + (on.has(i) ? " (set)" : "");
+    attrs.append(a);
+  }
+  frag.append(attrs);
+
+  frag.append(el("h3", `Properties (${o.props.length})`));
+  if (o.props.length) {
+    const table = el("table");
+    const head = el("tr");
+    head.append(el("th", "#"), el("th", "len"), el("th", "bytes"), el("th", "value"));
+    table.append(head);
+    for (const p of o.props) {
+      const tr = el("tr");
+      const len = p.d.length / 2;
+      let value = "";
+      if (len === 1) value = String(parseInt(p.d, 16));
+      else if (len === 2) value = String(parseInt(p.d, 16));
+      const hex = el("td", p.d.match(/../g)?.join(" ") ?? "", "hex");
+      const vcell = el("td", value);
+      if (len === 2) {
+        const n = parseInt(p.d, 16);
+        if (byId.has(n) && n > 0) {
+          vcell.textContent = "";
+          vcell.append(document.createTextNode(`${n} `), objLink(n));
+        }
+      }
+      tr.append(el("td", String(p.n)), el("td", String(len)), hex, vcell);
+      table.append(tr);
+    }
+    frag.append(table);
+  } else {
+    frag.append(el("div", "No properties.", "placeholder"));
+  }
+  const scroll = box.scrollTop;
+  box.replaceChildren(frag);
+  box.scrollTop = scroll;
+}
+
+// Globals and history
+
+function renderGlobals() {
+  const box = $("globals");
+  const frag = document.createDocumentFragment();
+  state.globals.forEach((v, i) => {
+    const g = el("div", undefined, "g");
+    if (lastGlobals && lastGlobals[i] !== v) g.classList.add("flash");
+    g.append(el("span", `G${i.toString(16).padStart(2, "0")}`, "k"), el("span", String(v)));
+    g.title = `global ${i} (variable ${i + 16}) = ${v} / 0x${v.toString(16)}`;
+    frag.append(g);
+  });
+  box.replaceChildren(frag);
+  lastGlobals = state.globals;
+}
+
+function renderHistory() {
+  const list = $("history");
+  list.replaceChildren(...state.commands.map((c) => el("li", c)));
+  list.scrollTop = list.scrollHeight;
+}
+
+// Map
+
+const DIRS = {
+  n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0],
+  ne: [1, -1], nw: [-1, -1], se: [1, 1], sw: [-1, 1],
+};
+const INVERSE = { n: "s", s: "n", e: "w", w: "e", ne: "sw", sw: "ne", nw: "se", se: "nw", up: "down", down: "up", in: "out", out: "in", unknown: "unknown" };
+// Preferred spots for moves with no compass direction.
+const FALLBACK = { up: [1, -1], down: [-1, 1], in: [1, 1], out: [-1, -1], unknown: [1, 1] };
+const CELL_W = 170, CELL_H = 96, ROOM_W = 132, ROOM_H = 48;
+
+const view = { x: 0, y: 0, scale: 1, userMoved: false };
+let positions = new Map();
+let lastLocation = 0;
+
+function layout(rooms, edges) {
+  const pos = new Map();
+  const taken = new Set();
+  const key = (x, y) => `${x},${y}`;
+  const place = (id, x, y) => { pos.set(id, [x, y]); taken.add(key(x, y)); };
+  const near = (x, y) => {
+    if (!taken.has(key(x, y))) return [x, y];
+    for (let r = 1; r < 50; r++) {
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dy = -r; dy <= r; dy++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          if (!taken.has(key(x + dx, y + dy))) return [x + dx, y + dy];
+        }
+      }
+    }
+    return [x, y];
+  };
+  const placeFrom = (fromId, toId, dir) => {
+    const [fx, fy] = pos.get(fromId);
+    const v = DIRS[dir] || FALLBACK[dir] || FALLBACK.unknown;
+    for (const step of [1, 2]) {
+      const tx = fx + v[0] * step, ty = fy + v[1] * step;
+      if (!taken.has(key(tx, ty))) return place(toId, tx, ty);
+    }
+    const [x, y] = near(fx + v[0], fy + v[1]);
+    place(toId, x, y);
+  };
+
+  if (rooms.length) place(rooms[0].id, 0, 0);
+  // Exploration order gives a stable, intuitive layout.
+  let progress = true;
+  while (progress) {
+    progress = false;
+    for (const e of edges) {
+      if (pos.has(e.from) && !pos.has(e.to)) { placeFrom(e.from, e.to, e.dir); progress = true; }
+      else if (pos.has(e.to) && !pos.has(e.from)) { placeFrom(e.to, e.from, INVERSE[e.dir]); progress = true; }
+    }
+  }
+  for (const r of rooms) {
+    if (!pos.has(r.id)) {
+      const [x, y] = near(0, 0);
+      place(r.id, x, y);
+    }
+  }
+  return pos;
+}
+
+function wrapName(name) {
+  const words = name.split(/\s+/);
+  const lines = [""];
+  for (const w of words) {
+    const cur = lines[lines.length - 1];
+    if ((cur + " " + w).trim().length > 17 && cur) lines.push(w);
+    else lines[lines.length - 1] = (cur + " " + w).trim();
+  }
+  if (lines.length > 2) lines.splice(2, lines.length, lines.slice(1).join(" ").slice(0, 16) + "…");
+  return lines;
+}
+
+function renderMap() {
+  const rooms = state.rooms;
+  $("map-empty").style.display = rooms.length ? "none" : "grid";
+  positions = layout(rooms, state.edges);
+
+  const edgesG = $("edges");
+  const roomsG = $("rooms");
+  edgesG.replaceChildren();
+  roomsG.replaceChildren();
+
+  const center = (id) => {
+    const [x, y] = positions.get(id);
+    return [x * CELL_W, y * CELL_H];
+  };
+
+  const drawn = new Map();
+  for (const e of state.edges) {
+    if (!positions.has(e.from) || !positions.has(e.to)) continue;
+    const pair = e.from < e.to ? `${e.from}-${e.to}` : `${e.to}-${e.from}`;
+    if (drawn.has(pair)) continue;
+    drawn.set(pair, true);
+    const [x1, y1] = center(e.from);
+    const [x2, y2] = center(e.to);
+    const line = document.createElementNS(svgNS, "line");
+    line.setAttribute("x1", x1); line.setAttribute("y1", y1);
+    line.setAttribute("x2", x2); line.setAttribute("y2", y2);
+    let cls = "edge";
+    if (e.dir === "up" || e.dir === "down" || e.dir === "in" || e.dir === "out") cls += " vertical";
+    if (e.dir === "unknown") cls += " unknown";
+    line.setAttribute("class", cls);
+    edgesG.append(line);
+    if (!DIRS[e.dir] && e.dir !== "unknown") {
+      const t = document.createElementNS(svgNS, "text");
+      const lx = x1 + (x2 - x1) * 0.5, ly = y1 + (y2 - y1) * 0.5;
+      t.setAttribute("x", lx); t.setAttribute("y", ly - 8);
+      t.setAttribute("class", "edge-label");
+      t.textContent = { up: "U", down: "D", in: "IN", out: "OUT" }[e.dir];
+      edgesG.append(t);
+    }
+  }
+
+  for (const r of rooms) {
+    const [cx, cy] = center(r.id);
+    const g = document.createElementNS(svgNS, "g");
+    g.setAttribute("class", "room" + (r.id === state.location ? " here" : ""));
+    g.setAttribute("transform", `translate(${cx - ROOM_W / 2},${cy - ROOM_H / 2})`);
+    const rect = document.createElementNS(svgNS, "rect");
+    rect.setAttribute("width", ROOM_W); rect.setAttribute("height", ROOM_H);
+    rect.setAttribute("rx", 8);
+    if (r.id === selected) rect.setAttribute("stroke-width", "2.5");
+    g.append(rect);
+    const lines = wrapName(r.name || `#${r.id}`);
+    lines.forEach((line, i) => {
+      const t = document.createElementNS(svgNS, "text");
+      t.setAttribute("x", ROOM_W / 2);
+      t.setAttribute("y", ROOM_H / 2 + (i - (lines.length - 1) / 2) * 15);
+      t.textContent = line;
+      g.append(t);
+    });
+    const title = document.createElementNS(svgNS, "title");
+    title.textContent = `${r.name} (#${r.id})`;
+    g.append(title);
+    g.addEventListener("click", () => select(r.id, true));
+    roomsG.append(g);
+  }
+
+  if (state.location !== lastLocation) {
+    lastLocation = state.location;
+    if (!view.userMoved) fitOrCenter();
+  }
+  applyView();
+}
+
+function centerOn(id) {
+  if (!positions.has(id)) return;
+  const [x, y] = positions.get(id);
+  view.x = x * CELL_W;
+  view.y = y * CELL_H;
+}
+
+// Shows the whole map when it fits at a readable size, otherwise follows
+// the player.
+function fitOrCenter() {
+  const svg = $("map");
+  const w = svg.clientWidth || 800, h = svg.clientHeight || 600;
+  if (!positions.size) return;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const [x, y] of positions.values()) {
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+  }
+  const spanW = (maxX - minX) * CELL_W + ROOM_W + 48;
+  const spanH = (maxY - minY) * CELL_H + ROOM_H + 48;
+  const scale = Math.min(1, w / spanW, h / spanH);
+  if (scale >= 0.6) {
+    view.scale = scale;
+    view.x = (minX + maxX) / 2 * CELL_W;
+    view.y = (minY + maxY) / 2 * CELL_H;
+  } else {
+    view.scale = Math.max(view.scale, 0.8);
+    centerOn(state.location);
+  }
+}
+
+function applyView() {
+  const svg = $("map");
+  const w = svg.clientWidth || 800, h = svg.clientHeight || 600;
+  const tx = w / 2 - view.x * view.scale;
+  const ty = h / 2 - view.y * view.scale;
+  $("viewport").setAttribute("transform", `translate(${tx},${ty}) scale(${view.scale})`);
+}
+
+function zoom(factor) {
+  view.scale = Math.min(3, Math.max(0.2, view.scale * factor));
+  applyView();
+}
+
+(() => {
+  const svg = $("map");
+  let drag = null;
+  svg.addEventListener("pointerdown", (ev) => {
+    if (ev.target.closest(".room")) return;
+    drag = { x: ev.clientX, y: ev.clientY, vx: view.x, vy: view.y };
+    svg.setPointerCapture(ev.pointerId);
+    svg.classList.add("dragging");
+  });
+  svg.addEventListener("pointermove", (ev) => {
+    if (!drag) return;
+    view.x = drag.vx - (ev.clientX - drag.x) / view.scale;
+    view.y = drag.vy - (ev.clientY - drag.y) / view.scale;
+    view.userMoved = true;
+    applyView();
+  });
+  const end = () => { drag = null; svg.classList.remove("dragging"); };
+  svg.addEventListener("pointerup", end);
+  svg.addEventListener("pointercancel", end);
+  svg.addEventListener("wheel", (ev) => {
+    ev.preventDefault();
+    zoom(ev.deltaY < 0 ? 1.1 : 1 / 1.1);
+  }, { passive: false });
+  $("zoom-in").addEventListener("click", () => zoom(1.25));
+  $("zoom-out").addEventListener("click", () => zoom(0.8));
+  $("recenter").addEventListener("click", () => {
+    view.userMoved = false;
+    if (state) fitOrCenter();
+    applyView();
+  });
+  window.addEventListener("resize", applyView);
+})();
+
+$("search").addEventListener("input", () => state && renderTree());
+$("follow").addEventListener("click", () => state && select(state.location, true));
+
+poll();
+</script>
+</body>
+</html>

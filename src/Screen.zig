@@ -8,7 +8,7 @@
 
 const std = @import("std");
 const Io = std.Io;
-const posix = std.posix;
+const terminal = @import("terminal.zig");
 
 const Screen = @This();
 
@@ -50,7 +50,7 @@ keys: [256]u8 = undefined,
 keys_len: usize = 0,
 keys_pos: usize = 0,
 
-pub const Error = Io.Writer.Error || Io.Reader.Error || error{StreamTooLong} || posix.TermiosSetError;
+pub const Error = Io.Writer.Error || Io.Reader.Error || error{StreamTooLong} || terminal.Error;
 
 pub const Style = struct {
     pub const reverse = 1;
@@ -78,21 +78,13 @@ pub fn init(io: Io, out: *Io.Writer, in: *Io.Reader, version: u8, ansi: bool, tt
         .status_rows = if (version <= 3) 1 else 0,
     };
     if (ansi) {
-        if (querySize()) |size| {
+        if (terminal.size()) |size| {
             s.width = size[0];
             s.height = size[1];
         }
     }
     s.lower_row = s.height;
     return s;
-}
-
-fn querySize() ?[2]u16 {
-    var ws: posix.winsize = undefined;
-    const fd = Io.File.stdout().handle;
-    if (std.c.ioctl(fd, std.c.T.IOCGWINSZ, &ws) != 0) return null;
-    if (ws.col == 0 or ws.row == 0) return null;
-    return .{ ws.col, ws.row };
 }
 
 /// Prepares the terminal: clears it and sets up the scroll region.
@@ -466,15 +458,8 @@ pub fn readKey(s: *Screen) Error!?u8 {
         return s.keys[s.keys_pos - 1];
     }
 
-    const fd = Io.File.stdin().handle;
-    const saved = try posix.tcgetattr(fd);
-    var raw = saved;
-    raw.lflag.ICANON = false;
-    raw.lflag.ECHO = false;
-    raw.cc[@backingInt(posix.V.MIN)] = 1;
-    raw.cc[@backingInt(posix.V.TIME)] = 0;
-    try posix.tcsetattr(fd, .NOW, raw);
-    defer posix.tcsetattr(fd, .NOW, saved) catch {};
+    const raw: terminal.RawMode = try .enter();
+    defer raw.leave();
 
     const c = s.in.takeByte() catch |err| switch (err) {
         error.EndOfStream => return null,

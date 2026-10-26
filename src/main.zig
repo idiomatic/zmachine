@@ -6,6 +6,7 @@ const Io = std.Io;
 const Inspector = @import("Inspector.zig");
 const Machine = @import("Machine.zig");
 const Screen = @import("Screen.zig");
+const terminal = @import("terminal.zig");
 const web = @import("web.zig");
 
 const usage =
@@ -61,25 +62,6 @@ fn parseArgs(args: []const []const u8) !?Options {
     }
     options.story_path = story_path orelse return null;
     return options;
-}
-
-/// Restores the terminal when interrupted, since the scroll region and
-/// colours would otherwise outlive the process.
-fn handleSignal(sig: std.posix.SIG) callconv(.c) void {
-    _ = sig;
-    const reset = "\x1b[0m\x1b[r\r\n";
-    _ = std.c.write(Io.File.stdout().handle, reset, reset.len);
-    std.process.exit(130);
-}
-
-fn installSignalHandlers() void {
-    const action: std.posix.Sigaction = .{
-        .handler = .{ .handler = handleSignal },
-        .mask = std.posix.sigemptyset(),
-        .flags = 0,
-    };
-    std.posix.sigaction(.INT, &action, null);
-    std.posix.sigaction(.TERM, &action, null);
 }
 
 /// Default save file name: the story's base name with a .qzl extension.
@@ -157,7 +139,12 @@ pub fn main(init: std.process.Init) !u8 {
         try stderr.flush();
     }
 
-    if (screen.ansi) installSignalHandlers();
+    if (screen.ansi) {
+        // Windows consoles need escape-sequence processing switched on.
+        Io.File.stdout().enableAnsiEscapeCodes(io) catch {};
+        // Reset styles and the scroll region if interrupted.
+        terminal.restoreOnInterrupt("\x1b[0m\x1b[r\r\n");
+    }
     const result = if (screen.start()) machine.run() else |err| err;
     screen.finish() catch {};
     result catch |err| {

@@ -62,6 +62,7 @@ Inform stories use for the status line.
 | `src/ObjectTable.zig` | Object tree and property tables |
 | `src/zstring.zig` | Z-string decoding, dictionary encoding, ZSCII/Unicode |
 | `src/Screen.zig` | Terminal windows, status line, styles and input |
+| `src/terminal.zig` | Window size, raw keys and Ctrl-C on POSIX and Windows |
 | `src/quetzal.zig` | Quetzal save files |
 | `src/Inspector.zig` | Map tracking and JSON snapshots for the web page |
 | `src/web.zig` | Embedded HTTP server (long-polling `/state`) |

@@ -9,8 +9,8 @@
 const std = @import("std");
 const Io = std.Io;
 const terminal = @import("terminal.zig");
-const Password = @import("Password.zig");
-const Remote = @import("Remote.zig");
+const Password = @import("poly").Password;
+const Remote = @import("hub").Remote;
 
 const Screen = @This();
 

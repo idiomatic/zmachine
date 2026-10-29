@@ -8,7 +8,7 @@ Keep this file up to date with every specification.
 * Zork I prints "You are standing in an open field"; a scripted walkthrough scores 350 of 350.
 * `save`/`restore` (portable Quetzal, default `<story>.qzl`), `script`, `-t <file>` (transcript from the start), `undo` in version 5.
 * `--seed <n>`: Frotz's generator, so transcripts match `dfrotz -s <n> -I 6 -T`.
-* `-h`/`--help`; `--version` prints `build.zig.zon`'s version (0.2.2).
+* `-h`/`--help`; `--version` prints `build.zig.zon`'s version (0.3.0).
 
 ## Terminal
 

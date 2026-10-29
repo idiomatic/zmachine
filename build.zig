@@ -9,6 +9,36 @@ pub fn build(b: *std.Build) void {
     const options = b.addOptions();
     options.addOption([]const u8, "version", manifest.version);
 
+    // The modules, each importing only those before it. A module's
+    // undeclared import doesn't build.
+    const modules = [_]struct { name: []const u8, imports: []const []const u8 }{
+        .{ .name = "poly", .imports = &.{} },
+        .{ .name = "hub", .imports = &.{"poly"} },
+        .{ .name = "console", .imports = &.{ "poly", "hub" } },
+        .{ .name = "vm", .imports = &.{"console"} },
+        .{ .name = "inspector", .imports = &.{"vm"} },
+        .{ .name = "web", .imports = &.{ "inspector", "hub", "poly" } },
+        .{ .name = "mcp", .imports = &.{ "hub", "build_options" } },
+    };
+    var imports: [modules.len + 1]std.Build.Module.Import = undefined;
+    imports[0] = .{ .name = "build_options", .module = options.createModule() };
+    const test_step = b.step("test", "Run unit tests");
+    for (modules, 1..) |m, i| {
+        const module = b.createModule(.{
+            .root_source_file = b.path(b.fmt("src/{s}/root.zig", .{m.name})),
+            .target = target,
+            .optimize = optimize,
+        });
+        for (m.imports) |name| {
+            for (imports[0..i]) |import| {
+                if (std.mem.eql(u8, import.name, name)) module.addImport(name, import.module);
+            }
+        }
+        imports[i] = .{ .name = m.name, .module = module };
+        const tests = b.addTest(.{ .name = m.name, .root_module = module });
+        test_step.dependOn(&b.addRunArtifact(tests).step);
+    }
+
     const exe = b.addExecutable(.{
         .name = "zmachine",
         .root_module = b.createModule(.{
@@ -16,9 +46,9 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .strip = strip,
+            .imports = &imports,
         }),
     });
-    exe.root_module.addOptions("build_options", options);
     b.installArtifact(exe);
 
     const run_step = b.step("run", "Run the interpreter");
@@ -27,12 +57,8 @@ pub fn build(b: *std.Build) void {
     run_cmd.step.dependOn(b.getInstallStep());
     run_cmd.addPassthruArgs();
 
-    const exe_tests = b.addTest(.{
-        .root_module = exe.root_module,
-    });
-    const run_exe_tests = b.addRunArtifact(exe_tests);
-    const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_exe_tests.step);
+    const exe_tests = b.addTest(.{ .name = "app", .root_module = exe.root_module });
+    test_step.dependOn(&b.addRunArtifact(exe_tests).step);
 
     // Walkthroughs: local ones (scripts, stories and manifest stay out of
     // git) and committed ones for the open-source stories. Whatever is

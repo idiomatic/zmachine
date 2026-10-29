@@ -6,7 +6,7 @@ const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
-const Machine = @import("Machine.zig");
+const Machine = @import("vm").Machine;
 
 const Inspector = @This();
 

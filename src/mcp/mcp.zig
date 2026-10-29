@@ -12,7 +12,7 @@ const json = std.json;
 const Allocator = std.mem.Allocator;
 
 const build_options = @import("build_options");
-const Remote = @import("Remote.zig");
+const Remote = @import("hub").Remote;
 
 const protocol_version = "2025-06-18";
 

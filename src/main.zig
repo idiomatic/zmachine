@@ -3,14 +3,14 @@
 const std = @import("std");
 const Io = std.Io;
 
-const Inspector = @import("Inspector.zig");
-const Machine = @import("Machine.zig");
-const Password = @import("Password.zig");
-const Remote = @import("Remote.zig");
-const Screen = @import("Screen.zig");
-const mcp = @import("mcp.zig");
-const terminal = @import("terminal.zig");
-const web = @import("web.zig");
+const Inspector = @import("inspector").Inspector;
+const Machine = @import("vm").Machine;
+const Password = @import("poly").Password;
+const Remote = @import("hub").Remote;
+const Screen = @import("console").Screen;
+const mcp = @import("mcp");
+const terminal = @import("console").terminal;
+const web = @import("web");
 const build_options = @import("build_options");
 
 const usage =
@@ -285,16 +285,6 @@ pub fn main(init: std.process.Init) !u8 {
         std.process.exit(status);
     }
     return status;
-}
-
-test {
-    _ = @import("zstring.zig");
-    _ = @import("Inspector.zig");
-    _ = @import("Remote.zig");
-    _ = @import("Password.zig");
-    _ = @import("Screen.zig");
-    _ = @import("mcp.zig");
-    _ = @import("web.zig");
 }
 
 test "ports default to 9675" {

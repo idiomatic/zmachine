@@ -55,11 +55,11 @@ const Io = std.Io;
 const net = std.Io.net;
 const Allocator = std.mem.Allocator;
 
-const Inspector = @import("Inspector.zig");
-const Password = @import("Password.zig");
-const Remote = @import("Remote.zig");
+const Inspector = @import("inspector").Inspector;
+const Password = @import("poly").Password;
+const Remote = @import("hub").Remote;
 
-const index_html = @embedFile("inspector.html");
+const index_html = @import("inspector").html;
 const log_html = @embedFile("log.html");
 const play_html = @embedFile("play.html");
 const login_html = @embedFile("login.html");

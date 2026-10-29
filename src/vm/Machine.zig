@@ -6,7 +6,7 @@ const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
 const ObjectTable = @import("ObjectTable.zig");
-const Screen = @import("Screen.zig");
+const Screen = @import("console").Screen;
 const quetzal = @import("quetzal.zig");
 const zstring = @import("zstring.zig");
 

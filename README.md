@@ -404,7 +404,7 @@ suspicious anything a player could not see: opening the object inspector,
 reading its snapshots (the object tree, attributes and globals), wrong
 passwords and refused requests. Each entry names the client by its
 `User-Agent`, after the player's name, such as
-`Claude via zmachine-mcp/0.2.2`.
+`Claude via zmachine-mcp/0.3.0`.
 
 Without `--listen` the server listens only on `127.0.0.1`. It refuses
 requests whose `Origin` or `Host` header names another site, so a web page
@@ -412,25 +412,28 @@ cannot send commands or read the game.
 
 ## Layout
 
+Each folder under `src/` is a Zig module, built and tested on its own; a
+module imports only those listed in `build.zig`.
+
 | File | Contents |
 | --- | --- |
 | `src/main.zig` | Command line, setup and signal handling |
-| `src/Machine.zig` | Processor: memory, stack, instruction decoding and opcodes |
-| `src/ObjectTable.zig` | Object tree and property tables |
-| `src/zstring.zig` | Z-string decoding, dictionary encoding, ZSCII/Unicode |
-| `src/Screen.zig` | Terminal windows, status line, styles and input |
-| `src/terminal.zig` | Window size, raw keys and Ctrl-C on POSIX and Windows |
-| `src/quetzal.zig` | Quetzal save files |
-| `src/Inspector.zig` | Map tracking and JSON snapshots for the web page |
-| `src/Remote.zig` | Shared state for playing together: commands, game text, discussion, players and the leader, sessions, audit log |
-| `src/Password.zig` | Passwords for remote players: three words from the EFF short word list |
-| `src/mcp.zig` | MCP server over stdio that lets an AI partner play through the web server |
-| `src/web.zig` | Embedded HTTP server: inspector, playing together, remote access and audit log |
-| `src/inspector.html` | The inspector page, embedded in the binary |
-| `src/play.html` | The play page, embedded in the binary |
-| `src/login.html` | The password page for remote players, embedded in the binary |
-| `src/eff_short_wordlist_1.txt` | The EFF short word list, embedded in the binary |
-| `src/log.html` | The audit log page, embedded in the binary |
+| `src/vm/Machine.zig` | Processor: memory, stack, instruction decoding and opcodes |
+| `src/vm/ObjectTable.zig` | Object tree and property tables |
+| `src/vm/zstring.zig` | Z-string decoding, dictionary encoding, ZSCII/Unicode |
+| `src/vm/quetzal.zig` | Quetzal save files |
+| `src/console/Screen.zig` | Terminal windows, status line, styles and input |
+| `src/console/terminal.zig` | Window size, raw keys and Ctrl-C on POSIX and Windows |
+| `src/hub/Remote.zig` | Shared state for playing together: commands, game text, discussion, players and the leader, sessions, audit log |
+| `src/poly/Password.zig` | Passwords for remote players: three words from the EFF short word list |
+| `src/poly/eff_short_wordlist_1.txt` | The EFF short word list, embedded in the binary |
+| `src/inspector/Inspector.zig` | Map tracking and JSON snapshots for the web page |
+| `src/inspector/inspector.html` | The inspector page, embedded in the binary |
+| `src/web/web.zig` | Embedded HTTP server: inspector, playing together, remote access and audit log |
+| `src/web/play.html` | The play page, embedded in the binary |
+| `src/web/login.html` | The password page for remote players, embedded in the binary |
+| `src/web/log.html` | The audit log page, embedded in the binary |
+| `src/mcp/mcp.zig` | MCP server over stdio that lets an AI partner play through the web server |
 | `tools/walkthrough.zig` | Plays the walkthroughs for `zig build walkthrough` |
 | `tools/fetch.zig` | Downloads a pinned file for the build, such as the open-source Zork stories |
 | `tools/screenshots/` | Scripts and notes for retaking this README's screenshots and phone animations |
@@ -500,5 +503,5 @@ zmachine was written with [Claude Code](https://claude.com/claude-code).
 [BSD 3-Clause](LICENSE)
 
 The [EFF short word list](https://www.eff.org/dice)
-(`src/eff_short_wordlist_1.txt`) is by the Electronic Frontier Foundation,
+(`src/poly/eff_short_wordlist_1.txt`) is by the Electronic Frontier Foundation,
 under [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/us/).

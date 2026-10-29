@@ -11,7 +11,7 @@ const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
-const Password = @import("Password.zig");
+const Password = @import("poly").Password;
 
 const Remote = @This();
 

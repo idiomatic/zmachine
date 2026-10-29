@@ -18,7 +18,7 @@ pub fn build(b: *std.Build) void {
         .{ .name = "console", .imports = &.{"vm"} },
         .{ .name = "hub", .imports = &.{ "vm", "console" } },
         .{ .name = "inspector", .imports = &.{ "vm", "protocol" } },
-        .{ .name = "web", .imports = &.{ "inspector", "hub", "poly", "protocol" } },
+        .{ .name = "web", .imports = &.{ "hub", "poly", "protocol" } },
         .{ .name = "mcp", .imports = &.{ "protocol", "build_options" } },
     };
     var imports: [modules.len + 1]std.Build.Module.Import = undefined;

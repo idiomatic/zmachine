@@ -4,6 +4,7 @@ const std = @import("std");
 const Io = std.Io;
 
 const Inspector = @import("inspector").Inspector;
+const inspector_routes = @import("inspector").routes;
 const Machine = @import("vm").Machine;
 const Storage = @import("vm").Storage;
 const Password = @import("poly").Password;
@@ -154,6 +155,33 @@ fn saveName(arena: std.mem.Allocator, story_path: []const u8) ![]const u8 {
     return std.fmt.allocPrint(arena, "{s}.qzl", .{stem});
 }
 
+/// The inspector's routes, for the web server.
+fn inspectorRoutes(inspector: *Inspector) web.Routes {
+    return .{
+        .context = inspector,
+        .paths = &inspector_routes.paths,
+        .ai_path = inspector_routes.ai_path,
+        .handle = handleInspector,
+    };
+}
+
+fn handleInspector(context: *anyopaque, arena: std.mem.Allocator, method: []const u8, path: []const u8, query: []const u8) anyerror!?web.Answer {
+    const reply = try inspector_routes.handle(@ptrCast(@alignCast(context)), arena, method, path, query) orelse return null;
+    return .{
+        .status = reply.status,
+        .content_type = reply.content_type,
+        .body = reply.body,
+        .log = if (reply.log) |l| .{
+            .kind = switch (l.kind) {
+                .inspector => .inspector,
+                .snapshot => .snapshot,
+            },
+            .detail = l.detail,
+            .suspicious = l.suspicious,
+        } else null,
+    };
+}
+
 pub fn main(init: std.process.Init) !u8 {
     const arena = init.arena.allocator();
     const gpa = init.gpa;
@@ -232,7 +260,7 @@ pub fn main(init: std.process.Init) !u8 {
     defer inspector.deinit();
     if (options.web_port) |port| {
         const server = try arena.create(web.Server);
-        server.* = web.Server.listen(gpa, io, &inspector, &hub, &group, port, options.listen) catch |err| {
+        server.* = web.Server.listen(gpa, io, inspectorRoutes(&inspector), &hub, &group, port, options.listen) catch |err| {
             try stderr.print("zmachine: cannot listen on port {d}: {s}\n", .{ port, @errorName(err) });
             try stderr.flush();
             return 1;

@@ -439,8 +439,9 @@ module imports only those listed in `build.zig`.
 | `src/poly/eff_short_wordlist_1.txt` | The EFF short word list, embedded in the binary |
 | `src/protocol/root.zig` | The JSON the routes speak: each reply's type, shared by the server and the MCP server |
 | `src/inspector/Inspector.zig` | Map tracking and JSON snapshots for the web page |
+| `src/inspector/routes.zig` | Its routes: the page, snapshots and erasing the map |
 | `src/inspector/inspector.html` | The inspector page, embedded in the binary |
-| `src/web/web.zig` | Embedded HTTP server: inspector, playing together, remote access and audit log |
+| `src/web/web.zig` | Embedded HTTP server: who is asking, access rules, playing together, remote access and the audit log; other modules' routes (the inspector's) handed to it |
 | `src/web/play.html` | The play page, embedded in the binary |
 | `src/web/login.html` | The password page for remote players, embedded in the binary |
 | `src/web/log.html` | The audit log page, embedded in the binary |

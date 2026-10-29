@@ -7,10 +7,8 @@
 //!                         without a session). `?password=` gives the
 //!                         password and redirects to `/`, so an invite link
 //!                         joins in one click
-//!   GET /inspector        the inspector page (local only)
-//!   GET /state?since=N    the latest snapshot, held open until it is newer
-//!                         than generation N (long polling; local only)
-//!   POST /erase-map       erase the map at the next snapshot (local only)
+//!   /inspector, /state and /erase-map
+//!                         the inspector's routes (`Routes`; local only)
 //!   POST /grant-inspector let the AI partner the body names read /state
 //!   POST /revoke-inspector  stop it (both for people on this machine only)
 //!   GET /me               who the server takes you for, and whether you lead
@@ -57,25 +55,54 @@ const Allocator = std.mem.Allocator;
 
 const Group = @import("poly").Group;
 const Hub = @import("hub").Hub;
-const Inspector = @import("inspector").Inspector;
 const Password = @import("poly").Password;
 const protocol = @import("protocol");
 
-const index_html = @import("inspector").html;
 const log_html = @embedFile("log.html");
 const play_html = @embedFile("play.html");
 const login_html = @embedFile("login.html");
 
-/// How long a long-poll request waits for a new snapshot.
+/// How long a long-poll request waits for something new.
 const poll_timeout_ms = 20_000;
 const poll_interval_ms = 100;
 
 const session_cookie = "zmachine_session";
 
+/// Routes another module serves, such as the inspector's. They answer only
+/// this machine, and AI partners only `ai_path`, when let read the
+/// inspector.
+pub const Routes = struct {
+    context: *anyopaque,
+    paths: []const []const u8,
+    ai_path: []const u8,
+    /// Answers a request for one of `paths`, or returns null for a method
+    /// it doesn't take.
+    handle: *const fn (context: *anyopaque, arena: Allocator, method: []const u8, path: []const u8, query: []const u8) anyerror!?Answer,
+
+    fn owns(r: Routes, path: []const u8) bool {
+        for (r.paths) |p| if (std.mem.eql(u8, p, path)) return true;
+        return false;
+    }
+};
+
+pub const Answer = struct {
+    status: []const u8,
+    content_type: []const u8,
+    body: []const u8,
+    /// What to note in the audit log, if anything.
+    log: ?Log = null,
+
+    pub const Log = struct {
+        kind: Group.Kind,
+        detail: []const u8,
+        suspicious: bool,
+    };
+};
+
 pub const Server = struct {
     gpa: Allocator,
     io: Io,
-    inspector: *Inspector,
+    routes: Routes,
     hub: *Hub,
     group: *Group,
     port: u16,
@@ -91,7 +118,7 @@ pub const Server = struct {
     /// Binds to `port` on the loopback interface and, with
     /// `listen_address`, on that address as well. What the game takes
     /// from `hub` goes to `group`'s discussion and audit log.
-    pub fn listen(gpa: Allocator, io: Io, inspector: *Inspector, hub: *Hub, group: *Group, port: u16, listen_address: ?[]const u8) !Server {
+    pub fn listen(gpa: Allocator, io: Io, routes: Routes, hub: *Hub, group: *Group, port: u16, listen_address: ?[]const u8) !Server {
         const loopback: net.IpAddress = .{ .ip4 = .loopback(port) };
         const address: net.IpAddress = if (listen_address) |text| try net.IpAddress.parse(text, port) else loopback;
         const listener = try address.listen(io, .{ .reuse_address = true });
@@ -106,7 +133,7 @@ pub const Server = struct {
         return .{
             .gpa = gpa,
             .io = io,
-            .inspector = inspector,
+            .routes = routes,
             .hub = hub,
             .group = group,
             .port = port,
@@ -245,12 +272,11 @@ pub const Server = struct {
 
         // The inspector shows what players can't see. The audit log is open
         // to everyone, so leaders and the others see the same record.
-        const local_only = std.mem.eql(u8, path, "/inspector") or std.mem.eql(u8, path, "/state") or
-            std.mem.eql(u8, path, "/erase-map");
+        const local_only = s.routes.owns(path);
         if (local_only and !local) return s.refuse(w, client, method, path, "this page is only for this machine\n");
         // AI partners read the inspector's snapshots, and only when let.
         if (local_only and player.ai) {
-            if (!std.mem.eql(u8, path, "/state")) return s.refuse(w, client, method, path, "AI partners only read the inspector's snapshots\n");
+            if (!std.mem.eql(u8, path, s.routes.ai_path)) return s.refuse(w, client, method, path, "AI partners only read the inspector's snapshots\n");
             if (!s.group.mayInspect(player)) return s.refuse(w, client, method, path, "nobody has let you read the inspector\n");
         }
         // This machine needs no password; drop one from an invite link.
@@ -300,11 +326,7 @@ pub const Server = struct {
                 };
                 return sendResponse(w, "204 No Content", "text/plain", "");
             }
-            if (std.mem.eql(u8, path, "/erase-map")) {
-                s.inspector.eraseMap();
-                s.group.log(.inspector, client, "erased the inspector's map", false);
-                return sendResponse(w, "204 No Content", "text/plain", "");
-            }
+            if (local_only) if (try s.routes.handle(s.routes.context, arena, method, path, query)) |answer| return s.send(w, client, answer);
             if (std.mem.eql(u8, path, "/password")) {
                 s.group.changePassword(player, if (text.len > 0) text else null) catch |err| return passwordError(w, err);
                 return sendResponse(w, "204 No Content", "text/plain", "");
@@ -315,28 +337,7 @@ pub const Server = struct {
             return sendResponse(w, "405 Method Not Allowed", "text/plain", "method not allowed\n");
         }
 
-        if (std.mem.eql(u8, path, "/inspector")) {
-            s.group.log(.inspector, client, "opened the object inspector", true);
-            return sendResponse(w, "200 OK", "text/html; charset=utf-8", index_html);
-        }
-        if (std.mem.eql(u8, path, "/state")) {
-            const since = parseSince(query);
-            var waited: u32 = 0;
-            while (true) {
-                if (try s.inspector.latest(s.gpa, since)) |json| {
-                    defer s.gpa.free(json);
-                    var detail_buf: [64]u8 = undefined;
-                    const detail = std.fmt.bufPrint(&detail_buf, "read the object tree and globals (since {d})", .{since}) catch "";
-                    s.group.log(.snapshot, client, detail, true);
-                    return sendResponse(w, "200 OK", "application/json", json);
-                }
-                if (waited >= poll_timeout_ms) {
-                    return sendResponse(w, "204 No Content", "application/json", "");
-                }
-                try s.io.sleep(.fromMilliseconds(poll_interval_ms), .awake);
-                waited += poll_interval_ms;
-            }
-        }
+        if (local_only) if (try s.routes.handle(s.routes.context, arena, method, path, query)) |answer| return s.send(w, client, answer);
         if (std.mem.eql(u8, path, "/")) {
             return sendResponse(w, "200 OK", "text/html; charset=utf-8", play_html);
         }
@@ -406,6 +407,12 @@ pub const Server = struct {
             return sendJson(w, arena, try s.group.events(arena, since));
         }
         return sendResponse(w, "404 Not Found", "text/plain", "not found\n");
+    }
+
+    /// Sends another module's answer, noting it in the audit log.
+    fn send(s: *Server, w: *Io.Writer, client: []const u8, answer: Answer) !void {
+        if (answer.log) |l| s.group.log(l.kind, client, l.detail, l.suspicious);
+        return sendResponse(w, answer.status, answer.content_type, answer.body);
     }
 
     /// Refuses a request, logging it as suspicious.

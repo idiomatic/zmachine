@@ -1,7 +1,7 @@
-//! The object inspector and map.
+//! The object inspector and map: what it watches, and its routes.
 
 pub const Inspector = @import("Inspector.zig");
-pub const html = @embedFile("inspector.html");
+pub const routes = @import("routes.zig");
 
 test {
     @import("std").testing.refAllDecls(@This());

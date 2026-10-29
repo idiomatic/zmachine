@@ -1,7 +1,10 @@
 //! The web service: the play page and its routes.
 
-pub const Server = @import("web.zig").Server;
+const web = @import("web.zig");
+pub const Server = web.Server;
+pub const Routes = web.Routes;
+pub const Answer = web.Answer;
 
 test {
-    _ = @import("web.zig");
+    _ = web;
 }

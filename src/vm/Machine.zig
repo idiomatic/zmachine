@@ -48,6 +48,10 @@ rng_state: u64,
 /// The seed from the command line, reused when the story asks for a
 /// fresh random seed.
 user_seed: ?u64 = null,
+/// The seed the generator last started from, and whether it was drawn at
+/// random (`--seed` with it replays the game).
+seed: u64,
+seed_random: bool = true,
 /// When nonzero, `random` counts 1, 2, ... up to this value (spec §2.4).
 predictable_range: u16 = 0,
 predictable_next: u16 = 0,
@@ -117,8 +121,7 @@ pub fn init(gpa: Allocator, io: Io, story: []const u8, display: Display, storage
     const frames = try gpa.alloc(Frame, frame_capacity);
     errdefer gpa.free(frames);
 
-    var seed: [8]u8 = undefined;
-    io.random(&seed);
+    const seed = randomSeed(io);
 
     m.* = .{
         .gpa = gpa,
@@ -136,7 +139,8 @@ pub fn init(gpa: Allocator, io: Io, story: []const u8, display: Display, storage
         .static_base = readHeader(memory, 0x0e),
         .display = display,
         .storage = storage,
-        .rng_state = std.mem.readInt(u64, &seed, .little),
+        .rng_state = seed,
+        .seed = seed,
         .save_name = save_name,
     };
     if (m.static_base > story.len or m.static_base < 64) return error.InvalidStory;
@@ -1104,11 +1108,9 @@ fn random(m: *Machine, range: i16) u16 {
         return value % r + 1;
     }
     if (range == 0) {
-        m.rng_state = m.user_seed orelse seed: {
-            var seed: [8]u8 = undefined;
-            m.io.random(&seed);
-            break :seed std.mem.readInt(u64, &seed, .little);
-        };
+        m.seed = m.user_seed orelse randomSeed(m.io);
+        m.seed_random = m.user_seed == null;
+        m.rng_state = m.seed;
         m.predictable_range = 0;
     } else {
         const seed: u16 = @intCast(-@as(i32, range));
@@ -1117,10 +1119,20 @@ fn random(m: *Machine, range: i16) u16 {
             m.predictable_next = 0;
         } else {
             m.rng_state = seed;
+            m.seed = seed;
+            m.seed_random = false;
             m.predictable_range = 0;
         }
     }
     return 0;
+}
+
+/// A random seed. The generator's output depends only on the low 31 bits
+/// of its state, so a short seed loses nothing.
+fn randomSeed(io: std.Io) u64 {
+    var bytes: [4]u8 = undefined;
+    io.random(&bytes);
+    return std.mem.readInt(u32, &bytes, .little) & 0x7fff_ffff;
 }
 
 /// Starts the transcript before the story runs, writing to `name`.
@@ -1133,6 +1145,8 @@ pub fn startTranscript(m: *Machine, name: []const u8) void {
 pub fn seedRandom(m: *Machine, seed: u64) void {
     m.rng_state = seed;
     m.user_seed = seed;
+    m.seed = seed;
+    m.seed_random = false;
 }
 
 // Game state

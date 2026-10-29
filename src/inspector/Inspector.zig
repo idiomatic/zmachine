@@ -294,6 +294,8 @@ fn takeSnapshot(in: *Inspector, m: *Machine, arena: Allocator, object_count: u16
         .version = m.version,
         .release = std.mem.readInt(u16, m.memory[2..4], .big),
         .serial = try arena.dupe(u8, m.memory[0x12..0x18]),
+        .seed = m.seed,
+        .seed_random = m.seed_random,
         .location = in.location,
         .objects = objects,
         .changed = try arena.dupe(u16, in.changed.items),

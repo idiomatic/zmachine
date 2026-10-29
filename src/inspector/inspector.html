@@ -174,6 +174,7 @@ td.hex { word-break: break-all; }
   <h1>Z-Machine Inspector</h1>
   <div class="meta">
     <span>Story <b id="story">-</b></span>
+    <span>Seed <b id="seed">-</b></span>
     <span>Turn <b id="turn">0</b></span>
     <span>Location <b id="location">-</b></span>
   </div>
@@ -446,6 +447,7 @@ function update(data) {
   flashObjects = new Set(data.changed);
 
   $("story").textContent = `v${data.version} r${data.release} ${data.serial}`;
+  $("seed").textContent = data.seed_random ? `${data.seed} (random)` : data.seed;
   $("turn").textContent = data.turn;
   const here = byId.get(data.location);
   $("location").textContent = here ? `${here.name || "(unnamed)"} (#${here.id})` : "-";

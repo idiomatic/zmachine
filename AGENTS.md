@@ -29,6 +29,7 @@ Keep this file up to date with every specification.
 
 ## Inspector
 
+* Header: story, seed (the generator's, "(random)" unless from `--seed` or the story; `--seed` with it replays the game), turn and location.
 * Live object tree, attributes, properties and globals with recent changes highlighted, command history, and a map of visited rooms laid out by direction.
 * Map: pan, zoom, Fit (all, or follow the player), Reset (erase and restart from the current room; `POST /erase-map`, logged).
     * One line per pair of rooms; an arrowhead if traveled one way only; faded gradually where it passes under a room it doesn't connect.

@@ -104,6 +104,10 @@ pub const Snapshot = struct {
     version: u8,
     release: u16,
     serial: []const u8,
+    /// The random number generator's seed, and whether it was drawn at
+    /// random rather than given by `--seed` or the story.
+    seed: u64,
+    seed_random: bool,
     /// The player's room.
     location: u16,
     /// Every object, numbered from 1.
@@ -219,6 +223,8 @@ test "snapshot" {
         .version = 3,
         .release = 119,
         .serial = "880429",
+        .seed = 42,
+        .seed_random = true,
         .location = 1,
         .objects = &.{.{ .id = 1, .name = "West of House", .parent = 0, .sibling = 0, .child = 0, .attrs = &.{ 3, 9 }, .props = &.{.{ .n = 18, .d = "42ab" }} }},
         .changed = &.{},
@@ -227,7 +233,7 @@ test "snapshot" {
         .edges = &.{.{ .from = 1, .to = 2, .dir = "n" }},
         .commands = &.{"north"},
     };
-    const expected = "{\"generation\":4,\"turn\":2,\"version\":3,\"release\":119,\"serial\":\"880429\",\"location\":1," ++
+    const expected = "{\"generation\":4,\"turn\":2,\"version\":3,\"release\":119,\"serial\":\"880429\",\"seed\":42,\"seed_random\":true,\"location\":1," ++
         "\"objects\":[{\"id\":1,\"name\":\"West of House\",\"parent\":0,\"sibling\":0,\"child\":0,\"attrs\":[3,9],\"props\":[{\"n\":18,\"d\":\"42ab\"}]}]," ++
         "\"changed\":[],\"globals\":[1,0],\"rooms\":[{\"id\":1,\"name\":\"West of House\"}],\"edges\":[{\"from\":1,\"to\":2,\"dir\":\"n\"}],\"commands\":[\"north\"]";
     try expectJson(expected ++ "}", snap);

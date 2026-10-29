@@ -1,0 +1,15 @@
+(async () => {
+  localStorage.setItem('zmachine-inspector-pins:r119-880429', JSON.stringify({"160": [0, -4], "5": [1, -4], "87": [-1, -3], "238": [0, -3], "32": [2, -3], "167": [3, -3], "137": [0, -2], "187": [1, -1], "64": [-1, 0], "75": [0, 0], "27": [1, 0], "85": [2, 0], "128": [3, 0], "22": [4, 1], "21": [4, 2], "125": [5, 2], "209": [0, 2], "221": [3, 3], "74": [4, 3]}));
+  localStorage.setItem('zmachine-inspector-layout', JSON.stringify({panels: [['map-pane','globals-pane','history-pane'],['objects-pane']], active: ['map-pane','objects-pane'], split: 0.7}));
+  applyLayout(loadLayout());
+  pinsKey = null; renderMap();
+  select(state.location, true);
+  // Fit the whole map, whatever its size.
+  const svg = document.getElementById('map');
+  const xs = [...positions.values()].map(p => p[0]), ys = [...positions.values()].map(p => p[1]);
+  const spanW = (Math.max(...xs) - Math.min(...xs)) * CELL_W + ROOM_W + 40, spanH = (Math.max(...ys) - Math.min(...ys)) * CELL_H + ROOM_H + 40;
+  view.scale = Math.min(svg.clientWidth / spanW, svg.clientHeight / spanH);
+  view.x = (Math.max(...xs) + Math.min(...xs)) / 2 * CELL_W; view.y = (Math.max(...ys) + Math.min(...ys)) / 2 * CELL_H;
+  view.userMoved = true; applyView();
+  return view.scale;
+})()

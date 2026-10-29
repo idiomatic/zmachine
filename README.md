@@ -185,9 +185,9 @@ zmachine --web zork1.z3
 On a phone the game and the discussion stack:
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/phone-dark.webp">
-  <img src="docs/screenshots/phone-light.webp" width="260"
-    alt="The play page on an iPhone: the game text above, the discussion below with the players strip and Claude's suggestions.">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/phone-dark.gif">
+  <img src="docs/screenshots/phone-light.gif" width="260"
+    alt="An animated session on an iPhone, joined over the local network with an invite link: the phone's player leads and types commands from West of House into the Living Room, while Claude and Gemini think aloud below and suggest commands, and the player answers Claude.">
 </picture>
 
 Open `http://127.0.0.1:9675/`. The first time, the play page asks for your
@@ -433,6 +433,7 @@ cannot send commands or read the game.
 | `src/log.html` | The audit log page, embedded in the binary |
 | `tools/walkthrough.zig` | Plays the walkthroughs for `zig build walkthrough` |
 | `tools/fetch.zig` | Downloads a pinned file for the build, such as the open-source Zork stories |
+| `tools/screenshots/` | Scripts and notes for retaking this README's screenshots and phone animations |
 | `tests/walkthroughs/` | Walkthroughs and expected transcripts for Zork I-III |
 
 ## Testing

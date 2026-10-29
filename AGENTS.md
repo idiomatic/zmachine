@@ -108,7 +108,7 @@ Keep this file up to date with every specification.
 
 ## Rules
 
-* Modules, one folder each under `src/` and declared in `build.zig`: `vm` (`std` only), `console`, `poly`, `hub`, `inspector`, `web` and `mcp`, with `src/main.zig` as the app; imports go one way, and `zig build test` tests each module on its own.
+* Modules, one folder each under `src/` and declared in `build.zig`: `vm` (`std` only), `protocol`, `poly`, `console`, `hub`, `inspector`, `web` and `mcp` (imports only `protocol`), with `src/main.zig` as the app; imports go one way, and `zig build test` tests each module on its own.
 * Tool code is Zig 0.17.0 or later, standard library only, never libc directly, `zig fmt`-clean; except `tools/screenshots/` (README screenshot scripts).
 * Never commit story files, manuals, maps, walkthrough scripts, manifests or transcripts, or copy-protection notes; they live in `games-local/`, `manuals-local/`, `maps-local/` and `tests/walkthroughs-local/`. Exceptions: `tests/walkthroughs/` (written for this project) and Zork I–III (downloaded into `games/`, not committed).
 * References allowed: MojoZork, zvm, zyppy, Frotz, Z-Machine Standards Document 1.1.

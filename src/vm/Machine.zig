@@ -62,6 +62,9 @@ observer: ?Observer = null,
 /// Default file name for saved games.
 save_name: []const u8,
 finished: bool = false,
+/// `runUntilInput` stopped before the input instruction here, which runs
+/// first when it is called again.
+stopped_at: ?u32 = null,
 
 const MemoryStream = struct {
     table: u16,
@@ -207,8 +210,45 @@ fn setupHeader(m: *Machine) void {
 }
 
 pub fn run(m: *Machine) !void {
-    while (!m.finished) try m.step();
+    while (try m.runUntilInput(std.math.maxInt(usize)) != .finished) {}
+}
+
+/// Why `runUntilInput` stopped.
+pub const Stop = enum {
+    /// The next instruction reads a line or a key.
+    input,
+    /// It ran as many instructions as it was allowed.
+    limit,
+    /// The story ended.
+    finished,
+};
+
+/// Runs until the story is about to wait for input (`read` or
+/// `read_char`), it ends, or `max_steps` instructions have run, so a
+/// caller can stop between instructions. Called again, it carries on from
+/// there, reading the input first.
+pub fn runUntilInput(m: *Machine, max_steps: usize) !Stop {
+    var steps: usize = 0;
+    while (!m.finished) : (steps += 1) {
+        if (steps == max_steps) return .limit;
+        const resuming = m.stopped_at == m.pc;
+        m.stopped_at = null;
+        if (!resuming and m.atInput()) {
+            m.stopped_at = m.pc;
+            return .input;
+        }
+        try m.step();
+    }
     try m.flushTranscript();
+    return .finished;
+}
+
+/// Whether the instruction at the program counter reads input: `read`
+/// (VAR:228) or `read_char` (VAR:246), which only the variable form
+/// encodes.
+fn atInput(m: *const Machine) bool {
+    const opcode = m.readByte(m.pc) catch return false;
+    return opcode == 0xe4 or opcode == 0xf6;
 }
 
 // Memory access

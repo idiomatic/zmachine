@@ -82,3 +82,43 @@ test "the header advertises the display" {
     try testing.expectEqual(30, m.memory[0x20]);
     try testing.expectEqual(60, m.memory[0x21]);
 }
+
+test "runUntilInput stops before input, and at a step limit" {
+    const s = story(&.{
+        0xb2, 0xb5, 0xc5, // print "hi"
+        0xbb, // new_line
+        0xe4, 0x5f, 0x80, 0x00, 0x00, // aread 0x80 0 -> sp
+        0x10, 0x80, 0x02, 0x00, // loadb 0x80 2 -> sp
+        0xe5, 0xbf, 0x00, // print_char sp
+        0x8c, 0xff, 0xff, // jump to itself
+    });
+    var display: RecordingDisplay = .init(testing.allocator, &.{"Go"});
+    defer display.deinit();
+    var cwd: Storage.Cwd = .init(testing.allocator, testing.io);
+    defer cwd.deinit();
+    const m = try Machine.init(testing.allocator, testing.io, &s, display.display(), cwd.storage(), "test.qzl");
+    defer m.deinit();
+
+    try testing.expectEqual(Machine.Stop.limit, try m.runUntilInput(1));
+    try testing.expectEqualStrings("hi", display.text.items);
+    // Stopped before the read, which hasn't taken the line yet.
+    try testing.expectEqual(Machine.Stop.input, try m.runUntilInput(100));
+    try testing.expectEqual(0, display.next_input);
+    try testing.expectEqual(0x104, m.pc);
+    // Carrying on reads it first, then runs into the loop.
+    try testing.expectEqual(Machine.Stop.limit, try m.runUntilInput(100));
+    try testing.expectEqualStrings("hi\nGo\ng", display.text.items);
+    try testing.expectEqual(0x110, m.pc);
+}
+
+test "runUntilInput runs to the end" {
+    const s = story(&.{0xba}); // quit
+    var display: RecordingDisplay = .init(testing.allocator, &.{});
+    defer display.deinit();
+    var cwd: Storage.Cwd = .init(testing.allocator, testing.io);
+    defer cwd.deinit();
+    const m = try Machine.init(testing.allocator, testing.io, &s, display.display(), cwd.storage(), "test.qzl");
+    defer m.deinit();
+    try testing.expectEqual(Machine.Stop.finished, try m.runUntilInput(100));
+    try testing.expectEqual(Machine.Stop.finished, try m.runUntilInput(100));
+}

@@ -419,7 +419,7 @@ module imports only those listed in `build.zig`.
 | --- | --- |
 | `src/main.zig` | Command line, setup and signal handling |
 | `src/commands.zig` | Console commands: `/lead`, `/password` and `/showpassword` |
-| `src/vm/Machine.zig` | Processor: memory, stack, instruction decoding and opcodes |
+| `src/vm/Machine.zig` | Processor: memory, stack, instruction decoding and opcodes; runs until input or a step limit |
 | `src/vm/ObjectTable.zig` | Object tree and property tables |
 | `src/vm/zstring.zig` | Z-string decoding, dictionary encoding, ZSCII/Unicode |
 | `src/vm/quetzal.zig` | Quetzal save files |

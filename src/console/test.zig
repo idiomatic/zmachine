@@ -5,6 +5,7 @@ const testing = std.testing;
 const Io = std.Io;
 
 const Screen = @import("Screen.zig");
+const TerminalInput = @import("TerminalInput.zig");
 const TestTerminal = @import("TestTerminal.zig");
 
 /// A full-screen screen of `width` by `height`, version 3 (with a status
@@ -12,12 +13,14 @@ const TestTerminal = @import("TestTerminal.zig");
 const Harness = struct {
     out: Io.Writer.Allocating,
     in: Io.Reader,
+    keyboard: TerminalInput,
     screen: Screen,
 
     fn init(h: *Harness, input: []const u8, width: u16, height: u16) void {
         h.out = .init(testing.allocator);
         h.in = .fixed(input);
-        h.screen = .init(testing.io, &h.out.writer, &h.in, 3, true, false);
+        h.keyboard = .{ .in = &h.in };
+        h.screen = .init(testing.io, &h.out.writer, h.keyboard.input(), 3, true, false);
         h.screen.width = width;
         h.screen.height = height;
         h.screen.lower_row = height;
@@ -99,7 +102,8 @@ test "plain output has no escapes" {
     var out: Io.Writer.Allocating = .init(testing.allocator);
     defer out.deinit();
     var in: Io.Reader = .fixed("look\n");
-    var s: Screen = .init(testing.io, &out.writer, &in, 3, false, false);
+    var keyboard: TerminalInput = .{ .in = &in };
+    var s: Screen = .init(testing.io, &out.writer, keyboard.input(), 3, false, false);
     try s.start();
     try s.drawStatus("West of House", "Score: 0");
     for ("Hello, sailor.\n>") |c| try s.print(c);

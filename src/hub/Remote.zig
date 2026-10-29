@@ -11,6 +11,7 @@ const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
+const InputSource = @import("console").InputSource;
 const Password = @import("poly").Password;
 
 const Remote = @This();
@@ -389,6 +390,52 @@ pub fn takeKey(r: *Remote, buf: []u8, by_line: bool, remote: bool) Key {
         }
     }
     return if (r.keyboard_closed) .closed else .none;
+}
+
+/// The keyboard and the web as the screen's input.
+pub fn input(r: *Remote) InputSource {
+    const gen = struct {
+        fn cast(context: *anyopaque) *Remote {
+            return @ptrCast(@alignCast(context));
+        }
+        fn waiting(c: *anyopaque) void {
+            cast(c).waiting();
+        }
+        fn takeLine(c: *anyopaque, buf: []u8) InputSource.Error!InputSource.Line {
+            return switch (cast(c).takeLine(buf)) {
+                .none => .none,
+                .closed => .closed,
+                .keyboard => |line| .{ .keyboard = line },
+                .remote => |line| .{ .web = line },
+                .console => |command| .{ .console = @tagName(command) },
+            };
+        }
+        fn takeKey(c: *anyopaque, buf: []u8, by_line: bool, web: bool) InputSource.Error!InputSource.Key {
+            return switch (cast(c).takeKey(buf, by_line, web)) {
+                .none => .none,
+                .closed => .closed,
+                .key => |key| .{ .key = key },
+                .line => |line| .{ .line = line },
+            };
+        }
+        fn keyboardPending(c: *anyopaque) bool {
+            return cast(c).keyboardPending();
+        }
+        fn takeKeyboardByte(c: *anyopaque) ?u8 {
+            return cast(c).takeKeyboardByte();
+        }
+        fn webPending(c: *anyopaque) bool {
+            return cast(c).pending();
+        }
+    };
+    return .{ .context = r, .vtable = &.{
+        .waiting = gen.waiting,
+        .takeLine = gen.takeLine,
+        .takeKey = gen.takeKey,
+        .keyboardPending = gen.keyboardPending,
+        .takeKeyboardByte = gen.takeKeyboardByte,
+        .webPending = gen.webPending,
+    } };
 }
 
 /// Whether keys have arrived from the keyboard that nothing has taken yet.

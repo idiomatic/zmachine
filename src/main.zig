@@ -9,6 +9,7 @@ const Storage = @import("vm").Storage;
 const Password = @import("poly").Password;
 const Remote = @import("hub").Remote;
 const Screen = @import("console").Screen;
+const TerminalInput = @import("console").TerminalInput;
 const mcp = @import("mcp");
 const terminal = @import("console").terminal;
 const web = @import("web");
@@ -197,10 +198,13 @@ pub fn main(init: std.process.Init) !u8 {
 
     const tty_out = try Io.File.stdout().isTty(io);
     const tty_in = try Io.File.stdin().isTty(io);
+    var remote: Remote = .init(gpa, io);
+    defer remote.deinit();
+    var keyboard: TerminalInput = .{ .in = &stdin_reader.interface };
     var screen: Screen = .init(
         io,
         &stdout_writer.interface,
-        &stdin_reader.interface,
+        if (options.web_port != null) remote.input() else keyboard.input(),
         story[0],
         tty_out and !options.plain,
         tty_in,
@@ -220,8 +224,6 @@ pub fn main(init: std.process.Init) !u8 {
 
     var inspector: Inspector = .init(gpa, io);
     defer inspector.deinit();
-    var remote: Remote = .init(gpa, io);
-    defer remote.deinit();
     if (options.web_port) |port| {
         const server = try arena.create(web.Server);
         server.* = web.Server.listen(gpa, io, &inspector, &remote, port, options.listen) catch |err| {

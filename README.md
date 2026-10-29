@@ -427,6 +427,8 @@ module imports only those listed in `build.zig`.
 | `src/vm/RecordingDisplay.zig`, `src/vm/test.zig` | Tests that run tiny assembled stories |
 | `src/console/Screen.zig` | Terminal windows, status line, styles and input |
 | `src/console/terminal.zig` | Window size, raw keys and Ctrl-C on POSIX and Windows |
+| `src/console/InputSource.zig` | Where the screen's input comes from |
+| `src/console/TerminalInput.zig` | Input straight from standard input, without `--web` |
 | `src/console/TestTerminal.zig`, `src/console/test.zig` | Tests of what the screen draws, through a small terminal emulator |
 | `src/hub/Remote.zig` | Shared state for playing together: commands, game text, discussion, players and the leader, sessions, audit log |
 | `src/poly/Password.zig` | Passwords for remote players: three words from the EFF short word list |

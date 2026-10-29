@@ -14,8 +14,8 @@ pub fn build(b: *std.Build) void {
     const modules = [_]struct { name: []const u8, imports: []const []const u8 }{
         .{ .name = "vm", .imports = &.{} },
         .{ .name = "poly", .imports = &.{} },
-        .{ .name = "hub", .imports = &.{"poly"} },
-        .{ .name = "console", .imports = &.{ "vm", "poly", "hub" } },
+        .{ .name = "console", .imports = &.{ "vm", "poly" } },
+        .{ .name = "hub", .imports = &.{ "poly", "console" } },
         .{ .name = "inspector", .imports = &.{"vm"} },
         .{ .name = "web", .imports = &.{ "inspector", "hub", "poly" } },
         .{ .name = "mcp", .imports = &.{ "hub", "build_options" } },
@@ -35,6 +35,8 @@ pub fn build(b: *std.Build) void {
             }
         }
         imports[i] = .{ .name = m.name, .module = module };
+        // Until the console commands move out of the console.
+        if (std.mem.eql(u8, m.name, "hub")) imports[i - 1].module.addImport("hub", module);
         const tests = b.addTest(.{ .name = m.name, .root_module = module });
         test_step.dependOn(&b.addRunArtifact(tests).step);
     }

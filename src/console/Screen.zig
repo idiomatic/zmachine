@@ -9,6 +9,7 @@
 const std = @import("std");
 const Io = std.Io;
 const Display = @import("vm").Display;
+const InputSource = @import("InputSource.zig");
 const terminal = @import("terminal.zig");
 const Password = @import("poly").Password;
 const Remote = @import("hub").Remote;
@@ -17,7 +18,7 @@ const Screen = @This();
 
 io: Io,
 out: *Io.Writer,
-in: *Io.Reader,
+input: InputSource,
 /// Draw with escape sequences; otherwise emit plain text.
 ansi: bool,
 /// Whether stdin is a terminal (enables raw key reads).
@@ -48,12 +49,12 @@ fg: u8 = 1,
 bg: u8 = 1,
 buffered: bool = true,
 lines_since_input: u16 = 0,
-/// Keypresses left over from a piped line; see `readKey`.
+/// Keypresses left over from a piped or web line; see `readKey`.
 keys: [256]u8 = undefined,
 keys_len: usize = 0,
 keys_pos: usize = 0,
-/// Input shared with a remote partner; when set, the keyboard is read
-/// through it instead of `in`.
+/// The state for playing together, with `--web`: it sees what the game
+/// prints and carries out console commands.
 remote: ?*Remote = null,
 looks: Looks = .{},
 /// What the lower window's current line holds, escapes included, so a
@@ -61,7 +62,7 @@ looks: Looks = .{},
 line_text: [256]u8 = undefined,
 line_len: usize = 0,
 
-pub const Error = Io.Writer.Error || Io.Reader.Error || error{StreamTooLong} || terminal.Error;
+pub const Error = Io.Writer.Error || InputSource.Error || terminal.Error;
 
 /// 256-color palette entries for the Z-machine colors 2-12.
 const palette = [_]u8{ 16, 160, 34, 220, 33, 164, 44, 255, 250, 244, 238 };
@@ -245,11 +246,11 @@ pub const Looks = struct {
     }
 };
 
-pub fn init(io: Io, out: *Io.Writer, in: *Io.Reader, version: u8, ansi: bool, tty_input: bool) Screen {
+pub fn init(io: Io, out: *Io.Writer, input: InputSource, version: u8, ansi: bool, tty_input: bool) Screen {
     var s: Screen = .{
         .io = io,
         .out = out,
-        .in = in,
+        .input = input,
         .ansi = ansi,
         .tty_input = tty_input,
         .echo = !tty_input,
@@ -391,29 +392,20 @@ fn more(s: *Screen) Error!void {
     var buf: [64]u8 = undefined;
     try s.writeLower(s.looks.more.sgr(&buf));
     try s.writeLower("[MORE]\x1b[0m");
-    if (s.remote) |r| {
-        // A command from the remote partner also continues.
-        try s.out.flush();
+    // Not readKey, which would print the pending word after [MORE], only
+    // for it to be cleared with it. A command from the web also continues.
+    try s.out.flush();
+    {
         const raw: terminal.RawMode = try .enter();
         defer raw.leave();
-        while (!r.pending()) {
-            switch (r.takeKey(&s.keys, false, false)) {
-                .none => s.pause(),
-                else => break,
-            }
-        }
-    } else {
-        // Not readKey, which would print the pending word after [MORE],
-        // only for it to be cleared with it.
-        try s.out.flush();
-        const raw: terminal.RawMode = try .enter();
-        defer raw.leave();
-        if (s.in.takeByte()) |c| {
-            _ = decodeKey(c, s.in);
-        } else |err| switch (err) {
-            error.EndOfStream => {},
-            else => return err,
-        }
+        while (!s.input.webPending()) switch (try s.input.takeKey(&s.keys, false, false)) {
+            .none => s.pause(),
+            .key => |c| {
+                _ = decodeKey(c, KeyboardBytes{ .screen = s });
+                break;
+            },
+            else => break,
+        };
     }
     try s.out.writeAll("\r\x1b[K");
     s.line_len = 0;
@@ -655,43 +647,32 @@ pub fn readLine(s: *Screen, buf: []u8) Error!?[]u8 {
 
     // Keys left over from a piped line are discarded, as in dumb Frotz.
     s.keys_pos = s.keys_len;
-    var remote_line = false;
-    const line = if (s.remote) |r| line: {
-        r.waiting();
-        while (true) switch (r.takeLine(buf)) {
-            .none => s.pause(),
-            .closed => break :line null,
-            .keyboard => |line| break :line line,
-            .remote => |line| {
-                remote_line = true;
-                break :line line;
-            },
-            .console => |command| {
-                try s.consoleCommand(r, command);
-                // Show the prompt again for the next line.
-                try s.writeLower(prompt);
-                s.col = start_col;
-                if (s.ansi) try s.out.writeAll(current_sgr);
-                try s.out.flush();
-                typed_ahead = s.typedAhead();
-            },
-        };
-    } else line: {
-        const raw = s.in.takeDelimiter('\n') catch |err| switch (err) {
-            error.StreamTooLong => s.in.buffered(),
-            else => return err,
-        };
-        const line = std.mem.trimEnd(u8, raw orelse break :line null, "\r");
-        const n = @min(line.len, buf.len);
-        @memcpy(buf[0..n], line[0..n]);
-        break :line buf[0..n];
+    var web_line = false;
+    s.input.waiting();
+    const line = while (true) switch (try s.input.takeLine(buf)) {
+        .none => s.pause(),
+        .closed => break null,
+        .keyboard => |line| break line,
+        .web => |line| {
+            web_line = true;
+            break line;
+        },
+        .console => |command| {
+            try s.consoleCommand(s.remote.?, std.meta.stringToEnum(Remote.ConsoleCommand, command).?);
+            // Show the prompt again for the next line.
+            try s.writeLower(prompt);
+            s.col = start_col;
+            if (s.ansi) try s.out.writeAll(current_sgr);
+            try s.out.flush();
+            typed_ahead = s.typedAhead();
+        },
     };
     const n = (line orelse {
         if (s.ansi) try s.writeSgrDirect();
         return null;
     }).len;
 
-    if (s.echo or remote_line) {
+    if (s.echo or web_line) {
         // Echoed lines are already entered, so they take the prior look.
         if (s.ansi) try s.out.writeAll(prior_sgr);
         try s.writeLower(buf[0..n]);
@@ -729,9 +710,7 @@ pub fn readLine(s: *Screen, buf: []u8) Error!?[]u8 {
 /// Whether keys were typed before the game asked for the line, so the
 /// terminal echoed them somewhere else, or not at all.
 fn typedAhead(s: *Screen) bool {
-    if (!s.tty_input) return false;
-    if (s.remote) |r| return r.keyboardPending();
-    return s.in.bufferedLen() > 0 or terminal.inputPending();
+    return s.tty_input and s.input.keyboardPending();
 }
 
 /// Carries out a console command typed in place of a line of input, which
@@ -782,7 +761,7 @@ fn consolePassword(s: *Screen, r: *Remote) Error!?[]const u8 {
     if (s.tty_input) {
         const raw: terminal.RawMode = try .enter();
         defer raw.leave();
-        while (true) switch (r.takeKey(&s.keys, false, false)) {
+        while (true) switch (try s.input.takeKey(&s.keys, false, false)) {
             .none => s.pause(),
             .closed => break,
             .line => break,
@@ -796,7 +775,7 @@ fn consolePassword(s: *Screen, r: *Remote) Error!?[]const u8 {
             },
         };
     } else {
-        while (true) switch (r.takeKey(&s.keys, true, false)) {
+        while (true) switch (try s.input.takeKey(&s.keys, true, false)) {
             .none => s.pause(),
             .line => |line| {
                 len = @min(line.len, text.len);
@@ -836,17 +815,17 @@ fn showPassword(s: *Screen, r: *Remote) Error!?[]const u8 {
     try s.out.splatByteAll(' ', s.width -| @as(u16, @intCast(@min(line.len, s.width))));
     try s.out.writeAll("\x1b[0m");
     try s.out.flush();
-    try s.waitForKey(r);
+    try s.waitForKey();
     try s.out.print("\x1b[{d};1H\x1b[2K\x1b8", .{s.height});
     try s.writeSgrDirect();
     s.restore_lower = true;
     return null;
 }
 
-fn waitForKey(s: *Screen, r: *Remote) Error!void {
+fn waitForKey(s: *Screen) Error!void {
     const raw: ?terminal.RawMode = if (s.tty_input) try .enter() else null;
     defer if (raw) |mode| mode.leave();
-    while (r.takeKey(&s.keys, !s.tty_input, false) == .none) s.pause();
+    while (try s.input.takeKey(&s.keys, !s.tty_input, false) == .none) s.pause();
 }
 
 /// Puts an escape sequence in front of the pending word, the prompt. The
@@ -865,47 +844,18 @@ pub fn readKey(s: *Screen) Error!?u8 {
     try s.out.flush();
     s.lines_since_input = 0;
 
-    if (s.remote) |r| return s.readRemoteKey(r);
-    if (!s.tty_input) {
-        // Piped input is read a line at a time and handed out one key per
-        // call, an empty line being Return. This matches dumb Frotz, so
-        // walkthrough scripts behave the same in both.
-        if (s.keys_pos == s.keys_len) {
-            const raw = s.in.takeDelimiter('\n') catch |err| switch (err) {
-                error.StreamTooLong => s.in.buffered(),
-                else => return err,
-            };
-            const line = std.mem.trimEnd(u8, raw orelse return null, "\r");
-            if (line.len == 0) return 13;
-            s.keys_len = @min(line.len, s.keys.len);
-            @memcpy(s.keys[0..s.keys_len], line[0..s.keys_len]);
-            s.keys_pos = 0;
-        }
-        s.keys_pos += 1;
-        return s.keys[s.keys_pos - 1];
-    }
-
-    const raw: terminal.RawMode = try .enter();
-    defer raw.leave();
-
-    const c = s.in.takeByte() catch |err| switch (err) {
-        error.EndOfStream => return null,
-        else => return err,
-    };
-    return decodeKey(c, s.in);
-}
-
-/// Reads a key from the keyboard or, a line at a time, from the remote
-/// partner.
-fn readRemoteKey(s: *Screen, r: *Remote) Error!?u8 {
+    // Piped input is read a line at a time and handed out one key per
+    // call, an empty line being Return. This matches dumb Frotz, so
+    // walkthrough scripts behave the same in both. So are lines from the
+    // web.
     if (s.keys_pos == s.keys_len) {
-        r.waiting();
+        s.input.waiting();
         const raw: ?terminal.RawMode = if (s.tty_input) try .enter() else null;
         defer if (raw) |mode| mode.leave();
-        while (true) switch (r.takeKey(&s.keys, !s.tty_input, true)) {
+        while (true) switch (try s.input.takeKey(&s.keys, !s.tty_input, true)) {
             .none => s.pause(),
             .closed => return null,
-            .key => |c| return decodeKey(c, RemoteBytes{ .screen = s, .remote = r }),
+            .key => |c| return decodeKey(c, KeyboardBytes{ .screen = s }),
             .line => |line| {
                 if (line.len == 0) return 13;
                 s.keys_len = line.len;
@@ -918,15 +868,14 @@ fn readRemoteKey(s: *Screen, r: *Remote) Error!?u8 {
     return s.keys[s.keys_pos - 1];
 }
 
-/// The rest of an escape sequence from the keyboard thread, which sends
-/// it at once.
-const RemoteBytes = struct {
+/// The rest of an escape sequence from the keyboard, which sends it at
+/// once.
+const KeyboardBytes = struct {
     screen: *Screen,
-    remote: *Remote,
 
-    fn takeByte(b: RemoteBytes) !u8 {
+    fn takeByte(b: KeyboardBytes) !u8 {
         for (0..5) |_| {
-            if (b.remote.takeKeyboardByte()) |c| return c;
+            if (b.screen.input.takeKeyboardByte()) |c| return c;
             b.screen.pause();
         }
         return error.EndOfStream;

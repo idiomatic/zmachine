@@ -5,4 +5,6 @@ pub const terminal = @import("terminal.zig");
 
 test {
     @import("std").testing.refAllDecls(@This());
+    _ = @import("TestTerminal.zig");
+    _ = @import("test.zig");
 }

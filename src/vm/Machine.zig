@@ -5,8 +5,9 @@ const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
+const Display = @import("Display.zig");
 const ObjectTable = @import("ObjectTable.zig");
-const Screen = @import("console").Screen;
+const Storage = @import("Storage.zig");
 const quetzal = @import("quetzal.zig");
 const zstring = @import("zstring.zig");
 
@@ -37,7 +38,10 @@ globals: usize,
 abbreviations: usize,
 dictionary: usize,
 static_base: usize,
-screen: *Screen,
+display: Display,
+storage: Storage,
+/// The window `set_window` selected.
+window: u8 = 0,
 /// Linear congruential generator state; the same generator as Frotz, so a
 /// run with `--seed` can be compared line for line with `dfrotz -s`.
 rng_state: u64,
@@ -50,7 +54,7 @@ predictable_next: u16 = 0,
 screen_stream: bool = true,
 memory_streams: [16]MemoryStream = undefined,
 memory_stream_depth: usize = 0,
-transcript: ?*Io.File.Writer = null,
+transcript: ?*Io.Writer = null,
 /// File that output stream 2 (the transcript) writes to.
 transcript_name: []const u8 = "transcript.txt",
 undo: ?Snapshot = null,
@@ -91,7 +95,7 @@ pub const Error = error{
     ReturnFromMain,
 };
 
-pub fn init(gpa: Allocator, io: Io, story: []const u8, screen: *Screen, save_name: []const u8) !*Machine {
+pub fn init(gpa: Allocator, io: Io, story: []const u8, display: Display, storage: Storage, save_name: []const u8) !*Machine {
     if (story.len < 64) return error.InvalidStory;
     const version = story[0];
     switch (version) {
@@ -127,7 +131,8 @@ pub fn init(gpa: Allocator, io: Io, story: []const u8, screen: *Screen, save_nam
         .abbreviations = readHeader(memory, 0x18),
         .dictionary = readHeader(memory, 0x08),
         .static_base = readHeader(memory, 0x0e),
-        .screen = screen,
+        .display = display,
+        .storage = storage,
         .rng_state = std.mem.readInt(u64, &seed, .little),
         .save_name = save_name,
     };
@@ -138,12 +143,7 @@ pub fn init(gpa: Allocator, io: Io, story: []const u8, screen: *Screen, save_nam
 }
 
 pub fn deinit(m: *Machine) void {
-    if (m.transcript) |t| {
-        t.interface.flush() catch {};
-        t.file.close(m.io);
-        m.gpa.free(t.interface.buffer);
-        m.gpa.destroy(t);
-    }
+    if (m.transcript) |t| t.flush() catch {};
     m.freeUndo();
     m.gpa.free(m.frames);
     m.gpa.free(m.stack);
@@ -176,7 +176,7 @@ fn reset(m: *Machine) void {
 /// Fills in the header fields the interpreter is responsible for.
 fn setupHeader(m: *Machine) void {
     const mem = m.memory;
-    const s = m.screen;
+    const caps = m.display.capabilities();
     if (m.version <= 3) {
         // Status line available, screen splitting available, fixed pitch.
         mem[0x01] = (mem[0x01] & ~@as(u8, 0x10 | 0x40)) | 0x20;
@@ -184,16 +184,16 @@ fn setupHeader(m: *Machine) void {
         // Fixed-space style; colors (v5+), bold and italic only when drawing
         // with escape sequences, so plain output gets each story's fallback
         // (such as capitals for emphasis); no timed input.
-        const styles: u8 = if (s.ansi) 0x0c | @as(u8, if (m.version >= 5) 0x01 else 0) else 0;
+        const styles: u8 = if (caps.styles) 0x0c | @as(u8, if (m.version >= 5) 0x01 else 0) else 0;
         mem[0x01] = (mem[0x01] & ~@as(u8, 0x80 | 0x0d)) | 0x10 | styles;
         mem[0x1e] = 6;
         mem[0x1f] = 'Z';
-        mem[0x20] = @intCast(@min(s.height, 255));
-        mem[0x21] = @intCast(@min(s.width, 255));
+        mem[0x20] = @intCast(@min(caps.height, 255));
+        mem[0x21] = @intCast(@min(caps.width, 255));
     }
     if (m.version >= 5) {
-        std.mem.writeInt(u16, mem[0x22..0x24], s.width, .big);
-        std.mem.writeInt(u16, mem[0x24..0x26], s.height, .big);
+        std.mem.writeInt(u16, mem[0x22..0x24], caps.width, .big);
+        std.mem.writeInt(u16, mem[0x24..0x26], caps.height, .big);
         mem[0x26] = 1;
         mem[0x27] = 1;
         mem[0x2c] = 2;
@@ -524,7 +524,7 @@ fn exec2op(m: *Machine, op: u8, ops: []const u16) !void {
         },
         25 => try m.call(a, ops[1..], try m.fetchByte()), // call_2s
         26 => try m.call(a, ops[1..], null), // call_2n
-        27 => try m.screen.setColor(a, b), // set_colour
+        27 => try m.display.setColor(a, b), // set_colour
         28 => { // throw
             if (b == 0 or b > m.frame_count) return error.StackUnderflow;
             m.frame_count = b;
@@ -639,27 +639,30 @@ fn execVar(m: *Machine, op: u8, ops: []const u16) !void {
             const value = try m.pop();
             try m.writeVarIndirect(@truncate(arg(ops, 0)), value);
         },
-        10 => try m.screen.splitWindow(arg(ops, 0)), // split_window
-        11 => try m.screen.setWindow(@truncate(arg(ops, 0))), // set_window
+        10 => try m.display.splitWindow(arg(ops, 0)), // split_window
+        11 => { // set_window
+            m.window = @truncate(arg(ops, 0));
+            try m.display.setWindow(m.window);
+        },
         12 => { // call_vs2
             if (ops.len == 0) return m.invalid();
             try m.call(ops[0], ops[1..], try m.fetchByte());
         },
-        13 => try m.screen.eraseWindow(signed(arg(ops, 0))), // erase_window
-        14 => if (arg(ops, 0) == 1) try m.screen.eraseLine(), // erase_line
-        15 => try m.screen.setCursor(arg(ops, 0), arg(ops, 1)), // set_cursor
+        13 => try m.display.eraseWindow(signed(arg(ops, 0))), // erase_window
+        14 => if (arg(ops, 0) == 1) try m.display.eraseLine(), // erase_line
+        15 => try m.display.setCursor(arg(ops, 0), arg(ops, 1)), // set_cursor
         16 => { // get_cursor
-            const pos = m.screen.getCursor();
+            const pos = m.display.getCursor();
             try m.writeWord(arg(ops, 0), pos[0]);
             try m.writeWord(arg(ops, 0) + 2, pos[1]);
         },
-        17 => try m.screen.setStyle(@truncate(arg(ops, 0))), // set_text_style
-        18 => try m.screen.setBuffered(arg(ops, 0) != 0), // buffer_mode
+        17 => try m.display.setStyle(@truncate(arg(ops, 0))), // set_text_style
+        18 => try m.display.setBuffered(arg(ops, 0) != 0), // buffer_mode
         19 => try m.outputStream(signed(arg(ops, 0)), arg(ops, 1)), // output_stream
         20 => {}, // input_stream
         21 => {}, // sound_effect
         22 => { // read_char
-            const key = (try m.screen.readKey()) orelse {
+            const key = (try m.display.readKey()) orelse {
                 m.finished = true;
                 return;
             };
@@ -802,7 +805,7 @@ pub fn printAscii(m: *Machine, text: []const u8) !void {
 fn printUnicode(m: *Machine, cp: u16) !void {
     if (m.unicode.fromUnicode(cp)) |z| return m.printZscii(z);
     if (m.memory_stream_depth > 0) return m.printZscii('?');
-    if (m.screen_stream) try m.screen.print(std.math.cast(u21, cp) orelse '?');
+    if (m.screen_stream) try m.display.print(std.math.cast(u21, cp) orelse '?');
 }
 
 pub fn printZscii(m: *Machine, zscii: u16) !void {
@@ -814,24 +817,19 @@ pub fn printZscii(m: *Machine, zscii: u16) !void {
         return;
     }
     const cp = m.unicode.toUnicode(c) orelse return;
-    if (m.screen_stream) try m.screen.print(cp);
-    if (m.memory[0x11] & 0x01 != 0 and m.screen.window == 0) try m.transcribe(cp);
+    if (m.screen_stream) try m.display.print(cp);
+    if (m.memory[0x11] & 0x01 != 0 and m.window == 0) try m.transcribe(cp);
 }
 
 fn transcribe(m: *Machine, cp: u21) !void {
-    if (m.transcript == null) {
-        const file = Io.Dir.cwd().createFile(m.io, m.transcript_name, .{}) catch return;
-        const writer = try m.gpa.create(Io.File.Writer);
-        writer.* = .initStreaming(file, m.io, try m.gpa.alloc(u8, 4096));
-        m.transcript = writer;
-    }
+    if (m.transcript == null) m.transcript = m.storage.transcript(m.transcript_name) orelse return;
     var utf8: [4]u8 = undefined;
     const n = std.unicode.utf8Encode(cp, &utf8) catch return;
-    m.transcript.?.interface.writeAll(utf8[0..n]) catch {};
+    m.transcript.?.writeAll(utf8[0..n]) catch {};
 }
 
 fn flushTranscript(m: *Machine) !void {
-    if (m.transcript) |t| t.interface.flush() catch {};
+    if (m.transcript) |t| t.flush() catch {};
 }
 
 fn outputStream(m: *Machine, n: i16, table: u16) !void {
@@ -856,12 +854,12 @@ fn outputStream(m: *Machine, n: i16, table: u16) !void {
 }
 
 fn printTable(m: *Machine, text: u16, width: u16, height: u16, skip: u16) !void {
-    const start = m.screen.getCursor();
+    const start = m.display.getCursor();
     var addr: usize = text;
     for (0..height) |row| {
         if (row > 0) {
-            if (m.screen.window == 1) {
-                try m.screen.setCursor(start[0] + @as(u16, @intCast(row)), start[1]);
+            if (m.window == 1) {
+                try m.display.setCursor(start[0] + @as(u16, @intCast(row)), start[1]);
             } else {
                 try m.printZscii(13);
             }
@@ -887,7 +885,7 @@ pub fn showStatus(m: *Machine) !void {
             h12, b % 60, if (hours < 12) "am" else "pm",
         }) catch unreachable;
     } else std.fmt.bufPrint(&right_buf, "Score: {d}   Moves: {d}", .{ a, b }) catch unreachable;
-    try m.screen.drawStatus(name.slice(), right);
+    try m.display.drawStatus(name.slice(), right);
 }
 
 // Input
@@ -911,7 +909,7 @@ fn read(m: *Machine, ops: []const u16) !void {
     }
 
     var buf: [512]u8 = undefined;
-    const line = (try m.screen.readLine(&buf)) orelse {
+    const line = (try m.display.readLine(&buf)) orelse {
         m.finished = true;
         return;
     };
@@ -930,8 +928,8 @@ fn read(m: *Machine, ops: []const u16) !void {
     }
     if (m.memory[0x11] & 0x01 != 0) {
         if (m.transcript) |t| {
-            t.interface.writeAll(line) catch {};
-            t.interface.writeAll("\n") catch {};
+            t.writeAll(line) catch {};
+            t.writeAll("\n") catch {};
         }
     }
     if (m.observer) |o| o.afterInput(o.context, m, line);
@@ -1117,7 +1115,7 @@ fn restart(m: *Machine) !void {
     const flags2 = m.memory[0x11] & 0x03;
     @memcpy(m.memory[0..m.static_base], m.story[0..m.static_base]);
     m.memory[0x11] = (m.memory[0x11] & ~@as(u8, 0x03)) | flags2;
-    try m.screen.eraseWindow(-1);
+    try m.display.eraseWindow(-1);
     m.reset();
 }
 
@@ -1126,7 +1124,7 @@ fn promptFileName(m: *Machine, prompt: []const u8, buf: []u8) !?[]const u8 {
     try m.printAscii(" [");
     try m.printAscii(m.save_name);
     try m.printAscii("]: ");
-    const line = (try m.screen.readLine(buf)) orelse return null;
+    const line = (try m.display.readLine(buf)) orelse return null;
     const trimmed = std.mem.trim(u8, line, " \t");
     if (trimmed.len == 0) return m.save_name;
     return trimmed;
@@ -1145,7 +1143,7 @@ fn saveGame(m: *Machine) !bool {
         .pc = m.pc,
     }) catch return false;
     defer m.gpa.free(data);
-    Io.Dir.cwd().writeFile(m.io, .{ .sub_path = name, .data = data }) catch |err| {
+    m.storage.save(name, data) catch |err| {
         try m.printAscii("Could not write save file: ");
         try m.printAscii(@errorName(err));
         try m.printZscii(13);
@@ -1159,7 +1157,7 @@ fn saveGame(m: *Machine) !bool {
 fn restoreGame(m: *Machine) !bool {
     var buf: [256]u8 = undefined;
     const name = (try m.promptFileName("Restore from file", &buf)) orelse return false;
-    const data = Io.Dir.cwd().readFileAlloc(m.io, name, m.gpa, .limited(1 << 20)) catch |err| {
+    const data = m.storage.restore(name, m.gpa) catch |err| {
         try m.printAscii("Could not read save file: ");
         try m.printAscii(@errorName(err));
         try m.printZscii(13);

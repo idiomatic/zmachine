@@ -8,6 +8,7 @@
 
 const std = @import("std");
 const Io = std.Io;
+const Display = @import("vm").Display;
 const terminal = @import("terminal.zig");
 const Password = @import("poly").Password;
 const Remote = @import("hub").Remote;
@@ -61,13 +62,6 @@ line_text: [256]u8 = undefined,
 line_len: usize = 0,
 
 pub const Error = Io.Writer.Error || Io.Reader.Error || error{StreamTooLong} || terminal.Error;
-
-pub const Style = struct {
-    pub const reverse = 1;
-    pub const bold = 2;
-    pub const italic = 4;
-    pub const fixed = 8;
-};
 
 /// 256-color palette entries for the Z-machine colors 2-12.
 const palette = [_]u8{ 16, 160, 34, 220, 33, 164, 44, 255, 250, 244, 238 };
@@ -270,6 +264,15 @@ pub fn init(io: Io, out: *Io.Writer, in: *Io.Reader, version: u8, ansi: bool, tt
     }
     s.lower_row = s.height;
     return s;
+}
+
+/// The screen as the machine's display.
+pub fn display(s: *Screen) Display {
+    return .from(s);
+}
+
+pub fn capabilities(s: *const Screen) Display.Capabilities {
+    return .{ .styles = s.ansi, .width = s.width, .height = s.height };
 }
 
 /// Prepares the terminal: clears it and sets up the scroll region.
@@ -610,9 +613,9 @@ pub fn setBuffered(s: *Screen, on: bool) Error!void {
 fn formatSgr(s: *const Screen, buf: []u8) []const u8 {
     var w: Io.Writer = .fixed(buf);
     w.writeAll("\x1b[0") catch unreachable;
-    if (s.style & Style.bold != 0) w.writeAll(";1") catch unreachable;
-    if (s.style & Style.italic != 0) w.writeAll(";3") catch unreachable;
-    if (s.style & Style.reverse != 0) w.writeAll(";7") catch unreachable;
+    if (s.style & Display.Style.bold != 0) w.writeAll(";1") catch unreachable;
+    if (s.style & Display.Style.italic != 0) w.writeAll(";3") catch unreachable;
+    if (s.style & Display.Style.reverse != 0) w.writeAll(";7") catch unreachable;
     if (s.fg >= 2) w.print(";38;5;{d}", .{palette[s.fg - 2]}) catch unreachable;
     if (s.bg >= 2) w.print(";48;5;{d}", .{palette[s.bg - 2]}) catch unreachable;
     w.writeAll("m") catch unreachable;

@@ -422,8 +422,12 @@ module imports only those listed in `build.zig`.
 | `src/vm/ObjectTable.zig` | Object tree and property tables |
 | `src/vm/zstring.zig` | Z-string decoding, dictionary encoding, ZSCII/Unicode |
 | `src/vm/quetzal.zig` | Quetzal save files |
+| `src/vm/Display.zig` | What the machine draws on and reads from |
+| `src/vm/Storage.zig` | Where it keeps saved games and the transcript (the working directory) |
+| `src/vm/RecordingDisplay.zig`, `src/vm/test.zig` | Tests that run tiny assembled stories |
 | `src/console/Screen.zig` | Terminal windows, status line, styles and input |
 | `src/console/terminal.zig` | Window size, raw keys and Ctrl-C on POSIX and Windows |
+| `src/console/TestTerminal.zig`, `src/console/test.zig` | Tests of what the screen draws, through a small terminal emulator |
 | `src/hub/Remote.zig` | Shared state for playing together: commands, game text, discussion, players and the leader, sessions, audit log |
 | `src/poly/Password.zig` | Passwords for remote players: three words from the EFF short word list |
 | `src/poly/eff_short_wordlist_1.txt` | The EFF short word list, embedded in the binary |

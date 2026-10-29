@@ -5,6 +5,7 @@ const Io = std.Io;
 
 const Inspector = @import("inspector").Inspector;
 const Machine = @import("vm").Machine;
+const Storage = @import("vm").Storage;
 const Password = @import("poly").Password;
 const Remote = @import("hub").Remote;
 const Screen = @import("console").Screen;
@@ -206,7 +207,9 @@ pub fn main(init: std.process.Init) !u8 {
     );
     screen.looks = options.looks;
 
-    const machine = Machine.init(gpa, io, story, &screen, try saveName(arena, options.story_path)) catch |err| {
+    var storage: Storage.Cwd = .init(gpa, io);
+    defer storage.deinit();
+    const machine = Machine.init(gpa, io, story, screen.display(), storage.storage(), try saveName(arena, options.story_path)) catch |err| {
         try stderr.print("zmachine: cannot load {s}: {s}\n", .{ options.story_path, @errorName(err) });
         try stderr.flush();
         return 1;

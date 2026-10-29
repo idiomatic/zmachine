@@ -12,10 +12,10 @@ pub fn build(b: *std.Build) void {
     // The modules, each importing only those before it. A module's
     // undeclared import doesn't build.
     const modules = [_]struct { name: []const u8, imports: []const []const u8 }{
+        .{ .name = "vm", .imports = &.{} },
         .{ .name = "poly", .imports = &.{} },
         .{ .name = "hub", .imports = &.{"poly"} },
-        .{ .name = "console", .imports = &.{ "poly", "hub" } },
-        .{ .name = "vm", .imports = &.{"console"} },
+        .{ .name = "console", .imports = &.{ "vm", "poly", "hub" } },
         .{ .name = "inspector", .imports = &.{"vm"} },
         .{ .name = "web", .imports = &.{ "inspector", "hub", "poly" } },
         .{ .name = "mcp", .imports = &.{ "hub", "build_options" } },

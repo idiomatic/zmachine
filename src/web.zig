@@ -81,13 +81,23 @@ pub const Server = struct {
     listen_address: ?[]const u8,
     listen_any: bool,
     listener: net.Server,
+    /// With a specific `--listen` address, the loopback listener too, so
+    /// this machine (and the MCP server) can still connect.
+    loopback: ?net.Server,
 
-    /// Binds to `port` on the loopback interface, or on `listen_address`.
+    /// Binds to `port` on the loopback interface and, with
+    /// `listen_address`, on that address as well.
     pub fn listen(gpa: Allocator, io: Io, inspector: *Inspector, remote: *Remote, port: u16, listen_address: ?[]const u8) !Server {
-        const address: net.IpAddress = if (listen_address) |text|
-            try net.IpAddress.parse(text, port)
-        else
-            .{ .ip4 = .loopback(port) };
+        const loopback: net.IpAddress = .{ .ip4 = .loopback(port) };
+        const address: net.IpAddress = if (listen_address) |text| try net.IpAddress.parse(text, port) else loopback;
+        const listener = try address.listen(io, .{ .reuse_address = true });
+        // 0.0.0.0 already covers the loopback address; `::` may, depending
+        // on the system, so a clash there is no error.
+        const also_loopback = listen_address != null and !(address == .ip4 and isUnspecified(address));
+        const extra: ?net.Server = if (also_loopback) loopback.listen(io, .{ .reuse_address = true }) catch |err| switch (err) {
+            error.AddressInUse => if (isUnspecified(address)) null else return err,
+            else => return err,
+        } else null;
         return .{
             .gpa = gpa,
             .io = io,
@@ -96,14 +106,23 @@ pub const Server = struct {
             .port = port,
             .listen_address = listen_address,
             .listen_any = if (listen_address != null) isUnspecified(address) else false,
-            .listener = try address.listen(io, .{ .reuse_address = true }),
+            .listener = listener,
+            .loopback = extra,
         };
     }
 
-    /// Accepts connections forever, one thread per connection.
+    /// Accepts connections forever, one thread per connection, on every
+    /// listener.
     pub fn serve(s: *Server) void {
+        if (s.loopback) |*extra| {
+            if (std.Thread.spawn(.{}, acceptLoop, .{ s, extra })) |thread| thread.detach() else |_| {}
+        }
+        acceptLoop(s, &s.listener);
+    }
+
+    fn acceptLoop(s: *Server, listener: *net.Server) void {
         while (true) {
-            const stream = s.listener.accept(s.io) catch |err| {
+            const stream = listener.accept(s.io) catch |err| {
                 std.log.warn("web: accept failed: {s}", .{@errorName(err)});
                 continue;
             };

@@ -9,6 +9,8 @@ const std = @import("std");
 const Io = std.Io;
 const Sha256 = std.crypto.hash.sha2.Sha256;
 
+const World = @import("world.zig").World;
+
 /// The EFF short word list (https://www.eff.org/dice), CC BY 3.0: one
 /// `<dice>\t<word>` line per word.
 const word_list = @embedFile("eff_short_wordlist_1.txt");
@@ -27,13 +29,14 @@ pub fn slice(p: *const Password) []const u8 {
     return p.text[0..p.len];
 }
 
-/// Makes a new password from the operating system's secure random source.
-pub fn generate(io: Io) Io.RandomSecureError!Password {
+/// Makes a new password from the world's randomness: for real, the
+/// operating system's secure random source.
+pub fn generate(world: World) World.Error!Password {
     var p: Password = .{};
     var w: Io.Writer = .fixed(&p.text);
     for (0..words_per_password) |i| {
         if (i > 0) w.writeByte('-') catch unreachable;
-        w.writeAll(word(try randomIndex(io))) catch unreachable;
+        w.writeAll(word(try randomIndex(world))) catch unreachable;
     }
     p.len = w.buffered().len;
     return p;
@@ -66,11 +69,11 @@ fn digest(text: []const u8) [Sha256.digest_length]u8 {
 }
 
 /// A uniformly random word index, without modulo bias.
-fn randomIndex(io: Io) Io.RandomSecureError!usize {
+fn randomIndex(world: World) World.Error!usize {
     const limit = std.math.maxInt(u16) / word_count * word_count;
     while (true) {
         var bytes: [2]u8 = undefined;
-        try io.randomSecure(&bytes);
+        try world.random(&bytes);
         const n = std.mem.readInt(u16, &bytes, .little);
         if (n < limit) return n % word_count;
     }
@@ -99,7 +102,8 @@ test "word list" {
 }
 
 test "generate and match" {
-    const p = try generate(std.testing.io);
+    var fake: World.Fake = .{};
+    const p = try generate(.{ .fake = &fake });
     var parts = std.mem.splitScalar(u8, p.slice(), '-');
     var count: usize = 0;
     while (parts.next()) |_| count += 1;

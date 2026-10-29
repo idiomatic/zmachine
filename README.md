@@ -431,7 +431,10 @@ module imports only those listed in `build.zig`.
 | `src/console/InputSource.zig` | Where the screen's input comes from |
 | `src/console/TerminalInput.zig` | Input straight from standard input, without `--web` |
 | `src/console/TestTerminal.zig`, `src/console/test.zig` | Tests of what the screen draws, through a small terminal emulator |
-| `src/hub/Remote.zig` | Shared state for playing together: the keyboard and web input, game text, discussion, players and the leader, sessions, audit log |
+| `src/hub/Hub.zig` | One game, many inputs: the keyboard and web commands, their replies, and the game text and status line players see |
+| `src/poly/Group.zig` | The rules of playing together: players, the leader, modes, kicks and inspector access |
+| `src/poly/Players.zig`, `Discussion.zig`, `Access.zig`, `AuditLog.zig` | Its parts: the players, the discussion, remote sessions and password guesses, the audit log |
+| `src/poly/world.zig` | The time and randomness the rules see, faked in tests |
 | `src/poly/Password.zig` | Passwords for remote players: three words from the EFF short word list |
 | `src/poly/eff_short_wordlist_1.txt` | The EFF short word list, embedded in the binary |
 | `src/inspector/Inspector.zig` | Map tracking and JSON snapshots for the web page |

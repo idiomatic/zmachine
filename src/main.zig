@@ -7,7 +7,8 @@ const Inspector = @import("inspector").Inspector;
 const Machine = @import("vm").Machine;
 const Storage = @import("vm").Storage;
 const Password = @import("poly").Password;
-const Remote = @import("hub").Remote;
+const Group = @import("poly").Group;
+const Hub = @import("hub").Hub;
 const Screen = @import("console").Screen;
 const commands = @import("commands.zig");
 const TerminalInput = @import("console").TerminalInput;
@@ -199,13 +200,15 @@ pub fn main(init: std.process.Init) !u8 {
 
     const tty_out = try Io.File.stdout().isTty(io);
     const tty_in = try Io.File.stdin().isTty(io);
-    var remote: Remote = .init(gpa, io);
-    defer remote.deinit();
+    var hub: Hub = .init(gpa, io);
+    defer hub.deinit();
+    var group: Group = .init(gpa, io, .{ .real = io });
+    defer group.deinit();
     var keyboard: TerminalInput = .{ .in = &stdin_reader.interface };
     var screen: Screen = .init(
         io,
         &stdout_writer.interface,
-        if (options.web_port != null) remote.input() else keyboard.input(),
+        if (options.web_port != null) hub.input() else keyboard.input(),
         story[0],
         tty_out and !options.plain,
         tty_in,
@@ -215,7 +218,7 @@ pub fn main(init: std.process.Init) !u8 {
     var storage: Storage.Cwd = .init(gpa, io);
     defer storage.deinit();
     // With --web, the players there see what the game prints.
-    const display = if (options.web_port != null) remote.display(screen.display()) else screen.display();
+    const display = if (options.web_port != null) hub.display(screen.display()) else screen.display();
     const machine = Machine.init(gpa, io, story, display, storage.storage(), try saveName(arena, options.story_path)) catch |err| {
         try stderr.print("zmachine: cannot load {s}: {s}\n", .{ options.story_path, @errorName(err) });
         try stderr.flush();
@@ -229,7 +232,7 @@ pub fn main(init: std.process.Init) !u8 {
     defer inspector.deinit();
     if (options.web_port) |port| {
         const server = try arena.create(web.Server);
-        server.* = web.Server.listen(gpa, io, &inspector, &remote, port, options.listen) catch |err| {
+        server.* = web.Server.listen(gpa, io, &inspector, &hub, &group, port, options.listen) catch |err| {
             try stderr.print("zmachine: cannot listen on port {d}: {s}\n", .{ port, @errorName(err) });
             try stderr.flush();
             return 1;
@@ -237,11 +240,11 @@ pub fn main(init: std.process.Init) !u8 {
         const thread = try std.Thread.spawn(.{}, web.Server.serve, .{server});
         thread.detach();
         machine.observer = inspector.observer();
-        try remote.startKeyboard();
-        screen.commands = commands.commands(&remote);
+        try hub.startKeyboard();
+        screen.commands = commands.commands(&group);
         try stderr.print("Play at http://127.0.0.1:{d}/ (the inspector is at /inspector)\n", .{port});
         if (options.grant_inspector) {
-            remote.inspector_for_all = true;
+            group.grantInspectorToAll();
             try stderr.writeAll("AI partners may read the inspector (--grant-inspector).\n");
         }
         if (options.listen) |address| {
@@ -252,8 +255,8 @@ pub fn main(init: std.process.Init) !u8 {
                 try stderr.writeAll("zmachine: ZMACHINE_PASSWORD is empty or longer than 64 characters\n");
                 try stderr.flush();
                 return 1;
-            } else try Password.generate(io);
-            remote.setPassword(password);
+            } else try Password.generate(group.world);
+            group.setPassword(password);
             // An address such as 0.0.0.0 stands for all of this machine's.
             const any = std.mem.eql(u8, address, "0.0.0.0") or std.mem.eql(u8, address, "::");
             try stderr.print(

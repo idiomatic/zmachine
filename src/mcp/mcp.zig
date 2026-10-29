@@ -12,7 +12,7 @@ const json = std.json;
 const Allocator = std.mem.Allocator;
 
 const build_options = @import("build_options");
-const Remote = @import("hub").Remote;
+const Group = @import("poly").Group;
 
 const protocol_version = "2025-06-18";
 
@@ -322,7 +322,7 @@ fn call(s: *Session, arena: Allocator, name: []const u8, args: ?json.ObjectMap) 
 }
 
 fn introduce(s: *Session, arena: Allocator, name: []const u8) !Result {
-    if (!Remote.validName(name)) return .{
+    if (!Group.validName(name)) return .{
         .text = "A name is 1 to 32 printable characters, and not \"you\", which stands for the person.",
         .is_error = true,
     };

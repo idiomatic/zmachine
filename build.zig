@@ -15,10 +15,10 @@ pub fn build(b: *std.Build) void {
         .{ .name = "vm", .imports = &.{} },
         .{ .name = "poly", .imports = &.{} },
         .{ .name = "console", .imports = &.{"vm"} },
-        .{ .name = "hub", .imports = &.{ "vm", "console", "poly" } },
+        .{ .name = "hub", .imports = &.{ "vm", "console" } },
         .{ .name = "inspector", .imports = &.{"vm"} },
         .{ .name = "web", .imports = &.{ "inspector", "hub", "poly" } },
-        .{ .name = "mcp", .imports = &.{ "hub", "build_options" } },
+        .{ .name = "mcp", .imports = &.{ "poly", "build_options" } },
     };
     var imports: [modules.len + 1]std.Build.Module.Import = undefined;
     imports[0] = .{ .name = "build_options", .module = options.createModule() };

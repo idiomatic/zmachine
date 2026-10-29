@@ -55,9 +55,10 @@ const Io = std.Io;
 const net = std.Io.net;
 const Allocator = std.mem.Allocator;
 
+const Group = @import("poly").Group;
+const Hub = @import("hub").Hub;
 const Inspector = @import("inspector").Inspector;
 const Password = @import("poly").Password;
-const Remote = @import("hub").Remote;
 
 const index_html = @import("inspector").html;
 const log_html = @embedFile("log.html");
@@ -74,7 +75,8 @@ pub const Server = struct {
     gpa: Allocator,
     io: Io,
     inspector: *Inspector,
-    remote: *Remote,
+    hub: *Hub,
+    group: *Group,
     port: u16,
     /// The address given with `--listen`, or null to listen on 127.0.0.1
     /// only. An unspecified address (such as 0.0.0.0) accepts any Host.
@@ -86,8 +88,9 @@ pub const Server = struct {
     loopback: ?net.Server,
 
     /// Binds to `port` on the loopback interface and, with
-    /// `listen_address`, on that address as well.
-    pub fn listen(gpa: Allocator, io: Io, inspector: *Inspector, remote: *Remote, port: u16, listen_address: ?[]const u8) !Server {
+    /// `listen_address`, on that address as well. What the game takes
+    /// from `hub` goes to `group`'s discussion and audit log.
+    pub fn listen(gpa: Allocator, io: Io, inspector: *Inspector, hub: *Hub, group: *Group, port: u16, listen_address: ?[]const u8) !Server {
         const loopback: net.IpAddress = .{ .ip4 = .loopback(port) };
         const address: net.IpAddress = if (listen_address) |text| try net.IpAddress.parse(text, port) else loopback;
         const listener = try address.listen(io, .{ .reuse_address = true });
@@ -98,11 +101,13 @@ pub const Server = struct {
             error.AddressInUse => if (isUnspecified(address)) null else return err,
             else => return err,
         } else null;
+        hub.hooks = .{ .context = group, .taken = taken };
         return .{
             .gpa = gpa,
             .io = io,
             .inspector = inspector,
-            .remote = remote,
+            .hub = hub,
+            .group = group,
             .port = port,
             .listen_address = listen_address,
             .listen_any = if (listen_address != null) isUnspecified(address) else false,
@@ -176,23 +181,23 @@ pub const Server = struct {
             const detail = std.fmt.bufPrint(&detail_buf, "{s} {s} from {s}", .{
                 method, path, headers.origin orelse headers.host orelse "?",
             }) catch path;
-            s.remote.log(.refused, agent, detail, true);
+            s.group.log(.refused, agent, detail, true);
             return sendResponse(w, "403 Forbidden", "text/plain", "forbidden\n");
         }
 
         // Work out who is asking.
         var name_buf: [64]u8 = undefined;
-        var token: ?Remote.Token = null;
-        var player: Remote.Player = .console;
+        var token: ?Group.Token = null;
+        var player: Group.Player = .console;
         if (headers.ai()) |name| {
-            if (!Remote.validName(name)) {
+            if (!Group.validName(name)) {
                 return sendResponse(w, "400 Bad Request", "text/plain", "X-Player names an AI partner in 1 to 32 printable characters\n");
             }
             if (!local) return s.refuse(w, agent, method, path, "AI partners connect from this machine\n");
             player = .{ .name = name, .ai = true, .local = false };
         } else if (local) {
             if (headers.person_name) |name| {
-                if (!Remote.validName(name)) {
+                if (!Group.validName(name)) {
                     return sendResponse(w, "400 Bad Request", "text/plain", "a name is 1 to 32 printable characters\n");
                 }
                 player = .{ .name = name, .local = true };
@@ -204,7 +209,7 @@ pub const Server = struct {
                 return s.login(w, peer, agent, body);
             }
             token = headers.session();
-            const state: Remote.SessionState = if (token) |t| s.remote.session(t, &name_buf) else .none;
+            const state: Group.SessionState = if (token) |t| s.group.session(t, &name_buf) else .none;
             // An invite link: give its password, then drop it from the
             // address bar.
             if (std.mem.eql(u8, method, "GET") and std.mem.eql(u8, path, "/")) if (queryValue(query, "password")) |raw| {
@@ -242,7 +247,7 @@ pub const Server = struct {
         // AI partners read the inspector's snapshots, and only when let.
         if (local_only and player.ai) {
             if (!std.mem.eql(u8, path, "/state")) return s.refuse(w, client, method, path, "AI partners only read the inspector's snapshots\n");
-            if (!s.remote.mayInspect(player)) return s.refuse(w, client, method, path, "nobody has let you read the inspector\n");
+            if (!s.group.mayInspect(player)) return s.refuse(w, client, method, path, "nobody has let you read the inspector\n");
         }
         // This machine needs no password; drop one from an invite link.
         if (local and std.mem.eql(u8, method, "GET") and std.mem.eql(u8, path, "/") and queryValue(query, "password") != null) {
@@ -254,7 +259,7 @@ pub const Server = struct {
             return s.join(w, player, token, std.mem.trim(u8, body, " \t\r\n"));
         }
         if (player.name != null) {
-            s.remote.touch(player) catch |err| switch (err) {
+            s.group.touch(player) catch |err| switch (err) {
                 error.NameTaken => return sendResponse(w, "409 Conflict", "text/plain", "that name is taken\n"),
                 error.Kicked => return s.refuse(w, client, method, path, "you were removed from the game\n"),
                 else => return err,
@@ -269,22 +274,22 @@ pub const Server = struct {
             if (std.mem.eql(u8, path, "/command")) return s.command(w, text, player, client);
             if (std.mem.eql(u8, path, "/say")) return s.say(w, body, player);
             if (std.mem.eql(u8, path, "/mode")) {
-                const mode = std.meta.stringToEnum(Remote.Mode, text) orelse
+                const mode = std.meta.stringToEnum(Group.Mode, text) orelse
                     return sendResponse(w, "400 Bad Request", "text/plain", "the mode is debate or turns\n");
-                s.remote.setMode(player, mode) catch |err| return leaderError(w, err);
+                s.group.setMode(player, mode) catch |err| return leaderError(w, err);
                 return sendResponse(w, "204 No Content", "text/plain", "");
             }
             if (std.mem.eql(u8, path, "/lead")) {
-                s.remote.passLeadership(player, text) catch |err| return leaderError(w, err);
+                s.group.passLeadership(player, text) catch |err| return leaderError(w, err);
                 return sendResponse(w, "204 No Content", "text/plain", "");
             }
             if (std.mem.eql(u8, path, "/kick")) {
-                s.remote.kick(player, text) catch |err| return leaderError(w, err);
+                s.group.kick(player, text) catch |err| return leaderError(w, err);
                 return sendResponse(w, "204 No Content", "text/plain", "");
             }
             if (std.mem.eql(u8, path, "/grant-inspector") or std.mem.eql(u8, path, "/revoke-inspector")) {
                 const grant = std.mem.eql(u8, path, "/grant-inspector");
-                s.remote.setInspectorAccess(player, text, grant) catch |err| return switch (err) {
+                s.group.setInspectorAccess(player, text, grant) catch |err| return switch (err) {
                     error.NotAllowed => sendResponse(w, "403 Forbidden", "text/plain", "only people on this machine may do that\n"),
                     error.UnknownPlayer => sendResponse(w, "404 Not Found", "text/plain", "no AI partner playing has that name\n"),
                     error.OutOfMemory => error.OutOfMemory,
@@ -293,11 +298,11 @@ pub const Server = struct {
             }
             if (std.mem.eql(u8, path, "/erase-map")) {
                 s.inspector.eraseMap();
-                s.remote.log(.inspector, client, "erased the inspector's map", false);
+                s.group.log(.inspector, client, "erased the inspector's map", false);
                 return sendResponse(w, "204 No Content", "text/plain", "");
             }
             if (std.mem.eql(u8, path, "/password")) {
-                s.remote.changePassword(player, if (text.len > 0) text else null) catch |err| return passwordError(w, err);
+                s.group.changePassword(player, if (text.len > 0) text else null) catch |err| return passwordError(w, err);
                 return sendResponse(w, "204 No Content", "text/plain", "");
             }
             return sendResponse(w, "404 Not Found", "text/plain", "not found\n");
@@ -307,7 +312,7 @@ pub const Server = struct {
         }
 
         if (std.mem.eql(u8, path, "/inspector")) {
-            s.remote.log(.inspector, client, "opened the object inspector", true);
+            s.group.log(.inspector, client, "opened the object inspector", true);
             return sendResponse(w, "200 OK", "text/html; charset=utf-8", index_html);
         }
         if (std.mem.eql(u8, path, "/state")) {
@@ -318,7 +323,7 @@ pub const Server = struct {
                     defer s.gpa.free(json);
                     var detail_buf: [64]u8 = undefined;
                     const detail = std.fmt.bufPrint(&detail_buf, "read the object tree and globals (since {d})", .{since}) catch "";
-                    s.remote.log(.snapshot, client, detail, true);
+                    s.group.log(.snapshot, client, detail, true);
                     return sendResponse(w, "200 OK", "application/json", json);
                 }
                 if (waited >= poll_timeout_ms) {
@@ -337,18 +342,18 @@ pub const Server = struct {
             try out.writer.writeAll("{\"name\":");
             if (player.name) |name| try std.json.Stringify.encodeJsonString(name, .{}, &out.writer) else try out.writer.writeAll("null");
             try out.writer.print(",\"ai\":{},\"local\":{},\"leader\":{},\"listening\":{}}}", .{
-                player.ai, player.local, s.remote.leads(player), s.remote.listening(),
+                player.ai, player.local, s.group.leads(player), s.group.listening(),
             });
             return sendResponse(w, "200 OK", "application/json", out.written());
         }
         if (std.mem.eql(u8, path, "/random-password")) {
-            if (!s.remote.managesPassword(player)) return passwordError(w, if (s.remote.listening()) error.NotAllowed else error.NotListening);
-            const password = Password.generate(s.io) catch |err| return passwordError(w, err);
+            if (!s.group.managesPassword(player)) return passwordError(w, if (s.group.listening()) error.NotAllowed else error.NotListening);
+            const password = Password.generate(s.group.world) catch |err| return passwordError(w, err);
             return sendResponse(w, "200 OK", "text/plain; charset=utf-8", password.slice());
         }
         if (std.mem.eql(u8, path, "/invite")) {
             var buf: [Password.max_len]u8 = undefined;
-            const password = s.remote.readPassword(player, &buf, "fetched an invite link with") catch |err| return passwordError(w, err);
+            const password = s.group.readPassword(player, &buf, "fetched an invite link with") catch |err| return passwordError(w, err);
             var host_buf: [128]u8 = undefined;
             const host = s.inviteHost(headers.host, local, &host_buf) orelse
                 return sendResponse(w, "503 Service Unavailable", "text/plain", "could not tell this machine's address\n");
@@ -362,26 +367,26 @@ pub const Server = struct {
             const since = parseSince(query);
             if (queryValue(query, "wait") != null) {
                 var waited: u32 = 0;
-                while (s.remote.textOffset() <= since and waited < poll_timeout_ms) {
+                while (s.hub.textOffset() <= since and waited < poll_timeout_ms) {
                     try s.io.sleep(.fromMilliseconds(poll_interval_ms), .awake);
                     waited += poll_interval_ms;
                 }
             }
             var out: Io.Writer.Allocating = .init(s.gpa);
             defer out.deinit();
-            try s.remote.writeText(&out.writer, since);
+            try s.hub.writeText(&out.writer, since, @tagName(s.group.currentMode()));
             return sendResponse(w, "200 OK", "application/json", out.written());
         }
         if (std.mem.eql(u8, path, "/discussion")) {
             const since = parseSince(query);
             var waited: u32 = 0;
-            while (queryValue(query, "wait") != null and s.remote.lastPost() <= since and waited < poll_timeout_ms) {
+            while (queryValue(query, "wait") != null and s.group.lastPost() <= since and waited < poll_timeout_ms) {
                 try s.io.sleep(.fromMilliseconds(poll_interval_ms), .awake);
                 waited += poll_interval_ms;
             }
             var out: Io.Writer.Allocating = .init(s.gpa);
             defer out.deinit();
-            try s.remote.writePosts(&out.writer, since);
+            try s.group.writeDiscussion(&out.writer, since);
             return sendResponse(w, "200 OK", "application/json", out.written());
         }
         if (std.mem.eql(u8, path, "/log")) {
@@ -390,13 +395,13 @@ pub const Server = struct {
         if (std.mem.eql(u8, path, "/events")) {
             const since = parseSince(query);
             var waited: u32 = 0;
-            while (s.remote.lastEvent() <= since and waited < poll_timeout_ms) {
+            while (s.group.lastEvent() <= since and waited < poll_timeout_ms) {
                 try s.io.sleep(.fromMilliseconds(poll_interval_ms), .awake);
                 waited += poll_interval_ms;
             }
             var out: Io.Writer.Allocating = .init(s.gpa);
             defer out.deinit();
-            try s.remote.writeEvents(&out.writer, since);
+            try s.group.writeEvents(&out.writer, since);
             return sendResponse(w, "200 OK", "application/json", out.written());
         }
         return sendResponse(w, "404 Not Found", "text/plain", "not found\n");
@@ -406,17 +411,17 @@ pub const Server = struct {
     fn refuse(s: *Server, w: *Io.Writer, client: []const u8, method: []const u8, path: []const u8, why: []const u8) !void {
         var detail_buf: [256]u8 = undefined;
         const detail = std.fmt.bufPrint(&detail_buf, "{s} {s}: {s}", .{ method, path, std.mem.trimEnd(u8, why, "\n") }) catch path;
-        s.remote.log(.refused, client, detail, true);
+        s.group.log(.refused, client, detail, true);
         return sendResponse(w, "403 Forbidden", "text/plain", why);
     }
 
     /// Checks a remote player's password, setting a session cookie if it
     /// is right.
     fn login(s: *Server, w: *Io.Writer, peer: net.IpAddress, agent: []const u8, body: []const u8) !void {
-        if (!s.remote.listening()) return sendResponse(w, "404 Not Found", "text/plain", "not found\n");
+        if (!s.group.listening()) return sendResponse(w, "404 Not Found", "text/plain", "not found\n");
         var client_buf: [256]u8 = undefined;
         const client = std.fmt.bufPrint(&client_buf, "{f} via {s}", .{ peer, agent }) catch agent;
-        switch (try s.remote.login(addressKey(peer), client, std.mem.trim(u8, body, " \t\r\n"))) {
+        switch (try s.group.login(addressKey(peer), client, std.mem.trim(u8, body, " \t\r\n"))) {
             .ok => |token| {
                 var cookie_buf: [128]u8 = undefined;
                 return sendResponseHeaders(w, "204 No Content", "text/plain", try sessionCookie(&cookie_buf, token), "");
@@ -429,10 +434,10 @@ pub const Server = struct {
     /// Gives the password from an invite link. Right, it sets the session
     /// cookie and redirects to `/`; wrong, it shows the password page.
     fn loginFromLink(s: *Server, w: *Io.Writer, peer: net.IpAddress, agent: []const u8, guess: []const u8) !void {
-        if (!s.remote.listening()) return redirectHome(w, "");
+        if (!s.group.listening()) return redirectHome(w, "");
         var client_buf: [256]u8 = undefined;
         const client = std.fmt.bufPrint(&client_buf, "{f} via {s} (invite link)", .{ peer, agent }) catch agent;
-        switch (try s.remote.login(addressKey(peer), client, guess)) {
+        switch (try s.group.login(addressKey(peer), client, guess)) {
             .ok => |token| {
                 var cookie_buf: [128]u8 = undefined;
                 return redirectHome(w, try sessionCookie(&cookie_buf, token));
@@ -466,10 +471,10 @@ pub const Server = struct {
     }
 
     /// Gives a person on the play page a name.
-    fn join(s: *Server, w: *Io.Writer, player: Remote.Player, token: ?Remote.Token, name: []const u8) !void {
+    fn join(s: *Server, w: *Io.Writer, player: Group.Player, token: ?Group.Token, name: []const u8) !void {
         if (player.ai) return sendResponse(w, "400 Bad Request", "text/plain", "AI partners are named by X-Player\n");
-        if (!Remote.validName(name)) return sendResponse(w, "400 Bad Request", "text/plain", "a name is 1 to 32 printable characters\n");
-        const result = if (token) |t| s.remote.joinSession(t, name) else s.remote.touch(.{ .name = name, .local = true });
+        if (!Group.validName(name)) return sendResponse(w, "400 Bad Request", "text/plain", "a name is 1 to 32 printable characters\n");
+        const result = if (token) |t| s.group.joinSession(t, name) else s.group.touch(.{ .name = name, .local = true });
         result catch |err| switch (err) {
             error.NameTaken => return sendResponse(w, "409 Conflict", "text/plain", "that name is taken\n"),
             error.Kicked => return sendResponse(w, "403 Forbidden", "text/plain", "you were removed from the game\n"),
@@ -480,27 +485,26 @@ pub const Server = struct {
 
     /// Queues a command and replies with the game's response once it waits
     /// for input again.
-    fn command(s: *Server, w: *Io.Writer, text: []const u8, player: Remote.Player, client: []const u8) !void {
-        const id = s.remote.submit(client, player, text) catch |err| switch (err) {
-            error.InvalidCommand => return sendResponse(
-                w,
-                "400 Bad Request",
-                "text/plain",
-                "a command is one line of printable text\n",
-            ),
-            error.NotYourTurn => return sendResponse(
-                w,
-                "409 Conflict",
-                "text/plain",
-                "in debate mode only the leader sends commands; suggest yours with POST /say\n",
-            ),
-            else => return err,
-        };
+    fn command(s: *Server, w: *Io.Writer, text: []const u8, player: Group.Player, client: []const u8) !void {
+        if (!Group.validCommand(text)) return sendResponse(
+            w,
+            "400 Bad Request",
+            "text/plain",
+            "a command is one line of printable text\n",
+        );
+        if (!s.group.maySend(player)) return sendResponse(
+            w,
+            "409 Conflict",
+            "text/plain",
+            "in debate mode only the leader sends commands; suggest yours with POST /say\n",
+        );
+        const id = try s.hub.submit(.{ .name = player.name, .ai = player.ai }, text);
+        s.group.log(.command, client, text, false);
 
         var out: Io.Writer.Allocating = .init(s.gpa);
         defer out.deinit();
         var waited: u32 = 0;
-        while (!try s.remote.writeReply(&out.writer, id)) {
+        while (!try s.hub.writeReply(&out.writer, id)) {
             if (waited >= poll_timeout_ms) {
                 // Still queued or still running; the text will appear in
                 // /transcript.
@@ -516,17 +520,17 @@ pub const Server = struct {
 
     /// Adds a thought or message to the discussion. The body is JSON:
     /// `{"text": "...", "suggestions": ["..."], "kind": "thought"}`.
-    fn say(s: *Server, w: *Io.Writer, body: []const u8, player: Remote.Player) !void {
+    fn say(s: *Server, w: *Io.Writer, body: []const u8, player: Group.Player) !void {
         const Say = struct {
             text: []const u8 = "",
             suggestions: []const []const u8 = &.{},
-            kind: Remote.PostKind = .message,
+            kind: Group.PostKind = .message,
         };
         const parsed = std.json.parseFromSlice(Say, s.gpa, body, .{ .ignore_unknown_fields = true }) catch
             return sendResponse(w, "400 Bad Request", "text/plain", "expected {\"text\": ..., \"suggestions\": [...]}\n");
         defer parsed.deinit();
         const v = parsed.value;
-        s.remote.post(player, v.kind, v.text, v.suggestions) catch |err| switch (err) {
+        s.group.post(player, v.kind, v.text, v.suggestions) catch |err| switch (err) {
             error.InvalidPost => return sendResponse(
                 w,
                 "400 Bad Request",
@@ -555,6 +559,17 @@ pub const Server = struct {
     }
 };
 
+/// Notes each line the game takes in the discussion, and keyboard lines in
+/// the audit log.
+fn taken(context: *anyopaque, sender: ?Hub.Sender, line: []const u8) void {
+    const group: *Group = @ptrCast(@alignCast(context));
+    if (sender) |s| {
+        group.heard(.{ .name = s.name, .ai = s.ai, .local = false }, line, false);
+    } else {
+        group.heard(.console, line, true);
+    }
+}
+
 /// A page may only call the server from the server's own pages: its
 /// Origin, if it sends one, must name the same host.
 fn allowedOrigin(origin: ?[]const u8, host: ?[]const u8) bool {
@@ -567,7 +582,7 @@ fn allowedOrigin(origin: ?[]const u8, host: ?[]const u8) bool {
 /// The header that sets the session cookie. Lax, not Strict, so it is sent
 /// when an invite link opened from another site redirects to `/`; it still
 /// isn't sent with requests other sites make.
-fn sessionCookie(buf: []u8, token: Remote.Token) ![]const u8 {
+fn sessionCookie(buf: []u8, token: Group.Token) ![]const u8 {
     return std.fmt.bufPrint(buf, "Set-Cookie: {s}={s}; Path=/; HttpOnly; SameSite=Lax\r\n", .{
         session_cookie, &std.fmt.bytesToHex(token, .lower),
     });
@@ -610,7 +625,7 @@ fn percentDecode(buf: []u8, text: []const u8) []const u8 {
     return buf[0..n];
 }
 
-fn leaderError(w: *Io.Writer, err: Remote.LeaderError) !void {
+fn leaderError(w: *Io.Writer, err: Group.LeaderError) !void {
     return switch (err) {
         error.NotLeader => sendResponse(w, "403 Forbidden", "text/plain", "only the leader may do that\n"),
         error.UnknownPlayer => sendResponse(w, "404 Not Found", "text/plain", "nobody playing has that name\n"),
@@ -619,7 +634,7 @@ fn leaderError(w: *Io.Writer, err: Remote.LeaderError) !void {
     };
 }
 
-fn passwordError(w: *Io.Writer, err: Remote.PasswordError) !void {
+fn passwordError(w: *Io.Writer, err: Group.PasswordError) !void {
     return switch (err) {
         error.NotListening => sendResponse(w, "404 Not Found", "text/plain", "there is no password without --listen\n"),
         error.NotAllowed => sendResponse(w, "403 Forbidden", "text/plain", "only this machine and the leader may do that\n"),
@@ -644,8 +659,8 @@ fn isUnspecified(address: net.IpAddress) bool {
 }
 
 /// The address without its port, for counting password guesses.
-fn addressKey(address: net.IpAddress) Remote.AddressKey {
-    var key: Remote.AddressKey = @splat(0);
+fn addressKey(address: net.IpAddress) Group.AddressKey {
+    var key: Group.AddressKey = @splat(0);
     switch (address) {
         .ip4 => |a| @memcpy(key[0..4], &a.bytes),
         .ip6 => |a| key = a.bytes,
@@ -684,13 +699,13 @@ const Headers = struct {
     }
 
     /// The session token from the cookie, if any.
-    fn session(h: *const Headers) ?Remote.Token {
+    fn session(h: *const Headers) ?Group.Token {
         var cookies = std.mem.tokenizeScalar(u8, h.cookie orelse return null, ';');
         while (cookies.next()) |raw| {
             const c = std.mem.trim(u8, raw, " ");
             const prefix = session_cookie ++ "=";
             if (!std.mem.startsWith(u8, c, prefix)) continue;
-            var token: Remote.Token = undefined;
+            var token: Group.Token = undefined;
             const bytes = std.fmt.hexToBytes(&token, c[prefix.len..]) catch return null;
             if (bytes.len != token.len) return null;
             return token;
@@ -770,7 +785,7 @@ test Headers {
     try std.testing.expectEqualStrings("curl/8.7.1", h.user_agent.?);
     try std.testing.expectEqual(@as(?usize, 12), h.content_length);
     try std.testing.expectEqual(@as(?[]u8, null), h.origin);
-    try std.testing.expectEqual(@as(?Remote.Token, null), h.session());
+    try std.testing.expectEqual(@as(?Group.Token, null), h.session());
     try h.add(std.testing.allocator, "Cookie: theme=dark; zmachine_session=000102030405060708090a0b0c0d0e0f");
     try std.testing.expectEqual(@as(u8, 15), h.session().?[15]);
 }

@@ -10,6 +10,7 @@
 //!   GET /inspector        the inspector page (local only)
 //!   GET /state?since=N    the latest snapshot, held open until it is newer
 //!                         than generation N (long polling; local only)
+//!   POST /erase-map       erase the map at the next snapshot (local only)
 //!   GET /me               who the server takes you for, and whether you lead
 //!   POST /login           give the password (remote players, with `--listen`)
 //!   POST /join            choose a name (people on the play page)
@@ -214,7 +215,8 @@ pub const Server = struct {
 
         // The inspector shows what players can't see. The audit log is open
         // to everyone, so leaders and the others see the same record.
-        const local_only = std.mem.eql(u8, path, "/inspector") or std.mem.eql(u8, path, "/state");
+        const local_only = std.mem.eql(u8, path, "/inspector") or std.mem.eql(u8, path, "/state") or
+            std.mem.eql(u8, path, "/erase-map");
         if (local_only and !local) return s.refuse(w, client, method, path, "this page is only for this machine\n");
         // This machine needs no password; drop one from an invite link.
         if (local and std.mem.eql(u8, method, "GET") and std.mem.eql(u8, path, "/") and queryValue(query, "password") != null) {
@@ -252,6 +254,11 @@ pub const Server = struct {
             }
             if (std.mem.eql(u8, path, "/kick")) {
                 s.remote.kick(player, text) catch |err| return leaderError(w, err);
+                return sendResponse(w, "204 No Content", "text/plain", "");
+            }
+            if (std.mem.eql(u8, path, "/erase-map")) {
+                s.inspector.eraseMap();
+                s.remote.log(.inspector, client, "erased the inspector's map", false);
                 return sendResponse(w, "204 No Content", "text/plain", "");
             }
             if (std.mem.eql(u8, path, "/password")) {

@@ -132,7 +132,9 @@ updates each time the game waits for input:
 
 - **Map**: rooms you have visited, laid out by the compass directions you
   moved in. Up/down/in/out moves are dashed; moves with no direction (such as
-  teleports) are dotted. Drag to pan, scroll to zoom.
+  teleports) are dotted. Drag to pan, scroll to zoom. Fit shows the whole
+  map (or centers on you) and follows you again; Reset erases the map and
+  starts it again from the room you're in.
 - **Objects**: the full object tree, with recently changed objects
   highlighted. Selecting an object shows its links, attributes and
   properties.
@@ -336,6 +338,7 @@ curl -d 'open mailbox' http://127.0.0.1:9675/command
 | `GET /` | The play page; for a remote player without a session, the password page. `?password=` gives the password and redirects to `/`. |
 | `GET /inspector` | The object inspector (this machine only; logged as suspicious). |
 | `GET /state?since=<n>` | The inspector's snapshots (this machine only; logged as suspicious). |
+| `POST /erase-map` | Erase the inspector's map, starting it again from the current room (this machine only; logged). |
 | `GET /me` | Who the server takes you for, and whether you lead. |
 | `POST /login` | A remote player gives the password; `204` sets the session cookie, `401` is wrong and `429` is too soon. |
 | `POST /join` | A person chooses a name (the body); `409` if it is taken. |

@@ -134,6 +134,8 @@ th, td { text-align: left; padding: 3px 8px 3px 0; border-bottom: 1px solid var(
 th { color: var(--muted); font-weight: 600; }
 td.hex { word-break: break-all; }
 .placeholder { color: var(--muted); padding: 20px 4px; }
+/* Fill the pane, so the scrollbar sits at its edge. */
+#globals, #history { flex: 1; min-width: 0; }
 #globals { overflow: auto; padding: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 4px; align-content: start; font: 12px var(--mono); }
 .g { background: var(--panel); border: 1px solid var(--border); border-radius: 5px; padding: 3px 7px; display: flex; justify-content: space-between; gap: 6px; }
 .g .k { color: var(--muted); }
@@ -169,7 +171,8 @@ td.hex { word-break: break-all; }
       <div class="map-tools">
         <button id="zoom-in" title="Zoom in">+</button>
         <button id="zoom-out" title="Zoom out">&minus;</button>
-        <button id="recenter" title="Fit the map, or center on the current room">Fit</button>
+        <button id="recenter" title="Fit the map, or center on the current room, and follow the player again">Fit</button>
+        <button id="erase-map" title="Erase the map and start it again from the current room">Reset</button>
       </div>
       <div class="map-empty" id="map-empty">The map fills in as you explore.</div>
     </div>
@@ -241,6 +244,7 @@ function setConnection(up) {
 
 function update(data) {
   const first = state === null;
+  erasing = Boolean(data.erasing);
   state = data;
   byId = new Map(data.objects.map((o) => [o.id, o]));
   flashObjects = new Set(data.changed);
@@ -494,6 +498,9 @@ const CELL_W = 170, CELL_H = 96, ROOM_W = 132, ROOM_H = 48;
 const view = { x: 0, y: 0, scale: 1, userMoved: false };
 let positions = new Map();
 let lastLocation = 0;
+// The map was erased; until the server's next snapshot, show only the
+// current room.
+let erasing = false;
 
 function layout(rooms, edges) {
   const pos = new Map();
@@ -555,9 +562,10 @@ function wrapName(name) {
 }
 
 function renderMap() {
-  const rooms = state.rooms;
+  const rooms = erasing ? state.rooms.filter((r) => r.id === state.location) : state.rooms;
+  const edges = erasing ? [] : state.edges;
   $("map-empty").style.display = rooms.length ? "none" : "grid";
-  positions = layout(rooms, state.edges);
+  positions = layout(rooms, edges);
 
   const edgesG = $("edges");
   const roomsG = $("rooms");
@@ -570,7 +578,7 @@ function renderMap() {
   };
 
   const drawn = new Map();
-  for (const e of state.edges) {
+  for (const e of edges) {
     if (!positions.has(e.from) || !positions.has(e.to)) continue;
     const pair = e.from < e.to ? `${e.from}-${e.to}` : `${e.to}-${e.from}`;
     if (drawn.has(pair)) continue;
@@ -668,6 +676,8 @@ function applyView() {
 
 function zoom(factor) {
   view.scale = Math.min(3, Math.max(0.2, view.scale * factor));
+  // Keep the chosen zoom when the next turn redraws the map.
+  view.userMoved = true;
   applyView();
 }
 
@@ -696,10 +706,24 @@ function zoom(factor) {
   }, { passive: false });
   $("zoom-in").addEventListener("click", () => zoom(1.25));
   $("zoom-out").addEventListener("click", () => zoom(0.8));
-  $("recenter").addEventListener("click", () => {
+  const fit = () => {
     view.userMoved = false;
+    view.scale = 1;
     if (state) fitOrCenter();
     applyView();
+  };
+  $("recenter").addEventListener("click", fit);
+  $("erase-map").addEventListener("click", async () => {
+    if (!state) return;
+    // Clear the map at once; the server erases its copy at the next turn.
+    erasing = true;
+    renderMap();
+    fit();
+    const ok = await fetch("/erase-map", { method: "POST" }).then((res) => res.ok, () => false);
+    if (!ok) {
+      erasing = false;
+      renderMap();
+    }
   });
   window.addEventListener("resize", applyView);
 })();

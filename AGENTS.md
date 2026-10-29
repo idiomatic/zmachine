@@ -26,7 +26,7 @@ Keep this file up to date with every specification.
 
 * `--web [port]` (default 9675) listens on 127.0.0.1; `--listen <address>` (implies `--web`) adds that address. Refuse and log requests whose `Host` isn't this server or whose `Origin` doesn't match `Host`.
 * Without `--web`, input is unchanged; with it, a piped walkthrough gives the same output, and quitting exits cleanly with requests open.
-* `/` is the play page (below); `/inspector` is a live inspector: object tree, attributes, properties and globals with recent changes highlighted, a map of visited rooms laid out by direction, and the command history.
+* `/` is the play page (below); `/inspector` is a live inspector: object tree, attributes, properties and globals with recent changes highlighted, a map of visited rooms laid out by direction (pan, zoom, Fit to show it all or follow the player, and Reset, which erases it and starts again from the current room: `POST /erase-map`, logged), and the command history.
 
 ## Playing together
 
@@ -81,7 +81,7 @@ Keep this file up to date with every specification.
 ### Remote access
 
 * `--listen <address>` opts in to players on other machines.
-* The inspector (`/inspector`, `/state`) answers only this machine. The audit log (`/log`, `/events`) is open to every player, putting leaders and the others on an equal footing; it never shows the password.
+* The inspector (`/inspector`, `/state`, `/erase-map`) answers only this machine. The audit log (`/log`, `/events`) is open to every player, putting leaders and the others on an equal footing; it never shows the password.
 * A remote player gives the password once (`POST /login`); pasting a whole invite link into the field gives just its password. That sets an HttpOnly, SameSite=Lax session cookie (Lax so an invite link opened from another site keeps it through the redirect). Local clients need none.
 * Wrong guesses double a per-address delay (up to a minute); guesses are capped at 10 a second overall; failures are logged.
 * The README warns that plain HTTP exposes the password until TLS.

@@ -13,10 +13,13 @@ const Inspector = @This();
 gpa: Allocator,
 io: Io,
 
-/// Guards `snapshot` and `generation`, which are shared with the server.
+/// Guards `snapshot`, `generation` and `erase_map`, which are shared with
+/// the server.
 mutex: Io.Mutex = .init,
 snapshot: []u8 = &.{},
 generation: u64 = 0,
+/// The map is erased before the next snapshot.
+erase_map: bool = false,
 
 // The rest is only touched on the interpreter thread.
 rooms: std.AutoArrayHashMapUnmanaged(u16, void) = .empty,
@@ -139,15 +142,43 @@ fn afterInput(context: *anyopaque, m: *Machine, line: []const u8) void {
     in.turn += 1;
 }
 
+/// Erases the map at the next snapshot, which starts it again from the
+/// player's room.
+pub fn eraseMap(in: *Inspector) void {
+    in.mutex.lockUncancelable(in.io);
+    defer in.mutex.unlock(in.io);
+    in.erase_map = true;
+    // A new generation, so every open inspector hears of it at once.
+    in.generation += 1;
+}
+
 /// Returns a copy of the latest snapshot if it is newer than `since`.
 pub fn latest(in: *Inspector, gpa: Allocator, since: u64) !?[]u8 {
     in.mutex.lockUncancelable(in.io);
     defer in.mutex.unlock(in.io);
     if (in.generation <= since or in.snapshot.len == 0) return null;
-    return try gpa.dupe(u8, in.snapshot);
+    // The snapshot begins with its generation, which an erase may have
+    // moved on since. Until the next snapshot erases the map, mark this one
+    // so the page shows only the current room.
+    const rest = in.snapshot[std.mem.indexOfScalar(u8, in.snapshot, ',').? .. in.snapshot.len - 1];
+    return try std.fmt.allocPrint(gpa, "{{\"generation\":{d}{s}{s}}}", .{
+        in.generation, rest, if (in.erase_map) ",\"erasing\":true" else "",
+    });
 }
 
 fn update(in: *Inspector, m: *Machine) !void {
+    const erase = erase: {
+        in.mutex.lockUncancelable(in.io);
+        defer in.mutex.unlock(in.io);
+        defer in.erase_map = false;
+        break :erase in.erase_map;
+    };
+    if (erase) {
+        // Start again from the room the player was in when it was erased.
+        in.rooms.clearRetainingCapacity();
+        in.edges.clearRetainingCapacity();
+        if (in.location != 0) try in.rooms.put(in.gpa, in.location, {});
+    }
     const object_count = m.objects.count();
     const here = m.readGlobal(0) catch 0;
     if (here != 0 and here <= object_count) {

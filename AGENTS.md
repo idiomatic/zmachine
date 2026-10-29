@@ -8,7 +8,7 @@ Keep this file up to date with every specification.
 * Zork I prints "You are standing in an open field"; a scripted walkthrough scores 350 of 350.
 * `save`/`restore` (portable Quetzal, default `<story>.qzl`), `script`, `-t <file>` (transcript from the start), `undo` in version 5.
 * `--seed <n>`: Frotz's generator, so transcripts match `dfrotz -s <n> -I 6 -T`.
-* `-h`/`--help`; `--version` prints `build.zig.zon`'s version (0.2.1).
+* `-h`/`--help`; `--version` prints `build.zig.zon`'s version (0.2.2).
 
 ## Terminal
 
@@ -103,6 +103,7 @@ Keep this file up to date with every specification.
     * Scripts are named `<story>.r<release>-<serial>[.<topic>].txt`; another release fails.
     * Each seed (or one unseeded run) plays with and without `--web`; outputs must match each other and the saved `<script name>.seed<n>.expected`.
     * `-Dwalkthrough=<name>` plays that name or names starting `<name>.`; `-Dupdate-walkthroughs` saves transcripts; anything missing is skipped and passes.
+    * `tests/walkthroughs/` is checked out without line-ending conversion (`.gitattributes`).
 * GitHub Actions: formatting, build, unit tests and walkthroughs on x86_64-linux, aarch64-linux, aarch64-macos, x86_64-windows and aarch64-windows; then stripped ReleaseSafe archives (with README and LICENSE) for all six targets, published as a release by a `v<version>` tag matching `build.zig.zon`.
 
 ## Rules

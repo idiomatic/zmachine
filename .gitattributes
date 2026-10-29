@@ -1,0 +1,3 @@
+# Walkthroughs are compared byte for byte, so check them out exactly as
+# committed, without Windows line endings.
+tests/walkthroughs/** -text

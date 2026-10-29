@@ -426,8 +426,30 @@ cannot send commands or read the game.
 | `src/login.html` | The password page for remote players, embedded in the binary |
 | `src/eff_short_wordlist_1.txt` | The EFF short word list, embedded in the binary |
 | `src/log.html` | The audit log page, embedded in the binary |
+| `tools/walkthrough.zig` | Plays the local walkthroughs for `zig build walkthrough` |
 
 Run the unit tests with `zig build test`.
+
+`zig build walkthrough` plays walkthroughs you keep locally (story files
+and walkthroughs can't be shared here). List them in
+`tests/walkthroughs/walkthroughs.zon`:
+
+```zig
+.{
+    .{
+        .script = "zork1.txt", // in tests/walkthroughs/
+        .story = "games/zork1.z3",
+        .seed = 15,
+        .expect = "Your score is 350 (total of 350 points)",
+    },
+}
+```
+
+Each script is played with and without `--web`; the two outputs must
+match, contain the `expect` line, and match `tests/walkthroughs/<name>.expected`
+if you have saved one with `zig build walkthrough -Dupdate-walkthroughs`.
+`-Dwalkthrough=zork1` plays just that one. Without a manifest, the step
+skips everything and passes.
 
 ## How it was made
 

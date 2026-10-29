@@ -32,11 +32,15 @@ jobs:
       # Once is enough, and Windows checkouts have CRLF line endings.
       - name: Check formatting
         if: matrix.target == 'x86_64-linux'
-        run: zig fmt --check build.zig src
+        run: zig fmt --check build.zig src tools
       - name: Build
         run: zig build -Doptimize=ReleaseSafe
       - name: Test
         run: zig build test
+      # The walkthroughs stay local, so here this only checks that the step
+      # builds and skips them.
+      - name: Walkthroughs
+        run: zig build walkthrough
 
   # Cross-compiles stripped release archives for every target once the
   # builds pass. A pushed tag such as v0.1.0 also publishes them as a

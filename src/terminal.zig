@@ -33,6 +33,14 @@ pub fn size() ?[2]u16 {
     return .{ ws.col, ws.row };
 }
 
+/// Whether a line of input is already waiting on stdin. Always false on
+/// Windows.
+pub fn inputPending() bool {
+    if (is_windows) return false;
+    var fds = [_]posix.pollfd{.{ .fd = Io.File.stdin().handle, .events = posix.POLL.IN, .revents = 0 }};
+    return (posix.poll(&fds, 0) catch return false) > 0;
+}
+
 const Mode = if (is_windows) u32 else posix.termios;
 
 /// The input mode raw mode replaced, while it is on, so an interrupt can

@@ -400,7 +400,17 @@ fn more(s: *Screen) Error!void {
             }
         }
     } else {
-        _ = try s.readKey();
+        // Not readKey, which would print the pending word after [MORE],
+        // only for it to be cleared with it.
+        try s.out.flush();
+        const raw: terminal.RawMode = try .enter();
+        defer raw.leave();
+        if (s.in.takeByte()) |c| {
+            _ = decodeKey(c, s.in);
+        } else |err| switch (err) {
+            error.EndOfStream => {},
+            else => return err,
+        }
     }
     try s.out.writeAll("\r\x1b[K");
     s.line_len = 0;
@@ -638,6 +648,7 @@ pub fn readLine(s: *Screen, buf: []u8) Error!?[]u8 {
     const prior_sgr = s.looks.priorinput.over(s.looks.input).sgr(&prior_buf);
     if (s.ansi) try s.out.writeAll(current_sgr);
     try s.out.flush();
+    var typed_ahead = s.typedAhead();
 
     // Keys left over from a piped line are discarded, as in dumb Frotz.
     s.keys_pos = s.keys_len;
@@ -659,6 +670,7 @@ pub fn readLine(s: *Screen, buf: []u8) Error!?[]u8 {
                 s.col = start_col;
                 if (s.ansi) try s.out.writeAll(current_sgr);
                 try s.out.flush();
+                typed_ahead = s.typedAhead();
             },
         };
     } else line: {
@@ -681,7 +693,7 @@ pub fn readLine(s: *Screen, buf: []u8) Error!?[]u8 {
         if (s.ansi) try s.out.writeAll(prior_sgr);
         try s.writeLower(buf[0..n]);
         try s.writeLower(if (s.ansi) "\r\n" else "\n");
-    } else if (s.ansi and !std.mem.eql(u8, current_sgr, prior_sgr)) {
+    } else if (s.ansi and !typed_ahead and !std.mem.eql(u8, current_sgr, prior_sgr)) {
         // The terminal echoed the line as it was typed; redraw it in the
         // prior look, on the rows above the cursor it took up.
         const width = start_col + displayWidth(buf[0..n]);
@@ -690,13 +702,33 @@ pub fn readLine(s: *Screen, buf: []u8) Error!?[]u8 {
         if (start_col > 0) try s.out.print("\x1b[{d}C", .{start_col});
         try s.out.writeAll(prior_sgr);
         try s.out.writeAll(buf[0..n]);
+        // Clear the rest of the last row in the game's style, in case
+        // wrapping scrolled it in with the input's background, unless the
+        // line filled it (erasing there would take the last character).
+        if (width % s.width != 0) {
+            try s.writeSgrDirect();
+            try s.out.writeAll("\x1b[K");
+        }
         try s.out.writeAll("\x1b8");
     }
-    if (s.ansi) try s.writeSgrDirect();
+    if (s.ansi) {
+        // Return may have scrolled the screen while the input look was set,
+        // filling the new row with its background; clear it in the game's.
+        try s.writeSgrDirect();
+        try s.out.writeAll("\x1b[K");
+    }
     s.col = 0;
     if (s.lower_row < s.height) s.lower_row += 1;
     s.lines_since_input = 0;
     return buf[0..n];
+}
+
+/// Whether keys were typed before the game asked for the line, so the
+/// terminal echoed them somewhere else, or not at all.
+fn typedAhead(s: *Screen) bool {
+    if (!s.tty_input) return false;
+    if (s.remote) |r| return r.keyboardPending();
+    return s.in.bufferedLen() > 0 or terminal.inputPending();
 }
 
 /// Carries out a console command typed in place of a line of input, which

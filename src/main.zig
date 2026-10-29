@@ -17,10 +17,10 @@ const usage =
     \\Usage: zmachine [options] <story-file>
     \\
     \\Options:
-    \\  -w, --web [port]   Serve the live object inspector and map on
-    \\                     http://127.0.0.1:<port>/ (default 9675, ZORK on
-    \\                     a phone keypad), and accept commands from a
-    \\                     partner with POST /command
+    \\  -w, --web [port]   Serve the play page on http://127.0.0.1:<port>/
+    \\                     (default 9675, ZORK on a phone keypad), so people
+    \\                     and AI partners can play along, and the live
+    \\                     object inspector and map on /inspector
     \\  --listen <address> Also let players on other machines join the game,
     \\                     with a password, on <address> (such as 0.0.0.0);
     \\                     implies --web. ZMACHINE_PASSWORD sets the
@@ -40,15 +40,15 @@ const usage =
     \\Styles:
     \\  A comma-separated list of presets and <part>=<look> settings, applied
     \\  in order, such as `mono,prompt=bold+cyan`.
-    \\  Presets: default, dark, light, mono (no colours), plain
+    \\  Presets: default, dark, light, mono (no colors), plain
     \\  Parts:   input, prompt, header (or status), more ([MORE]), and
     \\           currentinput and priorinput, laid over input for the
     \\           line being typed and for earlier lines
-    \\  Looks:   attributes and a colour joined by +, such as bold+white/blue
+    \\  Looks:   attributes and a color joined by +, such as bold+white/blue
     \\           attributes: bold, dim, italic, underline, reverse, plain
-    \\           colour: fg, fg/bg or /bg, each a theme colour (black, red,
+    \\           color: fg, fg/bg or /bg, each a theme color (black, red,
     \\           green, yellow, blue, magenta, cyan, white, or bright-<name>),
-    \\           a 256-colour number, #rrggbb or default
+    \\           a 256-color number, #rrggbb or default
     \\  Default: input=30,currentinput=bold,prompt=plain,
     \\           header=bold+231/24,more=reverse
     \\

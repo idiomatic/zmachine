@@ -379,6 +379,13 @@ pub fn takeKey(r: *Remote, buf: []u8, by_line: bool, remote: bool) Key {
     return if (r.keyboard_closed) .closed else .none;
 }
 
+/// Whether keys have arrived from the keyboard that nothing has taken yet.
+pub fn keyboardPending(r: *Remote) bool {
+    r.mutex.lockUncancelable(r.io);
+    defer r.mutex.unlock(r.io);
+    return r.keyboard.items.len > 0;
+}
+
 /// Takes a byte that has already arrived from the keyboard, for the rest
 /// of an escape sequence.
 pub fn takeKeyboardByte(r: *Remote) ?u8 {

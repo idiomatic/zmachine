@@ -8,7 +8,7 @@ Keep this file up to date with every specification.
 * Plays Zork I: prints "You are standing in an open field"; a scripted walkthrough scores 350 of 350.
 * `save`/`restore` with portable Quetzal files (default `<story>.qzl`), `script`, `-t <file>` to record from the start, `undo` in version 5.
 * `--seed <n>` uses Frotz's generator, so transcripts match `dfrotz -s <n> -I 6 -T`.
-* `-h`/`--help`; `--version` prints the version from `build.zig.zon` (0.2.0).
+* `-h`/`--help`; `--version` prints the version from `build.zig.zon` (0.2.1).
 
 ## Terminal
 
@@ -19,7 +19,7 @@ Keep this file up to date with every specification.
 * The story header advertises only what the display can do.
 * `--style <list>` (repeatable, applied after `ZMACHINE_STYLE`) applies presets and `<part>=<look>` settings in order. Unknown names are errors; plain output ignores styles.
     * Presets: `default` (`input=30,currentinput=bold,prompt=plain,header=bold+231/24,more=reverse`), `dark` (pale yellow input), `light` (blue input), `mono` (no colors), `plain` (no styling).
-    * Parts: `input`, with `currentinput`/`priorinput` laid over it in any order (a line is redrawn in the prior look after Return); `prompt` (last word before input); `header` or `status` (versions 1–3); `more`.
+    * Parts: `input`, with `currentinput`/`priorinput` laid over it in any order (a line is redrawn in the prior look after Return, unless typed before the game asked for it; an input background never spills onto the next row); `prompt` (last word before input); `header` or `status` (versions 1–3); `more`.
     * Looks: `+`-joined attributes (`bold`, `dim`, `italic`, `underline`, `reverse`, `plain`) and a color `fg`, `fg/bg` or `/bg`, each a theme color (`black`…`white`, `bright-<name>`), 256-color number, `#rrggbb` or `default`.
 
 ## Web server

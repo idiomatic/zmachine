@@ -1,0 +1,41 @@
+north
+north
+up
+down
+north
+east
+east
+north
+south
+east
+down
+down
+north
+southwest
+up
+up
+west
+northwest
+east
+open window
+west
+west
+take lamp
+turn on lamp
+east
+up
+down
+east
+north
+west
+west
+north
+west
+east
+south
+west
+south
+west
+score
+quit
+y

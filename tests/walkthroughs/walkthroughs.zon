@@ -9,6 +9,14 @@
         .expect = "You are standing in an open field west of a white house",
     },
     .{
+        // Every room above ground: the twisty forests, the canyon and the
+        // house, with up, down and one-way moves for the inspector's map.
+        .script = "zork1.r119-880429.surface.txt",
+        .story = "zork1",
+        .seeds = .{ 1, 2, 3 },
+        .expect = "Your score is 10 (total of 350 points), in 38 moves.",
+    },
+    .{
         .script = "zork2.r63-860811.opening.txt",
         .story = "zork2",
         .seeds = .{ 1, 2, 3 },

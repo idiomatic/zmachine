@@ -10,7 +10,7 @@ import json, os, subprocess, sys, time, urllib.request
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 STORY = ROOT + "/games/zork1.r119-880429.z3"
 SAFARI = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
-MCP = "zmachine-mcp/0.2.1"
+MCP = "zmachine-mcp/0.2.2"
 kind, port = sys.argv[1], int(sys.argv[2])
 base = f"http://127.0.0.1:{port}"
 

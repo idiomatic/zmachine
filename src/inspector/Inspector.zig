@@ -7,16 +7,18 @@ const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
 const Machine = @import("vm").Machine;
+const protocol = @import("protocol");
 
 const Inspector = @This();
 
 gpa: Allocator,
 io: Io,
 
-/// Guards `snapshot`, `generation` and `erase_map`, which are shared with
-/// the server.
+/// Guards `snapshot`, its arena, `generation` and `erase_map`, which are
+/// shared with the server.
 mutex: Io.Mutex = .init,
-snapshot: []u8 = &.{},
+snapshot: ?protocol.Snapshot = null,
+snapshot_arena: ?std.heap.ArenaAllocator = null,
 generation: u64 = 0,
 /// The map is erased before the next snapshot.
 erase_map: bool = false,
@@ -105,7 +107,7 @@ pub fn init(gpa: Allocator, io: Io) Inspector {
 }
 
 pub fn deinit(in: *Inspector) void {
-    in.gpa.free(in.snapshot);
+    if (in.snapshot_arena) |*arena| arena.deinit();
     in.gpa.free(in.hashes);
     in.rooms.deinit(in.gpa);
     in.edges.deinit(in.gpa);
@@ -152,18 +154,19 @@ pub fn eraseMap(in: *Inspector) void {
     in.generation += 1;
 }
 
-/// Returns a copy of the latest snapshot if it is newer than `since`.
+/// Returns the latest snapshot as JSON, allocated, if it is newer than
+/// `since`.
 pub fn latest(in: *Inspector, gpa: Allocator, since: u64) !?[]u8 {
     in.mutex.lockUncancelable(in.io);
     defer in.mutex.unlock(in.io);
-    if (in.generation <= since or in.snapshot.len == 0) return null;
-    // The snapshot begins with its generation, which an erase may have
-    // moved on since. Until the next snapshot erases the map, mark this one
-    // so the page shows only the current room.
-    const rest = in.snapshot[std.mem.indexOfScalar(u8, in.snapshot, ',').? .. in.snapshot.len - 1];
-    return try std.fmt.allocPrint(gpa, "{{\"generation\":{d}{s}{s}}}", .{
-        in.generation, rest, if (in.erase_map) ",\"erasing\":true" else "",
-    });
+    var snap = in.snapshot orelse return null;
+    if (in.generation <= since) return null;
+    // An erase moves the generation on before the next snapshot. Until
+    // that snapshot erases the map, mark this one so the page shows only
+    // the current room.
+    snap.generation = in.generation;
+    if (in.erase_map) snap.erasing = true;
+    return try protocol.allocWrite(gpa, snap);
 }
 
 fn update(in: *Inspector, m: *Machine) !void {
@@ -190,14 +193,15 @@ fn update(in: *Inspector, m: *Machine) !void {
     }
     try in.detectChanges(m, object_count);
 
-    var out: Io.Writer.Allocating = .init(in.gpa);
-    defer out.deinit();
-    try in.writeJson(m, &out.writer, object_count);
+    var arena: std.heap.ArenaAllocator = .init(in.gpa);
+    errdefer arena.deinit();
+    const snap = try in.takeSnapshot(m, arena.allocator(), object_count);
 
     in.mutex.lockUncancelable(in.io);
     defer in.mutex.unlock(in.io);
-    in.gpa.free(in.snapshot);
-    in.snapshot = try out.toOwnedSlice();
+    if (in.snapshot_arena) |*old| old.deinit();
+    in.snapshot_arena = arena;
+    in.snapshot = snap;
     in.generation += 1;
 }
 
@@ -238,87 +242,66 @@ fn detectChanges(in: *Inspector, m: *Machine, object_count: u16) !void {
     }
 }
 
-fn writeString(w: *Io.Writer, s: []const u8) !void {
-    try std.json.Stringify.encodeJsonString(s, .{}, w);
-}
-
-fn writeJson(in: *Inspector, m: *Machine, w: *Io.Writer, object_count: u16) !void {
-    try w.print("{{\"generation\":{d},\"turn\":{d},\"version\":{d},\"release\":{d},\"serial\":", .{
-        in.generation + 1, in.turn, m.version, std.mem.readInt(u16, m.memory[2..4], .big),
-    });
-    try writeString(w, m.memory[0x12..0x18]);
-    try w.print(",\"location\":{d}", .{in.location});
-
+/// The machine's objects, globals and the map, allocated in `arena`.
+fn takeSnapshot(in: *Inspector, m: *Machine, arena: Allocator, object_count: u16) !protocol.Snapshot {
     var name: Machine.TextBuffer = undefined;
-    try w.writeAll(",\"objects\":[");
-    for (1..@as(usize, object_count) + 1) |i| {
+    const objects = try arena.alloc(protocol.Snapshot.Object, object_count);
+    for (objects, 1..) |*o, i| {
         const obj: u16 = @intCast(i);
-        if (i > 1) try w.writeAll(",");
         m.objectName(obj, &name);
-        try w.print("{{\"id\":{d},\"name\":", .{obj});
-        try writeString(w, name.slice());
-        try w.print(",\"parent\":{d},\"sibling\":{d},\"child\":{d},\"attrs\":[", .{
-            m.objects.parent(obj) catch 0,
-            m.objects.sibling(obj) catch 0,
-            m.objects.child(obj) catch 0,
-        });
-        var first = true;
+        var attrs: std.ArrayList(u16) = .empty;
         for (0..m.objects.attributeCount()) |a| {
-            if (m.objects.attribute(obj, @intCast(a)) catch false) {
-                if (!first) try w.writeAll(",");
-                try w.print("{d}", .{a});
-                first = false;
-            }
+            if (m.objects.attribute(obj, @intCast(a)) catch false) try attrs.append(arena, @intCast(a));
         }
-        try w.writeAll("],\"props\":[");
-        first = true;
+        var props: std.ArrayList(protocol.Snapshot.Property) = .empty;
         var addr = m.objects.firstProperty(obj) catch 0;
         while (addr != 0) {
             const prop = (m.objects.propertyAt(addr) catch null) orelse break;
             if (prop.data + prop.size > m.memory.len) break;
-            if (!first) try w.writeAll(",");
-            try w.print("{{\"n\":{d},\"d\":\"", .{prop.number});
-            try w.printHex(m.memory[prop.data..][0..prop.size], .lower);
-            try w.writeAll("\"}");
-            first = false;
+            const data = m.memory[prop.data..][0..prop.size];
+            const hex = try arena.alloc(u8, data.len * 2);
+            for (data, 0..) |byte, j| _ = std.fmt.bufPrint(hex[j * 2 ..][0..2], "{x:0>2}", .{byte}) catch unreachable;
+            try props.append(arena, .{ .n = prop.number, .d = hex });
             addr = prop.next;
         }
-        try w.writeAll("]}");
+        o.* = .{
+            .id = obj,
+            .name = try arena.dupe(u8, name.slice()),
+            .parent = m.objects.parent(obj) catch 0,
+            .sibling = m.objects.sibling(obj) catch 0,
+            .child = m.objects.child(obj) catch 0,
+            .attrs = attrs.items,
+            .props = props.items,
+        };
     }
 
-    try w.writeAll("],\"changed\":[");
-    for (in.changed.items, 0..) |obj, i| {
-        if (i > 0) try w.writeAll(",");
-        try w.print("{d}", .{obj});
-    }
+    const globals = try arena.alloc(u16, 240);
+    for (globals, 0..) |*g, i| g.* = m.readGlobal(@intCast(i)) catch 0;
 
-    try w.writeAll("],\"globals\":[");
-    for (0..240) |i| {
-        if (i > 0) try w.writeAll(",");
-        try w.print("{d}", .{m.readGlobal(@intCast(i)) catch 0});
-    }
-
-    try w.writeAll("],\"rooms\":[");
-    for (in.rooms.keys(), 0..) |room, i| {
-        if (i > 0) try w.writeAll(",");
+    const rooms = try arena.alloc(protocol.Snapshot.Room, in.rooms.count());
+    for (rooms, in.rooms.keys()) |*r, room| {
         m.objectName(room, &name);
-        try w.print("{{\"id\":{d},\"name\":", .{room});
-        try writeString(w, name.slice());
-        try w.writeAll("}");
+        r.* = .{ .id = room, .name = try arena.dupe(u8, name.slice()) };
     }
+    const edges = try arena.alloc(protocol.Snapshot.Edge, in.edges.items.len);
+    for (edges, in.edges.items) |*out, e| out.* = .{ .from = e.from, .to = e.to, .dir = @tagName(e.dir) };
+    const commands = try arena.alloc([]const u8, in.commands.items.len);
+    for (commands, in.commands.items) |*out, c| out.* = try arena.dupe(u8, c);
 
-    try w.writeAll("],\"edges\":[");
-    for (in.edges.items, 0..) |e, i| {
-        if (i > 0) try w.writeAll(",");
-        try w.print("{{\"from\":{d},\"to\":{d},\"dir\":\"{s}\"}}", .{ e.from, e.to, @tagName(e.dir) });
-    }
-
-    try w.writeAll("],\"commands\":[");
-    for (in.commands.items, 0..) |c, i| {
-        if (i > 0) try w.writeAll(",");
-        try writeString(w, c);
-    }
-    try w.writeAll("]}");
+    return .{
+        .generation = in.generation + 1,
+        .turn = in.turn,
+        .version = m.version,
+        .release = std.mem.readInt(u16, m.memory[2..4], .big),
+        .serial = try arena.dupe(u8, m.memory[0x12..0x18]),
+        .location = in.location,
+        .objects = objects,
+        .changed = try arena.dupe(u16, in.changed.items),
+        .globals = globals,
+        .rooms = rooms,
+        .edges = edges,
+        .commands = commands,
+    };
 }
 
 test "direction from command" {

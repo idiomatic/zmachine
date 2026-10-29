@@ -59,6 +59,7 @@ const Group = @import("poly").Group;
 const Hub = @import("hub").Hub;
 const Inspector = @import("inspector").Inspector;
 const Password = @import("poly").Password;
+const protocol = @import("protocol");
 
 const index_html = @import("inspector").html;
 const log_html = @embedFile("log.html");
@@ -151,6 +152,9 @@ pub const Server = struct {
         var writer = stream.writer(s.io, &write_buf);
         const r = &reader.interface;
         const w = &writer.interface;
+        var arena_state: std.heap.ArenaAllocator = .init(s.gpa);
+        defer arena_state.deinit();
+        const arena = arena_state.allocator();
 
         const request_line = (try r.takeDelimiter('\n')) orelse return;
         var parts = std.mem.tokenizeScalar(u8, std.mem.trimEnd(u8, request_line, "\r"), ' ');
@@ -271,7 +275,7 @@ pub const Server = struct {
         if (std.mem.eql(u8, method, "POST")) {
             const body = (try readBody(r, w, &headers)) orelse return;
             const text = std.mem.trim(u8, body, " \t\r\n");
-            if (std.mem.eql(u8, path, "/command")) return s.command(w, text, player, client);
+            if (std.mem.eql(u8, path, "/command")) return s.command(w, arena, text, player, client);
             if (std.mem.eql(u8, path, "/say")) return s.say(w, body, player);
             if (std.mem.eql(u8, path, "/mode")) {
                 const mode = std.meta.stringToEnum(Group.Mode, text) orelse
@@ -337,14 +341,13 @@ pub const Server = struct {
             return sendResponse(w, "200 OK", "text/html; charset=utf-8", play_html);
         }
         if (std.mem.eql(u8, path, "/me")) {
-            var out: Io.Writer.Allocating = .init(s.gpa);
-            defer out.deinit();
-            try out.writer.writeAll("{\"name\":");
-            if (player.name) |name| try std.json.Stringify.encodeJsonString(name, .{}, &out.writer) else try out.writer.writeAll("null");
-            try out.writer.print(",\"ai\":{},\"local\":{},\"leader\":{},\"listening\":{}}}", .{
-                player.ai, player.local, s.group.leads(player), s.group.listening(),
+            return sendJson(w, arena, protocol.Me{
+                .name = player.name,
+                .ai = player.ai,
+                .local = player.local,
+                .leader = s.group.leads(player),
+                .listening = s.group.listening(),
             });
-            return sendResponse(w, "200 OK", "application/json", out.written());
         }
         if (std.mem.eql(u8, path, "/random-password")) {
             if (!s.group.managesPassword(player)) return passwordError(w, if (s.group.listening()) error.NotAllowed else error.NotListening);
@@ -372,10 +375,14 @@ pub const Server = struct {
                     waited += poll_interval_ms;
                 }
             }
-            var out: Io.Writer.Allocating = .init(s.gpa);
-            defer out.deinit();
-            try s.hub.writeText(&out.writer, since, @tagName(s.group.currentMode()));
-            return sendResponse(w, "200 OK", "application/json", out.written());
+            const t = try s.hub.textSince(arena, since);
+            return sendJson(w, arena, protocol.Transcript{
+                .offset = t.offset,
+                .waiting = t.waiting,
+                .mode = @tagName(s.group.currentMode()),
+                .text = t.text,
+                .status = &t.status,
+            });
         }
         if (std.mem.eql(u8, path, "/discussion")) {
             const since = parseSince(query);
@@ -384,10 +391,7 @@ pub const Server = struct {
                 try s.io.sleep(.fromMilliseconds(poll_interval_ms), .awake);
                 waited += poll_interval_ms;
             }
-            var out: Io.Writer.Allocating = .init(s.gpa);
-            defer out.deinit();
-            try s.group.writeDiscussion(&out.writer, since);
-            return sendResponse(w, "200 OK", "application/json", out.written());
+            return sendJson(w, arena, try s.group.discussionSince(arena, since));
         }
         if (std.mem.eql(u8, path, "/log")) {
             return sendResponse(w, "200 OK", "text/html; charset=utf-8", log_html);
@@ -399,10 +403,7 @@ pub const Server = struct {
                 try s.io.sleep(.fromMilliseconds(poll_interval_ms), .awake);
                 waited += poll_interval_ms;
             }
-            var out: Io.Writer.Allocating = .init(s.gpa);
-            defer out.deinit();
-            try s.group.writeEvents(&out.writer, since);
-            return sendResponse(w, "200 OK", "application/json", out.written());
+            return sendJson(w, arena, try s.group.events(arena, since));
         }
         return sendResponse(w, "404 Not Found", "text/plain", "not found\n");
     }
@@ -485,7 +486,7 @@ pub const Server = struct {
 
     /// Queues a command and replies with the game's response once it waits
     /// for input again.
-    fn command(s: *Server, w: *Io.Writer, text: []const u8, player: Group.Player, client: []const u8) !void {
+    fn command(s: *Server, w: *Io.Writer, arena: Allocator, text: []const u8, player: Group.Player, client: []const u8) !void {
         if (!Group.validCommand(text)) return sendResponse(
             w,
             "400 Bad Request",
@@ -501,21 +502,23 @@ pub const Server = struct {
         const id = try s.hub.submit(.{ .name = player.name, .ai = player.ai }, text);
         s.group.log(.command, client, text, false);
 
-        var out: Io.Writer.Allocating = .init(s.gpa);
-        defer out.deinit();
         var waited: u32 = 0;
-        while (!try s.hub.writeReply(&out.writer, id)) {
+        while (true) {
+            if (try s.hub.takeAnswer(arena, id)) |a| return sendJson(w, arena, protocol.CommandReply{
+                .id = id,
+                .echo = a.echo,
+                .offset = a.offset,
+                .output = a.output,
+                .status = &a.status,
+            });
             if (waited >= poll_timeout_ms) {
                 // Still queued or still running; the text will appear in
                 // /transcript.
-                out.clearRetainingCapacity();
-                try out.writer.print("{{\"id\":{d},\"pending\":true}}", .{id});
-                return sendResponse(w, "202 Accepted", "application/json", out.written());
+                return sendJsonStatus(w, arena, "202 Accepted", protocol.CommandReply{ .id = id, .pending = true });
             }
             try s.io.sleep(.fromMilliseconds(poll_interval_ms / 4), .awake);
             waited += poll_interval_ms / 4;
         }
-        return sendResponse(w, "200 OK", "application/json", out.written());
     }
 
     /// Adds a thought or message to the discussion. The body is JSON:
@@ -755,6 +758,15 @@ fn queryValue(query: []const u8, name: []const u8) ?[]const u8 {
         if (std.mem.eql(u8, pair[0..eq], name)) return if (eq < pair.len) pair[eq + 1 ..] else "";
     }
     return null;
+}
+
+/// Sends `value`, one of the `protocol` replies, as JSON.
+fn sendJson(w: *Io.Writer, arena: Allocator, value: anytype) !void {
+    return sendJsonStatus(w, arena, "200 OK", value);
+}
+
+fn sendJsonStatus(w: *Io.Writer, arena: Allocator, status: []const u8, value: anytype) !void {
+    return sendResponse(w, status, "application/json", try protocol.allocWrite(arena, value));
 }
 
 fn sendResponse(w: *Io.Writer, status: []const u8, content_type: []const u8, body: []const u8) !void {

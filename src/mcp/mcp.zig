@@ -12,7 +12,7 @@ const json = std.json;
 const Allocator = std.mem.Allocator;
 
 const build_options = @import("build_options");
-const Group = @import("poly").Group;
+const protocol = @import("protocol");
 
 const protocol_version = "2025-06-18";
 
@@ -112,48 +112,10 @@ const Result = struct {
     is_error: bool = false,
 };
 
-const Transcript = struct {
-    offset: u64,
-    waiting: bool,
-    mode: []const u8,
-    text: []const u8,
-    status: []const []const u8,
-};
-
-const Post = struct {
-    seq: u64,
-    ai: bool = false,
-    author: []const u8,
-    kind: []const u8,
-    text: []const u8,
-    suggestions: []const []const u8,
-};
-
-const Member = struct {
-    name: []const u8,
-    ai: bool = false,
-    local: bool = false,
-    leader: bool = false,
-    inspector: bool = false,
-};
-
-const Discussion = struct {
-    last: u64,
-    mode: []const u8,
-    inspector_for_all: bool = false,
-    leader: []const u8 = "console",
-    players: []const Member = &.{},
-    posts: []const Post,
-};
-
-const Reply = struct {
-    id: u64,
-    echo: u64 = 0,
-    offset: u64 = 0,
-    output: []const u8 = "",
-    status: []const []const u8 = &.{},
-    pending: bool = false,
-};
+const Transcript = protocol.Transcript;
+const Post = protocol.Post;
+const Discussion = protocol.Discussion;
+const Snapshot = protocol.Snapshot;
 
 /// Serves MCP requests from standard input until it closes.
 pub fn run(gpa: Allocator, io: Io, port: u16) !void {
@@ -322,7 +284,7 @@ fn call(s: *Session, arena: Allocator, name: []const u8, args: ?json.ObjectMap) 
 }
 
 fn introduce(s: *Session, arena: Allocator, name: []const u8) !Result {
-    if (!Group.validName(name)) return .{
+    if (!protocol.validName(name)) return .{
         .text = "A name is 1 to 32 printable characters, and not \"you\", which stands for the person.",
         .is_error = true,
     };
@@ -383,23 +345,25 @@ fn sendCommand(s: *Session, arena: Allocator, command: []const u8) !Result {
         },
         else => return .{ .text = response.body, .is_error = true },
     }
-    const reply = try json.parseFromSliceLeaky(Reply, arena, response.body, .{ .ignore_unknown_fields = true });
+    const reply = try protocol.parse(protocol.CommandReply, arena, response.body);
+    const echo = reply.echo orelse 0;
+    const status = reply.status orelse &.{};
 
     var out: Io.Writer.Allocating = .init(arena);
     const w = &out.writer;
     // Show anything the others did since this partner last looked.
-    if (s.offset) |seen| if (reply.echo > seen) {
+    if (s.offset) |seen| if (echo > seen) {
         const t = try transcript(s, arena, seen);
-        const missed = t.text[0..@min(t.text.len, reply.echo - seen)];
+        const missed = t.text[0..@min(t.text.len, echo - seen)];
         if (std.mem.trim(u8, missed, " \n>").len > 0) {
             try w.print("--- Before your command ---\n{s}\n\n", .{missed});
         }
     };
-    try w.print(">{s}\n{s}\n", .{ command, reply.output });
-    if (reply.status.len == 2 and reply.status[0].len > 0) {
-        try w.print("\n[{s} | {s}]\n", .{ reply.status[0], reply.status[1] });
+    try w.print(">{s}\n{s}\n", .{ command, reply.output orelse "" });
+    if (status.len == 2 and status[0].len > 0) {
+        try w.print("\n[{s} | {s}]\n", .{ status[0], status[1] });
     }
-    s.offset = reply.offset;
+    s.offset = reply.offset orelse 0;
     return .{ .text = out.written() };
 }
 
@@ -544,37 +508,11 @@ fn writeMessages(w: *Io.Writer, posts: []const Post, name: []const u8) !void {
     }
 }
 
-const Snapshot = struct {
-    location: u16 = 0,
-    objects: []const Object = &.{},
-    changed: []const u16 = &.{},
-    globals: []const u16 = &.{},
-    rooms: []const Room = &.{},
-    edges: []const Edge = &.{},
-
-    const Object = struct {
-        id: u16,
-        name: []const u8,
-        parent: u16 = 0,
-        sibling: u16 = 0,
-        child: u16 = 0,
-        attrs: []const u16 = &.{},
-        props: []const Property = &.{},
-    };
-    const Property = struct { n: u16, d: []const u8 };
-    const Room = struct { id: u16, name: []const u8 };
-    const Edge = struct { from: u16, to: u16, dir: []const u8 };
-
-    fn get(snap: Snapshot, id: u16) ?Object {
-        if (id == 0 or id > snap.objects.len) return null;
-        return snap.objects[id - 1];
-    }
-
-    fn label(snap: Snapshot, w: *Io.Writer, id: u16) !void {
-        const o = snap.get(id) orelse return w.print("#{d}", .{id});
-        try w.print("#{d} {s}", .{ id, if (o.name.len > 0) o.name else "(unnamed)" });
-    }
-};
+/// Writes an object's number and name.
+fn label(snap: Snapshot, w: *Io.Writer, id: u16) !void {
+    const o = snap.get(id) orelse return w.print("#{d}", .{id});
+    try w.print("#{d} {s}", .{ id, if (o.name.len > 0) o.name else "(unnamed)" });
+}
 
 /// The most lines an object tree takes up.
 const max_tree_lines = 120;
@@ -591,7 +529,7 @@ fn readInspector(s: *Session, arena: Allocator, object: ?[]const u8, globals: bo
         },
         else => return .{ .text = "The inspector has nothing yet; try again once the game waits for a command.", .is_error = true },
     }
-    const snap = try json.parseFromSliceLeaky(Snapshot, arena, response.body, .{ .ignore_unknown_fields = true });
+    const snap = try protocol.parse(Snapshot, arena, response.body);
     var out: Io.Writer.Allocating = .init(arena);
     const w = &out.writer;
     if (globals) {
@@ -603,7 +541,7 @@ fn readInspector(s: *Session, arena: Allocator, object: ?[]const u8, globals: bo
         try writeObjects(w, snap, std.mem.trim(u8, query, " #"));
     } else {
         try w.writeAll("Location: ");
-        try snap.label(w, snap.location);
+        try label(snap, w, snap.location);
         try w.writeAll("\nIn it:\n");
         var lines: usize = 0;
         if (snap.get(snap.location)) |room| try writeTree(w, snap, room.child, 1, &lines);
@@ -611,16 +549,16 @@ fn readInspector(s: *Session, arena: Allocator, object: ?[]const u8, globals: bo
             try w.writeAll("Changed this turn:");
             for (snap.changed, 0..) |id, i| {
                 try w.writeAll(if (i > 0) ", " else " ");
-                try snap.label(w, id);
+                try label(snap, w, id);
             }
             try w.writeAll("\n");
         }
         try w.print("Map ({d} rooms visited):\n", .{snap.rooms.len});
         for (snap.edges) |e| {
             try w.writeAll("  ");
-            try snap.label(w, e.from);
+            try label(snap, w, e.from);
             try w.print(" --{s}--> ", .{e.dir});
-            try snap.label(w, e.to);
+            try label(snap, w, e.to);
             try w.writeAll("\n");
         }
     }
@@ -638,7 +576,7 @@ fn writeTree(w: *Io.Writer, snap: Snapshot, first: u16, depth: usize, lines: *us
         if (lines.* >= max_tree_lines) return w.writeAll("  …\n");
         lines.* += 1;
         try w.splatByteAll(' ', depth * 2);
-        try snap.label(w, id);
+        try label(snap, w, id);
         try w.writeAll("\n");
         if (depth < 6) try writeTree(w, snap, o.child, depth + 1, lines);
     }
@@ -664,9 +602,9 @@ fn writeObjects(w: *Io.Writer, snap: Snapshot, query: []const u8) !void {
 }
 
 fn writeObject(w: *Io.Writer, snap: Snapshot, o: Snapshot.Object) !void {
-    try snap.label(w, o.id);
+    try label(snap, w, o.id);
     try w.writeAll("\nIn: ");
-    try snap.label(w, o.parent);
+    try label(snap, w, o.parent);
     try w.writeAll("\nHolds:");
     var id = o.child;
     var guard: usize = 0;
@@ -674,7 +612,7 @@ fn writeObject(w: *Io.Writer, snap: Snapshot, o: Snapshot.Object) !void {
         guard += 1;
         if (guard > snap.objects.len) break;
         try w.writeAll(" ");
-        try snap.label(w, id);
+        try label(snap, w, id);
         try w.writeAll(";");
     }
     if (o.child == 0) try w.writeAll(" nothing");
@@ -691,7 +629,7 @@ fn transcript(s: *Session, arena: Allocator, since: u64) !Transcript {
     const path = try std.fmt.allocPrint(arena, "/transcript?since={d}", .{since});
     const response = try request(s, arena, "GET", path, "");
     if (response.status != 200) return error.BadResponse;
-    return json.parseFromSliceLeaky(Transcript, arena, response.body, .{ .ignore_unknown_fields = true });
+    return protocol.parse(Transcript, arena, response.body);
 }
 
 /// Reads the discussion after `since`; with `wait`, holds on until there
@@ -700,7 +638,7 @@ fn discussion(s: *Session, arena: Allocator, since: u64, wait: bool) !Discussion
     const path = try std.fmt.allocPrint(arena, "/discussion?since={d}{s}", .{ since, if (wait) "&wait=1" else "" });
     const response = try request(s, arena, "GET", path, "");
     if (response.status != 200) return error.BadResponse;
-    return json.parseFromSliceLeaky(Discussion, arena, response.body, .{ .ignore_unknown_fields = true });
+    return protocol.parse(Discussion, arena, response.body);
 }
 
 const Response = struct {

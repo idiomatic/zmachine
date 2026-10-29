@@ -2,11 +2,11 @@
 
 const std = @import("std");
 const testing = std.testing;
-const Io = std.Io;
 
 const Group = @import("Group.zig");
 const Password = @import("Password.zig");
 const World = @import("world.zig").World;
+const protocol = @import("protocol");
 
 const Player = Group.Player;
 
@@ -14,10 +14,11 @@ const claude: Player = .{ .name = "Claude", .ai = true, .local = false };
 const ana: Player = .{ .name = "Ana", .local = true };
 const bo: Player = .{ .name = "Bo", .local = false };
 
+/// The discussion after `since`, as `/discussion` writes it.
 fn discussion(g: *Group, since: u64) ![]u8 {
-    var out: Io.Writer.Allocating = .init(testing.allocator);
-    try g.writeDiscussion(&out.writer, since);
-    return out.toOwnedSlice();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    return protocol.allocWrite(testing.allocator, try g.discussionSince(arena.allocator(), since));
 }
 
 test "debate mode and discussion" {
@@ -59,13 +60,12 @@ test "keyboard lines are logged; web commands only posted" {
     defer g.deinit();
     g.heard(.console, "look", true);
     g.heard(claude, "north", false);
-    var out: Io.Writer.Allocating = .init(testing.allocator);
-    defer out.deinit();
-    try g.writeEvents(&out.writer, 0);
-    try testing.expectEqualStrings(
-        "{\"last\":1,\"events\":[{\"seq\":1,\"time\":1700000000000,\"kind\":\"keyboard\",\"suspicious\":false,\"client\":\"keyboard\",\"detail\":\"look\"}]}",
-        out.written(),
-    );
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const log = try g.events(arena.allocator(), 0);
+    try testing.expectEqual(1, log.last);
+    try testing.expectEqualStrings("keyboard", log.events[0].kind);
+    try testing.expectEqualStrings("look", log.events[0].detail);
     try testing.expectEqual(2, g.lastPost());
 }
 

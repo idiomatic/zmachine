@@ -13,12 +13,13 @@ pub fn build(b: *std.Build) void {
     // undeclared import doesn't build.
     const modules = [_]struct { name: []const u8, imports: []const []const u8 }{
         .{ .name = "vm", .imports = &.{} },
-        .{ .name = "poly", .imports = &.{} },
+        .{ .name = "protocol", .imports = &.{} },
+        .{ .name = "poly", .imports = &.{"protocol"} },
         .{ .name = "console", .imports = &.{"vm"} },
         .{ .name = "hub", .imports = &.{ "vm", "console" } },
-        .{ .name = "inspector", .imports = &.{"vm"} },
-        .{ .name = "web", .imports = &.{ "inspector", "hub", "poly" } },
-        .{ .name = "mcp", .imports = &.{ "poly", "build_options" } },
+        .{ .name = "inspector", .imports = &.{ "vm", "protocol" } },
+        .{ .name = "web", .imports = &.{ "inspector", "hub", "poly", "protocol" } },
+        .{ .name = "mcp", .imports = &.{ "protocol", "build_options" } },
     };
     var imports: [modules.len + 1]std.Build.Module.Import = undefined;
     imports[0] = .{ .name = "build_options", .module = options.createModule() };

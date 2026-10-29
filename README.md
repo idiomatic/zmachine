@@ -437,6 +437,7 @@ module imports only those listed in `build.zig`.
 | `src/poly/world.zig` | The time and randomness the rules see, faked in tests |
 | `src/poly/Password.zig` | Passwords for remote players: three words from the EFF short word list |
 | `src/poly/eff_short_wordlist_1.txt` | The EFF short word list, embedded in the binary |
+| `src/protocol/root.zig` | The JSON the routes speak: each reply's type, shared by the server and the MCP server |
 | `src/inspector/Inspector.zig` | Map tracking and JSON snapshots for the web page |
 | `src/inspector/inspector.html` | The inspector page, embedded in the binary |
 | `src/web/web.zig` | Embedded HTTP server: inspector, playing together, remote access and audit log |

@@ -402,22 +402,32 @@ pub fn submit(h: *Hub, sender: Sender, text: []const u8) error{OutOfMemory}!u64 
     return id;
 }
 
-/// Writes the reply to command `id` as JSON, if the game has finished
-/// answering it.
-pub fn writeReply(h: *Hub, w: *Io.Writer, id: u64) !bool {
+/// The game's reply to a web command.
+pub const Answer = struct {
+    /// Where the echoed command starts in the game text.
+    echo: u64,
+    /// The offset just past the reply.
+    offset: u64,
+    output: []const u8,
+    status: [2][]const u8,
+};
+
+/// The reply to command `id`, copied into `arena`, if the game has
+/// finished answering it.
+pub fn takeAnswer(h: *Hub, arena: Allocator, id: u64) Allocator.Error!?Answer {
     h.lock();
     defer h.unlock();
     for (h.replies.items, 0..) |reply, i| {
         if (reply.id != id) continue;
         _ = h.replies.orderedRemove(i);
-        try w.print("{{\"id\":{d},\"echo\":{d},\"offset\":{d},\"output\":", .{ id, reply.echo, reply.end });
-        try writeString(w, h.textBetween(reply.start, reply.end));
-        try w.writeAll(",");
-        try h.writeStatus(w);
-        try w.writeAll("}");
-        return true;
+        return .{
+            .echo = reply.echo,
+            .offset = reply.end,
+            .output = try arena.dupe(u8, h.textBetween(reply.start, reply.end)),
+            .status = try h.copyStatus(arena),
+        };
     }
-    return false;
+    return null;
 }
 
 /// The offset just past the latest game text.
@@ -427,16 +437,26 @@ pub fn textOffset(h: *Hub) u64 {
     return h.textEnd();
 }
 
-/// Writes the game text printed since offset `since` as JSON, with the
-/// players' `mode`.
-pub fn writeText(h: *Hub, w: *Io.Writer, since: u64, mode: []const u8) !void {
+/// The game text printed since an offset.
+pub const Text = struct {
+    /// The offset just past it.
+    offset: u64,
+    /// The game is waiting for input.
+    waiting: bool,
+    text: []const u8,
+    status: [2][]const u8,
+};
+
+/// The game text printed since offset `since`, copied into `arena`.
+pub fn textSince(h: *Hub, arena: Allocator, since: u64) Allocator.Error!Text {
     h.lock();
     defer h.unlock();
-    try w.print("{{\"offset\":{d},\"waiting\":{},\"mode\":\"{s}\",\"text\":", .{ h.textEnd(), h.idle, mode });
-    try writeString(w, h.textBetween(since, h.textEnd()));
-    try w.writeAll(",");
-    try h.writeStatus(w);
-    try w.writeAll("}");
+    return .{
+        .offset = h.textEnd(),
+        .waiting = h.idle,
+        .text = try arena.dupe(u8, h.textBetween(since, h.textEnd())),
+        .status = try h.copyStatus(arena),
+    };
 }
 
 fn textBetween(h: *const Hub, start: u64, end: u64) []const u8 {
@@ -446,16 +466,8 @@ fn textBetween(h: *const Hub, start: u64, end: u64) []const u8 {
     return h.text.items[@intCast(from)..@intCast(to)];
 }
 
-fn writeStatus(h: *const Hub, w: *Io.Writer) !void {
-    try w.writeAll("\"status\":[");
-    try writeString(w, h.status[0].items);
-    try w.writeAll(",");
-    try writeString(w, h.status[1].items);
-    try w.writeAll("]");
-}
-
-fn writeString(w: *Io.Writer, s: []const u8) !void {
-    try std.json.Stringify.encodeJsonString(s, .{}, w);
+fn copyStatus(h: *const Hub, arena: Allocator) Allocator.Error![2][]const u8 {
+    return .{ try arena.dupe(u8, h.status[0].items), try arena.dupe(u8, h.status[1].items) };
 }
 
 test "web command and reply" {
@@ -471,20 +483,21 @@ test "web command and reply" {
     h.capture("Opening the small mailbox reveals a leaflet.\n\n>");
     h.setStatus("West of House", "Score: 0   Moves: 1");
 
-    var out: Io.Writer.Allocating = .init(std.testing.allocator);
-    defer out.deinit();
-    try std.testing.expect(!try h.writeReply(&out.writer, id));
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    try std.testing.expectEqual(null, try h.takeAnswer(arena.allocator(), id));
     h.waiting();
-    try std.testing.expect(try h.writeReply(&out.writer, id));
-    try std.testing.expectEqualStrings(
-        "{\"id\":1,\"echo\":0,\"offset\":60,\"output\":\"Opening the small mailbox reveals a leaflet.\\n\\n>\"," ++
-            "\"status\":[\"West of House\",\"Score: 0   Moves: 1\"]}",
-        out.written(),
-    );
+    const answer = (try h.takeAnswer(arena.allocator(), id)).?;
+    try std.testing.expectEqual(0, answer.echo);
+    try std.testing.expectEqual(60, answer.offset);
+    try std.testing.expectEqualStrings("Opening the small mailbox reveals a leaflet.\n\n>", answer.output);
+    try std.testing.expectEqualStrings("Score: 0   Moves: 1", answer.status[1]);
+    try std.testing.expectEqual(null, try h.takeAnswer(arena.allocator(), id));
 
-    out.clearRetainingCapacity();
-    try h.writeText(&out.writer, 0, "turns");
-    try std.testing.expect(std.mem.startsWith(u8, out.written(), "{\"offset\":60,\"waiting\":true,\"mode\":\"turns\",\"text\":\"open mailbox\\nOpening"));
+    const text = try h.textSince(arena.allocator(), 0);
+    try std.testing.expect(text.waiting);
+    try std.testing.expectEqual(60, text.offset);
+    try std.testing.expect(std.mem.startsWith(u8, text.text, "open mailbox\nOpening"));
 }
 
 test "keyboard lines come first, and hooks hear them" {

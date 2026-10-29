@@ -99,10 +99,4 @@ pub fn dropGrant(p: *Players, gpa: Allocator, name: []const u8) void {
     };
 }
 
-/// Whether `name` can name a player: 1 to 32 printable characters, and not
-/// "you" or "console", which stand for the console.
-pub fn validName(name: []const u8) bool {
-    if (name.len == 0 or name.len > 32 or !std.unicode.utf8ValidateSlice(name)) return false;
-    for (name) |c| if (c < 0x20 or c == 0x7f) return false;
-    return !std.ascii.eqlIgnoreCase(name, "you") and !std.ascii.eqlIgnoreCase(name, "console");
-}
+pub const validName = @import("protocol").validName;

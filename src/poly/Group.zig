@@ -15,6 +15,7 @@ const Discussion = @import("Discussion.zig");
 const Password = @import("Password.zig");
 const Players = @import("Players.zig");
 const World = @import("world.zig").World;
+const protocol = @import("protocol");
 
 const Group = @This();
 
@@ -110,25 +111,23 @@ pub fn lastEvent(g: *Group) u64 {
     return g.audit.last();
 }
 
-/// Writes the events after `since` as JSON.
-pub fn writeEvents(g: *Group, w: *Io.Writer, since: u64) !void {
+/// The events after `since`, copied into `arena`.
+pub fn events(g: *Group, arena: Allocator, since: u64) Allocator.Error!protocol.Events {
     g.lock();
     defer g.unlock();
-    try w.print("{{\"last\":{d},\"events\":[", .{g.audit.last()});
-    var first = true;
+    var list: std.ArrayList(protocol.Event) = .empty;
     for (g.audit.events.items) |e| {
         if (e.seq <= since) continue;
-        if (!first) try w.writeAll(",");
-        first = false;
-        try w.print("{{\"seq\":{d},\"time\":{d},\"kind\":\"{s}\",\"suspicious\":{},\"client\":", .{
-            e.seq, e.time, @tagName(e.kind), e.suspicious,
+        try list.append(arena, .{
+            .seq = e.seq,
+            .time = e.time,
+            .kind = @tagName(e.kind),
+            .suspicious = e.suspicious,
+            .client = try arena.dupe(u8, e.client),
+            .detail = try arena.dupe(u8, e.detail),
         });
-        try writeString(w, e.client);
-        try w.writeAll(",\"detail\":");
-        try writeString(w, e.detail);
-        try w.writeAll("}");
     }
-    try w.writeAll("]}");
+    return .{ .last = g.audit.last(), .events = list.items };
 }
 
 // Commands and the discussion
@@ -193,47 +192,43 @@ pub fn lastPost(g: *Group) u64 {
     return g.discussion.last();
 }
 
-/// Writes the mode, the leader, the players and the posts after `since`
-/// as JSON.
-pub fn writeDiscussion(g: *Group, w: *Io.Writer, since: u64) !void {
+/// The mode, the leader, the players and the posts after `since`, copied
+/// into `arena`.
+pub fn discussionSince(g: *Group, arena: Allocator, since: u64) Allocator.Error!protocol.Discussion {
     g.lock();
     defer g.unlock();
     g.pruneLocked();
-    try w.print("{{\"last\":{d},\"mode\":\"{s}\",\"inspector_for_all\":{},\"leader\":", .{
-        g.discussion.last(), @tagName(g.mode), g.players.inspector_for_all,
-    });
-    try writeString(w, g.players.leader orelse "console");
-    try w.writeAll(",\"players\":[");
-    for (g.players.members.items, 0..) |m, i| {
-        if (i > 0) try w.writeAll(",");
-        try w.writeAll("{\"name\":");
-        try writeString(w, m.name);
-        const leader = g.players.leads(m.player());
-        const inspects = m.ai and g.players.mayInspect(m.name);
-        try w.print(",\"ai\":{},\"local\":{},\"leader\":{},\"inspector\":{}}}", .{ m.ai, m.local, leader, inspects });
-    }
-    try w.writeAll("],\"posts\":[");
-    var first = true;
+    const members = try arena.alloc(protocol.Member, g.players.members.items.len);
+    for (g.players.members.items, members) |m, *out| out.* = .{
+        .name = try arena.dupe(u8, m.name),
+        .ai = m.ai,
+        .local = m.local,
+        .leader = g.players.leads(m.player()),
+        .inspector = m.ai and g.players.mayInspect(m.name),
+    };
+    var posts: std.ArrayList(protocol.Post) = .empty;
     for (g.discussion.posts.items) |p| {
         if (p.seq <= since) continue;
-        if (!first) try w.writeAll(",");
-        first = false;
-        try w.print("{{\"seq\":{d},\"time\":{d},\"ai\":{},\"author\":", .{ p.seq, p.time, p.ai });
-        try writeString(w, p.author orelse "console");
-        try w.print(",\"kind\":\"{s}\",\"text\":", .{@tagName(p.kind)});
-        try writeString(w, p.text);
-        try w.writeAll(",\"suggestions\":[");
-        for (p.suggestions, 0..) |s, i| {
-            if (i > 0) try w.writeAll(",");
-            try writeString(w, s);
-        }
-        try w.writeAll("]}");
+        const suggestions = try arena.alloc([]const u8, p.suggestions.len);
+        for (p.suggestions, suggestions) |text, *out| out.* = try arena.dupe(u8, text);
+        try posts.append(arena, .{
+            .seq = p.seq,
+            .time = p.time,
+            .ai = p.ai,
+            .author = try arena.dupe(u8, p.author orelse "console"),
+            .kind = @tagName(p.kind),
+            .text = try arena.dupe(u8, p.text),
+            .suggestions = suggestions,
+        });
     }
-    try w.writeAll("]}");
-}
-
-fn writeString(w: *Io.Writer, s: []const u8) !void {
-    try std.json.Stringify.encodeJsonString(s, .{}, w);
+    return .{
+        .last = g.discussion.last(),
+        .mode = @tagName(g.mode),
+        .inspector_for_all = g.players.inspector_for_all,
+        .leader = try arena.dupe(u8, g.players.leader orelse "console"),
+        .players = members,
+        .posts = posts.items,
+    };
 }
 
 // Players and leadership

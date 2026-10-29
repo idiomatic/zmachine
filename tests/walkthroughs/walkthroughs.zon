@@ -1,0 +1,23 @@
+// Short scripts for the open-source Zork I-III, which the build downloads
+// (pinned in build.zig). Written for this project; the stories are MIT
+// licensed (Copyright (c) 2025 Microsoft).
+.{
+    .{
+        .script = "zork1.r119-880429.opening.txt",
+        .story = "zork1",
+        .seeds = .{ 1, 2, 3 },
+        .expect = "You are standing in an open field west of a white house",
+    },
+    .{
+        .script = "zork2.r63-860811.opening.txt",
+        .story = "zork2",
+        .seeds = .{ 1, 2, 3 },
+        .expect = "Inside the Barrow",
+    },
+    .{
+        .script = "zork3.r25-860811.opening.txt",
+        .story = "zork3",
+        .seeds = .{ 1, 2, 3 },
+        .expect = "Endless Stair",
+    },
+}

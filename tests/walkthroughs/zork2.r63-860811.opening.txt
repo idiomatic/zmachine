@@ -1,0 +1,13 @@
+look
+inventory
+take sword
+take lamp
+south
+turn on lamp
+south
+east
+west
+north
+score
+quit
+y

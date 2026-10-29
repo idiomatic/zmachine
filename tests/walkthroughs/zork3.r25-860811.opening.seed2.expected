@@ -1,0 +1,81 @@
+As in a dream, you see yourself tumbling down a great, dark staircase. All about
+you are shadowy images of struggles against fierce opponents and diabolical
+traps. These give way to another round of images: of imposing stone figures, a
+cool, clear lake, and, now, of an old, yet oddly youthful man. He turns toward
+you slowly, his long, silver hair dancing about him in a fresh breeze. "You have
+reached the final test, my friend! You are proved clever and powerful, but this
+is not yet enough! Seek me when you feel yourself worthy!" The dream dissolves
+around you as his last words echo through the void....
+
+ZORK III: The Dungeon Master
+Infocom interactive fiction - a fantasy story
+Copyright 1982, 1983, 1984, 1986 Infocom, Inc. All rights reserved.
+ZORK is a registered trademark of Infocom, Inc.
+Release 25 / Serial number 860811
+
+Endless Stair
+You are at the bottom of a seemingly endless stair, winding its way upward
+beyond your vision. An eerie light, coming from all around you, casts strange
+shadows on the walls. To the south is a dark and winding trail.
+Your old friend, the brass lantern, is at your feet.
+
+>look
+Endless Stair
+You are at the bottom of a seemingly endless stair, winding its way upward
+beyond your vision. An eerie light, coming from all around you, casts strange
+shadows on the walls. To the south is a dark and winding trail.
+Your old friend, the brass lantern, is at your feet.
+
+>inventory
+You are empty-handed.
+
+>south
+You have moved into a dark place.
+It is pitch black. You are likely to be eaten by a grue.
+
+>take lamp
+It's too dark to see!
+
+>turn on lamp
+It's too dark to see!
+
+>north
+Endless Stair
+Your old friend, the brass lantern, is at your feet.
+
+>south
+You have moved into a dark place.
+It is pitch black. You are likely to be eaten by a grue.
+
+>west
+You have moved into a dark place.
+It is pitch black. You are likely to be eaten by a grue.
+
+>east
+Oh, no! A lurking grue slithered into the room and devoured you!
+
+    ****  You have died  ****
+
+You find yourself deep within the earth in a barren prison cell. Outside the
+iron-barred window, you can see a great, fiery pit. Flames leap up and very
+nearly sear your flesh. After a while, footfalls can be heard in the distance,
+then closer and closer.... The door swings open, and in walks an old man.
+
+He is dressed simply in a hood and cloak, wearing an amulet and ring, carrying
+an old book under one arm, and leaning on a wooden staff. A single key, as if to
+a massive prison cell, hangs from his belt.
+
+He raises the staff toward you and you hear him speak, as if in a dream: "I
+await you, though your journey be long and full of peril. Go then, and let me
+not wait long!" You feel some great power well up inside you and you fall to the
+floor. The next moment, you are awakening, as if from a deep slumber.
+
+Endless Stair
+Your old friend, the brass lantern, is at your feet.
+
+>score
+Your potential is 0 of a possible 7, in 7 moves.
+
+>quit
+Your potential is 0 of a possible 7, in 7 moves.
+Do you wish to leave the game? (Y is affirmative): >y

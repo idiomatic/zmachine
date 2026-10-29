@@ -126,7 +126,8 @@ Keep this file up to date with every specification.
 ## Build and release
 
 * Builds and runs on Linux, macOS and Windows, on x86_64 and aarch64.
-* `zig build walkthrough` plays the local walkthroughs listed in `tests/walkthroughs/walkthroughs.zon` (script, story, seed, a line the output must contain), with and without `--web`; both outputs must match each other and `<script>.expected` when saved. `-Dwalkthrough=<name>` plays one; `-Dupdate-walkthroughs` saves the transcripts. With no manifest or a missing file it says what it skipped and passes. The runner is `tools/walkthrough.zig`.
+* `zig build stories` downloads Zork I-III (MIT, Copyright (c) 2025 Microsoft) into `games/` as `zork1.r119-880429.z3` and so on: each `COMPILED/zorkN.z3` from historicalsource at a pinned commit, checked against a pinned SHA-256 (`tools/fetch.zig`), cached. Only `stories` and `walkthrough` download them; `-Dstories=false` skips them. Other story files live in `games-local/`.
+* `zig build walkthrough` plays the walkthroughs listed in `tests/walkthroughs-local/walkthroughs.zon` (local) and `tests/walkthroughs/walkthroughs.zon` (committed, for the downloaded Zork I-III, with their transcripts): script, story (a path, or `zork1`-`zork3`), seeds, and a line the output must contain. A script is named for its story, the release and serial it was written for, and what it covers (`zork1.r119-880429.opening.txt`); a story of another release fails. Each is played once per seed (or once unseeded), with and without `--web`; both outputs must match each other and the saved transcript, the script's name plus the seed (`zork1.r119-880429.opening.seed1.expected`), when there is one. `-Dwalkthrough=<name>` plays the scripts with that name or starting with it and a dot (`zork1`); `-Dupdate-walkthroughs` saves the transcripts. A missing manifest, script or story is skipped and the step passes. The runner is `tools/walkthrough.zig`.
 * GitHub Actions checks formatting, builds and runs unit tests and the walkthrough step on x86_64-linux, aarch64-linux, aarch64-macos, x86_64-windows and aarch64-windows.
 * Then it cross-compiles stripped ReleaseSafe archives with README and LICENSE for all six targets; a `v<version>` tag matching `build.zig.zon` publishes them as a GitHub release.
 
@@ -135,5 +136,5 @@ Keep this file up to date with every specification.
 * All tool code is Zig 0.17.0 or later; non-negotiable.
 * Zig's standard library only; never call libc directly.
 * Follow Zig's style; pass `zig fmt --check`.
-* Story files, manuals, walkthrough scripts, their manifest and transcripts, and copy-protection notes stay local, never committed.
+* Story files, manuals, walkthrough scripts, their manifest and transcripts, and copy-protection notes stay local, never committed; local files live in `games-local/`, `manuals-local/` and `tests/walkthroughs-local/`. The exceptions are the walkthroughs in `tests/walkthroughs/`, written for this project, and Zork I-III, downloaded into `games/` (not committed).
 * References allowed: MojoZork, zvm, zyppy, Frotz, Z-Machine Standards Document 1.1.

@@ -426,30 +426,64 @@ cannot send commands or read the game.
 | `src/login.html` | The password page for remote players, embedded in the binary |
 | `src/eff_short_wordlist_1.txt` | The EFF short word list, embedded in the binary |
 | `src/log.html` | The audit log page, embedded in the binary |
-| `tools/walkthrough.zig` | Plays the local walkthroughs for `zig build walkthrough` |
+| `tools/walkthrough.zig` | Plays the walkthroughs for `zig build walkthrough` |
+| `tools/fetch.zig` | Downloads a pinned file for the build, such as the open-source Zork stories |
+| `tests/walkthroughs/` | Walkthroughs and expected transcripts for Zork I-III |
+
+## Testing
 
 Run the unit tests with `zig build test`.
 
-`zig build walkthrough` plays walkthroughs you keep locally (story files
-and walkthroughs can't be shared here). List them in
-`tests/walkthroughs/walkthroughs.zon`:
+### Open-source stories
+
+Zork I, II and III are [open source](https://opensource.microsoft.com/blog/2025/11/20/preserving-code-that-shaped-generations-zork-i-ii-and-iii-go-open-source/)
+under the MIT license (Copyright (c) 2025 Microsoft). `zig build stories`
+downloads their compiled story files from
+[historicalsource](https://github.com/historicalsource/zork1) at a pinned
+commit, checks each against a pinned SHA-256, and puts them in `games/`,
+named for their release and serial number:
+
+```
+zig build stories
+./zig-out/bin/zmachine games/zork1.r119-880429.z3
+```
+
+### Walkthroughs
+
+`zig build walkthrough` plays two sets of walkthroughs. Short ones for
+Zork I-III, written for this project, are in `tests/walkthroughs/` with
+their expected transcripts; the build downloads the stories for them
+(`-Dstories=false` skips that, as when offline). Others you keep
+locally, since most story files and walkthroughs can't be shared here:
+put the stories in `games-local/` and the scripts in
+`tests/walkthroughs-local/`, and list them in
+`tests/walkthroughs-local/walkthroughs.zon`:
 
 ```zig
 .{
     .{
-        .script = "zork1.txt", // in tests/walkthroughs/
-        .story = "games/zork1.z3",
-        .seed = 15,
+        .script = "zork1.r88-840726.txt", // in tests/walkthroughs-local/
+        .story = "games-local/zork1-r88.z3",
+        .seeds = .{15},
         .expect = "Your score is 350 (total of 350 points)",
     },
 }
 ```
 
-Each script is played with and without `--web`; the two outputs must
-match, contain the `expect` line, and match `tests/walkthroughs/<name>.expected`
-if you have saved one with `zig build walkthrough -Dupdate-walkthroughs`.
-`-Dwalkthrough=zork1` plays just that one. Without a manifest, the step
-skips everything and passes.
+Each script is played once per seed (or once without one), with and
+without `--web`; the two outputs must match, contain the `expect` line,
+and match the saved transcript, if you have saved one with `zig build
+walkthrough -Dupdate-walkthroughs`.
+
+A script is named for its story, the release and serial number it was
+written for (the game prints them at the start), and optionally what it
+covers: `zork1.r88-840726.txt`, `zork1.r119-880429.opening.txt`. Playing
+it on another release fails. Its transcripts add the seed, such as
+`zork1.r119-880429.opening.seed1.expected`, so scripts for several
+releases, each with several seeds, sit side by side.
+`-Dwalkthrough=zork1` plays every script whose name starts with `zork1.`;
+`-Dwalkthrough=zork1.r88-840726` plays just that one. A missing manifest, script or
+story is skipped, and the step still passes.
 
 ## How it was made
 

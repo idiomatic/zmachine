@@ -1,13 +1,24 @@
-//! Plays the local walkthroughs for `zig build walkthrough`.
+//! Plays the walkthroughs for `zig build walkthrough`.
 //!
 //! usage: walkthrough <zmachine> <manifest> [--only <name>] [--update]
+//!                    [--story <name>=<path>]...
 //!
-//! The manifest, `tests/walkthroughs/walkthroughs.zon`, lists each script
-//! with its story file, seed and a line the output must contain. Each
-//! script is piped in with and without `--web`; both outputs must match,
-//! and match the saved transcript `<script>.expected` when there is one.
-//! `--update` saves the transcripts instead. Scripts, stories, transcripts
-//! and the manifest stay local, so a missing one is skipped, not failed.
+//! The manifest lists each script with its story file, the seeds to play
+//! it with and a line the output must contain. For each seed, the script
+//! is piped in with and without `--web`; both outputs must match, and match
+//! the saved transcript when there is one.
+//!
+//! A script is named for its story, the release and serial number it was
+//! written for, and optionally what it covers, such as
+//! `zork1.r119-880429.opening.txt`; the story must be that release. Its
+//! transcripts add the seed: `zork1.r119-880429.opening.seed1.expected`.
+//! (A script named without a release gets the story's in its transcripts'
+//! names.) `--update` saves the transcripts instead. `--only <name>` plays
+//! the scripts with that name, or whose names start with it and a dot, such
+//! as `zork1`. A missing script or story is
+//! skipped, not failed: most stay local. A story named without a path, such
+//! as `zork1`, is one `--story` gives (the open-source Zork stories, which
+//! the build downloads).
 
 const std = @import("std");
 const Io = std.Io;
@@ -16,9 +27,11 @@ const Allocator = std.mem.Allocator;
 const Entry = struct {
     /// The script's file name in the manifest's directory.
     script: []const u8,
-    /// The story file, relative to the working directory.
+    /// The story file, relative to the working directory, or the name of
+    /// one given with `--story`.
     story: []const u8,
-    seed: ?u64 = null,
+    /// The seeds to play it with; with none, it is played once unseeded.
+    seeds: []const u64 = &.{},
     /// A line the output must contain, such as a final score.
     expect: ?[]const u8 = null,
 };
@@ -42,6 +55,7 @@ pub fn main(init: std.process.Init) !u8 {
     const manifest_path = args[2];
     var only: ?[]const u8 = null;
     var update = false;
+    var stories: std.StringHashMapUnmanaged([]const u8) = .empty;
     var i: usize = 3;
     while (i < args.len) : (i += 1) {
         if (std.mem.eql(u8, args[i], "--update")) {
@@ -49,6 +63,10 @@ pub fn main(init: std.process.Init) !u8 {
         } else if (std.mem.eql(u8, args[i], "--only") and i + 1 < args.len) {
             i += 1;
             only = args[i];
+        } else if (std.mem.eql(u8, args[i], "--story") and i + 1 < args.len) {
+            i += 1;
+            const eq = std.mem.indexOfScalar(u8, args[i], '=') orelse continue;
+            try stories.put(arena, args[i][0..eq], args[i][eq + 1 ..]);
         }
     }
 
@@ -75,14 +93,25 @@ pub fn main(init: std.process.Init) !u8 {
     var counts = std.enums.EnumArray(Outcome, usize).initFill(0);
     for (entries) |entry| {
         const name = if (std.mem.endsWith(u8, entry.script, ".txt")) entry.script[0 .. entry.script.len - 4] else entry.script;
-        if (only) |want| if (!std.mem.eql(u8, want, name)) continue;
-        const outcome = try play(arena, io, out, zmachine, dir, name, entry, update);
-        counts.getPtr(outcome).* += 1;
-        try out.flush();
+        if (only) |want| if (!(std.mem.eql(u8, want, name) or
+            (std.mem.startsWith(u8, name, want) and name.len > want.len and name[want.len] == '.'))) continue;
+        var resolved = entry;
+        if (stories.get(entry.story)) |path| resolved.story = path;
+        const seeds: []const ?u64 = if (entry.seeds.len == 0) &.{null} else seeds: {
+            const list = try arena.alloc(?u64, entry.seeds.len);
+            for (list, entry.seeds) |*slot, seed| slot.* = seed;
+            break :seeds list;
+        };
+        for (seeds) |seed| {
+            const outcome = try play(arena, io, out, zmachine, dir, name, resolved, seed, update);
+            counts.getPtr(outcome).* += 1;
+            try out.flush();
+        }
     }
+    // With several manifests, a name is in at most one of them.
     if (only != null and counts.get(.passed) + counts.get(.failed) + counts.get(.skipped) == 0) {
         try out.print("walkthrough: nothing in {s} is named {s}\n", .{ manifest_path, only.? });
-        return 1;
+        return 0;
     }
     try out.print("walkthrough: {d} passed, {d} failed, {d} skipped\n", .{
         counts.get(.passed), counts.get(.failed), counts.get(.skipped),
@@ -90,28 +119,44 @@ pub fn main(init: std.process.Init) !u8 {
     return if (counts.get(.failed) > 0) 1 else 0;
 }
 
-/// Plays one walkthrough with and without `--web`, and checks the output.
+/// Plays one walkthrough with one seed, with and without `--web`, and
+/// checks the output.
 fn play(
     arena: Allocator,
     io: Io,
     out: *Io.Writer,
     zmachine: []const u8,
     dir: []const u8,
-    name: []const u8,
+    script_name: []const u8,
     entry: Entry,
+    seed_number: ?u64,
     update: bool,
 ) !Outcome {
     const cwd = Io.Dir.cwd();
     const script = try std.fs.path.join(arena, &.{ dir, entry.script });
     inline for (.{ script, entry.story }) |path| {
         cwd.access(io, path, .{}) catch {
-            try out.print("skip {s}: no {s}\n", .{ name, path });
+            // A bare name is a story the build downloads.
+            const hint = if (std.mem.indexOfAny(u8, path, "/.") == null) " (not downloaded with -Dstories=false)" else "";
+            try out.print("skip {s}: no {s}{s}\n", .{ script_name, path, hint });
             return .skipped;
         };
     }
 
-    var seed_buf: [24]u8 = undefined;
-    const seed = if (entry.seed) |n| try std.fmt.bufPrint(&seed_buf, "{d}", .{n}) else null;
+    // The story must be the release the script was written for; the
+    // transcript is named for the script (with the release) and the seed.
+    const version = try storyVersion(arena, io, entry.story);
+    const written_for = scriptVersion(script_name);
+    if (written_for) |want| if (!std.mem.eql(u8, want, version)) {
+        try out.print("FAIL {s}: written for {s}, but {s} is {s}\n", .{ script_name, want, entry.story, version });
+        return .failed;
+    };
+    const seed = if (seed_number) |n| try std.fmt.allocPrint(arena, "{d}", .{n}) else null;
+    const base = if (written_for != null) script_name else try std.fmt.allocPrint(arena, "{s}.{s}", .{ script_name, version });
+    const name = if (seed) |n|
+        try std.fmt.allocPrint(arena, "{s}.seed{s}", .{ base, n })
+    else
+        try std.fmt.allocPrint(arena, "{s}.unseeded", .{base});
     const plain = try run(arena, io, zmachine, seed, false, entry.story, script);
     // Port 0 lets the system pick a free port.
     const web = try run(arena, io, zmachine, seed, true, entry.story, script);
@@ -147,6 +192,36 @@ fn play(
     }
     try out.print("ok   {s}\n", .{name});
     return .passed;
+}
+
+/// The release and serial number in a script's name, such as `r88-840726`
+/// in `zork1.r88-840726.txt`'s name `zork1.r88-840726`.
+fn scriptVersion(name: []const u8) ?[]const u8 {
+    var parts = std.mem.splitScalar(u8, name, '.');
+    while (parts.next()) |part| {
+        if (part.len < 9 or part[0] != 'r') continue;
+        const dash = std.mem.indexOfScalar(u8, part, '-') orelse continue;
+        _ = std.fmt.parseInt(u16, part[1..dash], 10) catch continue;
+        if (part.len - dash - 1 == 6) return part;
+    }
+    return null;
+}
+
+/// The story's release and serial number, such as `r88-840726`, from its
+/// header.
+fn storyVersion(arena: Allocator, io: Io, story: []const u8) ![]const u8 {
+    const file = try Io.Dir.cwd().openFile(io, story, .{});
+    defer file.close(io);
+    var header: [0x18]u8 = undefined;
+    var buf: [64]u8 = undefined;
+    var reader = file.reader(io, &buf);
+    reader.interface.readSliceAll(&header) catch return "unknown";
+    var serial: [6]u8 = header[0x12..0x18].*;
+    // Keep the name to letters and digits.
+    for (&serial) |*c| if (!std.ascii.isAlphanumeric(c.*)) {
+        c.* = '_';
+    };
+    return std.fmt.allocPrint(arena, "r{d}-{s}", .{ std.mem.readInt(u16, header[2..4], .big), &serial });
 }
 
 fn fail(out: *Io.Writer, name: []const u8, comptime fmt: []const u8, args: anytype) !Outcome {

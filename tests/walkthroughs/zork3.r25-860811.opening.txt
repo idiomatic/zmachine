@@ -1,0 +1,12 @@
+look
+inventory
+south
+take lamp
+turn on lamp
+north
+south
+west
+east
+score
+quit
+y

@@ -1,0 +1,63 @@
+ZORK II: The Wizard of Frobozz
+Infocom interactive fiction - a fantasy story
+Copyright (c) 1981, 1982, 1983, 1986 Infocom, Inc. All rights reserved.
+ZORK is a registered trademark of Infocom, Inc.
+Release 63 / Serial number 860811
+
+Inside the Barrow
+You are inside an ancient barrow hidden deep within a dark forest. The barrow
+opens into a narrow tunnel at its southern end. You can see a faint glow at the
+far end.
+A sword of Elvish workmanship is on the ground.
+A strangely familiar brass lantern is lying on the ground.
+
+>look
+Inside the Barrow
+You are inside an ancient barrow hidden deep within a dark forest. The barrow
+opens into a narrow tunnel at its southern end. You can see a faint glow at the
+far end.
+A sword of Elvish workmanship is on the ground.
+A strangely familiar brass lantern is lying on the ground.
+
+>inventory
+You are empty-handed.
+
+>take sword
+Taken.
+
+>take lamp
+Taken.
+
+>south
+Narrow Tunnel
+You are standing at the southern end of a narrow tunnel where it opens into a
+wide cavern. The cavern is dimly illuminated by phosphorescent mosses clinging
+to its high ceiling. A deep ravine winds through the cavern, with a small stream
+at the bottom. The walls of the ravine are steep and crumbly. A foot bridge
+crosses the ravine to the south.
+
+>turn on lamp
+The lamp is now on.
+
+>south
+Foot Bridge
+You are standing on a crude but sturdy wooden foot bridge crossing a deep
+ravine. The path runs north and south from here.
+
+>east
+You can't go that way.
+
+>west
+You can't go that way.
+
+>north
+Narrow Tunnel
+
+>score
+Your score would be 0 (total of 400 points), in 10 moves.
+This score gives you the rank of Beginner.
+
+>quit
+Your score would be 0 (total of 400 points), in 10 moves.
+This score gives you the rank of Beginner.
+Do you wish to leave the game? (Y is affirmative): >y

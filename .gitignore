@@ -6,5 +6,7 @@ transcript.txt
 .DS_Store
 copy-protection.md
 games/
+games-local/
 manuals/
-tests/walkthroughs/
+manuals-local/
+tests/walkthroughs-local/

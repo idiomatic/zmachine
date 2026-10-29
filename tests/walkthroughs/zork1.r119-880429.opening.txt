@@ -1,0 +1,26 @@
+look
+open mailbox
+read leaflet
+drop leaflet
+inventory
+north
+north
+up
+take egg
+down
+south
+east
+open window
+enter house
+west
+take lamp
+take sword
+move rug
+open trap door
+turn on lamp
+down
+score
+undo
+verbose
+quit
+y

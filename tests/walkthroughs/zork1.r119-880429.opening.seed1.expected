@@ -1,0 +1,133 @@
+ZORK I: The Great Underground Empire
+Infocom interactive fiction - a fantasy story
+Copyright (c) 1981, 1982, 1983, 1984, 1985, 1986 Infocom, Inc. All rights
+reserved.
+ZORK is a registered trademark of Infocom, Inc.
+Release 119 / Serial number 880429
+
+West of House
+You are standing in an open field west of a white house, with a boarded front
+door.
+There is a small mailbox here.
+
+>look
+West of House
+You are standing in an open field west of a white house, with a boarded front
+door.
+There is a small mailbox here.
+
+>open mailbox
+Opening the small mailbox reveals a leaflet.
+
+>read leaflet
+(Taken)
+"WELCOME TO ZORK!
+
+ZORK is a game of adventure, danger, and low cunning. In it you will explore
+some of the most amazing territory ever seen by mortals. No computer should be
+without one!"
+
+>drop leaflet
+Dropped.
+
+>inventory
+You are empty-handed.
+
+>north
+North of House
+You are facing the north side of a white house. There is no door here, and all
+the windows are boarded up. To the north a narrow path winds through the trees.
+
+>north
+Forest Path
+This is a path winding through a dimly lit forest. The path heads north-south
+here. One particularly large tree with some low branches stands at the edge of
+the path.
+
+>up
+Up a Tree
+You are about 10 feet above the ground nestled among some large branches. The
+nearest branch above you is above your reach.
+Beside you on the branch is a small bird's nest.
+In the bird's nest is a large egg encrusted with precious jewels, apparently
+scavenged by a childless songbird. The egg is covered with fine gold inlay, and
+ornamented in lapis lazuli and mother-of-pearl. Unlike most eggs, this one is
+hinged and closed with a delicate looking clasp. The egg appears extremely
+fragile.
+
+>take egg
+Taken.
+
+>down
+Forest Path
+
+>south
+North of House
+
+>east
+Behind House
+You are behind the white house. A path leads into the forest to the east. In one
+corner of the house there is a small window which is slightly ajar.
+
+>open window
+With great effort, you open the window far enough to allow entry.
+
+>enter house
+Kitchen
+You are in the kitchen of the white house. A table seems to have been used
+recently for the preparation of food. A passage leads to the west and a dark
+staircase can be seen leading upward. A dark chimney leads down and to the east
+is a small window which is open.
+A bottle is sitting on the table.
+The glass bottle contains:
+  A quantity of water
+On the table is an elongated brown sack, smelling of hot peppers.
+
+>west
+Living Room
+You are in the living room. There is a doorway to the east, a wooden door with
+strange gothic lettering to the west, which appears to be nailed shut, a trophy
+case, and a large oriental rug in the center of the room.
+Above the trophy case hangs an elvish sword of great antiquity.
+A battery-powered brass lantern is on the trophy case.
+
+>take lamp
+Taken.
+
+>take sword
+Taken.
+
+>move rug
+With a great effort, the rug is moved to one side of the room, revealing the
+dusty cover of a closed trap door.
+
+>open trap door
+The door reluctantly opens to reveal a rickety staircase descending into
+darkness.
+
+>turn on lamp
+The brass lantern is now on.
+
+>down
+The trap door crashes shut, and you hear someone barring it.
+
+Cellar
+You are in a dark and damp cellar with a narrow passageway leading north, and a
+crawlway to the south. On the west is the bottom of a steep metal ramp which is
+unclimbable.
+Your sword is glowing with a faint blue glow.
+
+>score
+Your score is 40 (total of 350 points), in 21 moves.
+This gives you the rank of Amateur Adventurer.
+
+>undo
+I don't know the word "undo".
+
+>verbose
+Maximum verbosity.
+
+>quit
+Your score is 40 (total of 350 points), in 21 moves.
+This gives you the rank of Amateur Adventurer.
+Do you wish to leave the game? (Y is affirmative): >y

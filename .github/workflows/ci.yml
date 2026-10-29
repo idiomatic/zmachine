@@ -37,8 +37,8 @@ jobs:
         run: zig build -Doptimize=ReleaseSafe
       - name: Test
         run: zig build test
-      # The walkthroughs stay local, so here this only checks that the step
-      # builds and skips them.
+      # Downloads the open-source Zork I-III and plays their walkthroughs;
+      # the local walkthroughs aren't here, so they're skipped.
       - name: Walkthroughs
         run: zig build walkthrough
 

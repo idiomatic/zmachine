@@ -122,7 +122,7 @@ background; numbered and `#rrggbb` colors are the same everywhere.
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/inspector-dark.webp">
   <img src="docs/screenshots/inspector-light.webp" width="800"
-    alt="The object inspector: a map of five rooms explored so far (West of House, North of House, Behind House, Kitchen and the highlighted Living Room) beside the object tree and the Living Room's contents.">
+    alt="The object inspector after exploring all of Zork I above ground, its 19 rooms arranged as on Infocom's map: the house, the twisty forests and clearings with their directions labeled, Up a Tree, and the canyon down to the End of Rainbow, with one-way arrows and dashed up and down moves; beside it, the object tree and West of House's contents.">
 </picture>
 
 Run with `--web` and open `http://127.0.0.1:9675/inspector`. The port is
@@ -394,7 +394,7 @@ Who is asking:
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/log-dark.webp">
   <img src="docs/screenshots/log-light.webp" width="800"
-    alt="The audit log: commands from Ana's browser, the lead passed to Claude for one command through MCP and back, and two rows highlighted as suspicious where someone opened the object inspector.">
+    alt="The audit log: commands from Ana's browser, the lead passed to Claude for one command through MCP and back, Ana opening the object inspector and letting Claude read it, and the two suspicious rows highlighted: opening the inspector and Claude reading its snapshot.">
 </picture>
 
 The audit log, open to every player, lists every command sent with `POST /command` and every line

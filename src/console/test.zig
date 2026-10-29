@@ -112,3 +112,24 @@ test "plain output has no escapes" {
     try s.finish();
     try testing.expectEqualStrings("Hello, sailor.\n>look\n", out.written());
 }
+
+test "notes, hidden input and a flashed bottom row" {
+    var h: Harness = undefined;
+    h.init("secret words\nx\n", 40, 5);
+    defer h.deinit();
+    try h.screen.start();
+    try h.print("Hello.\n");
+    try h.screen.note("Noted.");
+    var buf: [64]u8 = undefined;
+    try testing.expectEqualStrings("secret words", try h.screen.readHidden("Password: ", &buf));
+    try h.screen.flashBottom(" shown until a key");
+    var t = h.terminal();
+    try testing.expectEqualStrings("[Noted.]", t.rowText(t.row - 2, &buf));
+    try testing.expect(t.cell(t.row - 2, 1).style.dim);
+    // Hidden input is never shown.
+    try testing.expectEqualStrings("Password:", t.rowText(t.row - 1, &buf));
+    // The flashed row is cleared and the cursor put back.
+    try testing.expectEqualStrings("", t.rowText(t.height - 1, &buf));
+    try testing.expectEqual(t.height - 1, t.row);
+    try testing.expectEqual(0, t.col);
+}

@@ -14,8 +14,8 @@ pub fn build(b: *std.Build) void {
     const modules = [_]struct { name: []const u8, imports: []const []const u8 }{
         .{ .name = "vm", .imports = &.{} },
         .{ .name = "poly", .imports = &.{} },
-        .{ .name = "console", .imports = &.{ "vm", "poly" } },
-        .{ .name = "hub", .imports = &.{ "poly", "console" } },
+        .{ .name = "console", .imports = &.{"vm"} },
+        .{ .name = "hub", .imports = &.{ "vm", "console", "poly" } },
         .{ .name = "inspector", .imports = &.{"vm"} },
         .{ .name = "web", .imports = &.{ "inspector", "hub", "poly" } },
         .{ .name = "mcp", .imports = &.{ "hub", "build_options" } },
@@ -30,13 +30,12 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         for (m.imports) |name| {
-            for (imports[0..i]) |import| {
-                if (std.mem.eql(u8, import.name, name)) module.addImport(name, import.module);
-            }
+            const import = for (imports[0..i]) |import| {
+                if (std.mem.eql(u8, import.name, name)) break import;
+            } else std.debug.panic("{s} imports {s}, which isn't declared before it", .{ m.name, name });
+            module.addImport(name, import.module);
         }
         imports[i] = .{ .name = m.name, .module = module };
-        // Until the console commands move out of the console.
-        if (std.mem.eql(u8, m.name, "hub")) imports[i - 1].module.addImport("hub", module);
         const tests = b.addTest(.{ .name = m.name, .root_module = module });
         test_step.dependOn(&b.addRunArtifact(tests).step);
     }

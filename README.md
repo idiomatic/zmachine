@@ -418,6 +418,7 @@ module imports only those listed in `build.zig`.
 | File | Contents |
 | --- | --- |
 | `src/main.zig` | Command line, setup and signal handling |
+| `src/commands.zig` | Console commands: `/lead`, `/password` and `/showpassword` |
 | `src/vm/Machine.zig` | Processor: memory, stack, instruction decoding and opcodes |
 | `src/vm/ObjectTable.zig` | Object tree and property tables |
 | `src/vm/zstring.zig` | Z-string decoding, dictionary encoding, ZSCII/Unicode |
@@ -430,7 +431,7 @@ module imports only those listed in `build.zig`.
 | `src/console/InputSource.zig` | Where the screen's input comes from |
 | `src/console/TerminalInput.zig` | Input straight from standard input, without `--web` |
 | `src/console/TestTerminal.zig`, `src/console/test.zig` | Tests of what the screen draws, through a small terminal emulator |
-| `src/hub/Remote.zig` | Shared state for playing together: commands, game text, discussion, players and the leader, sessions, audit log |
+| `src/hub/Remote.zig` | Shared state for playing together: the keyboard and web input, game text, discussion, players and the leader, sessions, audit log |
 | `src/poly/Password.zig` | Passwords for remote players: three words from the EFF short word list |
 | `src/poly/eff_short_wordlist_1.txt` | The EFF short word list, embedded in the binary |
 | `src/inspector/Inspector.zig` | Map tracking and JSON snapshots for the web page |

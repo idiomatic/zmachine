@@ -11,6 +11,7 @@ const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
+const Display = @import("vm").Display;
 const InputSource = @import("console").InputSource;
 const Password = @import("poly").Password;
 
@@ -40,6 +41,8 @@ text: std.ArrayList(u8) = .empty,
 /// Offset of `text.items[0]` in all the text printed so far.
 text_base: u64 = 0,
 status: [2]std.ArrayList(u8) = .{ .empty, .empty },
+/// The display the game draws on, seen through `display`.
+seen: Seen = undefined,
 
 events: std.ArrayList(Event) = .empty,
 next_seq: u64 = 1,
@@ -506,6 +509,74 @@ pub fn pending(r: *Remote) bool {
     defer r.mutex.unlock(r.io);
     return r.queue.items.len > 0;
 }
+
+/// `screen` as the game draws on it, keeping what it prints in the lower
+/// window and the status line for players on the web.
+pub fn display(r: *Remote, screen: Display) Display {
+    r.seen = .{ .remote = r, .screen = screen };
+    return .from(&r.seen);
+}
+
+/// A display passing everything on to the screen, and the game text and
+/// status line to the remote state too.
+const Seen = struct {
+    remote: *Remote,
+    screen: Display,
+    window: u8 = 0,
+
+    pub fn print(v: *Seen, cp: u21) Display.Error!void {
+        if (v.window == 0) {
+            var utf8: [4]u8 = undefined;
+            const len = std.unicode.utf8Encode(cp, &utf8) catch blk: {
+                utf8[0] = '?';
+                break :blk 1;
+            };
+            v.remote.capture(utf8[0..len]);
+        }
+        return v.screen.print(cp);
+    }
+    pub fn setWindow(v: *Seen, window: u8) Display.Error!void {
+        v.window = window;
+        return v.screen.setWindow(window);
+    }
+    pub fn drawStatus(v: *Seen, left: []const u8, right: []const u8) Display.Error!void {
+        v.remote.setStatus(left, right);
+        return v.screen.drawStatus(left, right);
+    }
+    pub fn splitWindow(v: *Seen, lines: u16) Display.Error!void {
+        return v.screen.splitWindow(lines);
+    }
+    pub fn eraseWindow(v: *Seen, which: i16) Display.Error!void {
+        return v.screen.eraseWindow(which);
+    }
+    pub fn eraseLine(v: *Seen) Display.Error!void {
+        return v.screen.eraseLine();
+    }
+    pub fn setCursor(v: *Seen, row: u16, col: u16) Display.Error!void {
+        return v.screen.setCursor(row, col);
+    }
+    pub fn getCursor(v: *Seen) [2]u16 {
+        return v.screen.getCursor();
+    }
+    pub fn setStyle(v: *Seen, style: u8) Display.Error!void {
+        return v.screen.setStyle(style);
+    }
+    pub fn setColor(v: *Seen, fg: u16, bg: u16) Display.Error!void {
+        return v.screen.setColor(fg, bg);
+    }
+    pub fn setBuffered(v: *Seen, on: bool) Display.Error!void {
+        return v.screen.setBuffered(on);
+    }
+    pub fn readLine(v: *Seen, buf: []u8) Display.Error!?[]u8 {
+        return v.screen.readLine(buf);
+    }
+    pub fn readKey(v: *Seen) Display.Error!?u8 {
+        return v.screen.readKey();
+    }
+    pub fn capabilities(v: *Seen) Display.Capabilities {
+        return v.screen.capabilities();
+    }
+};
 
 /// Adds text the game printed in the lower window.
 pub fn capture(r: *Remote, bytes: []const u8) void {

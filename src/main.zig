@@ -9,6 +9,7 @@ const Storage = @import("vm").Storage;
 const Password = @import("poly").Password;
 const Remote = @import("hub").Remote;
 const Screen = @import("console").Screen;
+const commands = @import("commands.zig");
 const TerminalInput = @import("console").TerminalInput;
 const mcp = @import("mcp");
 const terminal = @import("console").terminal;
@@ -213,7 +214,9 @@ pub fn main(init: std.process.Init) !u8 {
 
     var storage: Storage.Cwd = .init(gpa, io);
     defer storage.deinit();
-    const machine = Machine.init(gpa, io, story, screen.display(), storage.storage(), try saveName(arena, options.story_path)) catch |err| {
+    // With --web, the players there see what the game prints.
+    const display = if (options.web_port != null) remote.display(screen.display()) else screen.display();
+    const machine = Machine.init(gpa, io, story, display, storage.storage(), try saveName(arena, options.story_path)) catch |err| {
         try stderr.print("zmachine: cannot load {s}: {s}\n", .{ options.story_path, @errorName(err) });
         try stderr.flush();
         return 1;
@@ -235,7 +238,7 @@ pub fn main(init: std.process.Init) !u8 {
         thread.detach();
         machine.observer = inspector.observer();
         try remote.startKeyboard();
-        screen.remote = &remote;
+        screen.commands = commands.commands(&remote);
         try stderr.print("Play at http://127.0.0.1:{d}/ (the inspector is at /inspector)\n", .{port});
         if (options.grant_inspector) {
             remote.inspector_for_all = true;

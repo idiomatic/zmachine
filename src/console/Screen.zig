@@ -11,8 +11,6 @@ const Io = std.Io;
 const Display = @import("vm").Display;
 const InputSource = @import("InputSource.zig");
 const terminal = @import("terminal.zig");
-const Password = @import("poly").Password;
-const Remote = @import("hub").Remote;
 
 const Screen = @This();
 
@@ -53,9 +51,9 @@ lines_since_input: u16 = 0,
 keys: [256]u8 = undefined,
 keys_len: usize = 0,
 keys_pos: usize = 0,
-/// The state for playing together, with `--web`: it sees what the game
-/// prints and carries out console commands.
-remote: ?*Remote = null,
+/// Carries out console commands, which the input reports in place of a
+/// line; without it they are ignored.
+commands: ?Commands = null,
 looks: Looks = .{},
 /// What the lower window's current line holds, escapes included, so a
 /// prompt can be shown again after a console command.
@@ -63,6 +61,13 @@ line_text: [256]u8 = undefined,
 line_len: usize = 0,
 
 pub const Error = Io.Writer.Error || InputSource.Error || terminal.Error;
+
+/// Console commands such as `/lead`, carried out by the program around
+/// the screen with `note`, `flashBottom` and `readHidden`.
+pub const Commands = struct {
+    context: *anyopaque,
+    run: *const fn (context: *anyopaque, s: *Screen, name: []const u8) Error!void,
+};
 
 /// 256-color palette entries for the Z-machine colors 2-12.
 const palette = [_]u8{ 16, 160, 34, 220, 33, 164, 44, 255, 250, 244, 238 };
@@ -421,7 +426,6 @@ pub fn print(s: *Screen, cp: u21) Error!void {
         break :blk 1;
     };
     const bytes = utf8[0..len];
-    if (s.window == 0) if (s.remote) |r| r.capture(bytes);
 
     if (s.window == 1) return s.printUpper(cp, bytes);
 
@@ -463,7 +467,6 @@ fn printUpper(s: *Screen, cp: u21, bytes: []const u8) Error!void {
 
 /// Draws the version 3 status line.
 pub fn drawStatus(s: *Screen, left: []const u8, right: []const u8) Error!void {
-    if (s.remote) |r| r.setStatus(left, right);
     if (!s.ansi or s.status_rows == 0) return;
     // The pending word stays pending, so the prompt can still be styled.
     var buf: [64]u8 = undefined;
@@ -658,7 +661,7 @@ pub fn readLine(s: *Screen, buf: []u8) Error!?[]u8 {
             break line;
         },
         .console => |command| {
-            try s.consoleCommand(s.remote.?, std.meta.stringToEnum(Remote.ConsoleCommand, command).?);
+            try s.consoleCommand(command);
             // Show the prompt again for the next line.
             try s.writeLower(prompt);
             s.col = start_col;
@@ -714,33 +717,22 @@ fn typedAhead(s: *Screen) bool {
 }
 
 /// Carries out a console command typed in place of a line of input, which
-/// the terminal has already echoed, and notes the outcome on a line of its
-/// own. The game never sees it.
-fn consoleCommand(s: *Screen, r: *Remote, command: Remote.ConsoleCommand) Error!void {
+/// the terminal has already echoed. The game never sees it.
+fn consoleCommand(s: *Screen, name: []const u8) Error!void {
     if (s.echo) {
         try s.writeLower("/");
-        try s.writeLower(@tagName(command));
+        try s.writeLower(name);
         try s.writeLower(if (s.ansi) "\r\n" else "\n");
     } else {
         s.line_len = 0;
     }
     if (s.lower_row < s.height) s.lower_row += 1;
     s.col = 0;
-    const note: ?[]const u8 = switch (command) {
-        .lead => if (r.leads(.console))
-            "The console already leads."
-        else if (r.passLeadership(.console, "console")) |_|
-            "The console leads again."
-        else |_|
-            "Could not take back the leadership.",
-        .password => try s.consolePassword(r),
-        .showpassword => try s.showPassword(r),
-    };
-    if (note) |text| try s.consoleNote(text);
+    if (s.commands) |c| try c.run(c.context, s, name);
 }
 
-/// Writes a console note in brackets, on a line of its own.
-fn consoleNote(s: *Screen, text: []const u8) Error!void {
+/// Writes a note in brackets, dim, on a line of its own.
+pub fn note(s: *Screen, text: []const u8) Error!void {
     if (s.ansi) try s.out.writeAll("\x1b[0;2m");
     try s.writeLower("[");
     try s.writeLower(text);
@@ -750,13 +742,11 @@ fn consoleNote(s: *Screen, text: []const u8) Error!void {
     if (s.lower_row < s.height) s.lower_row += 1;
 }
 
-/// `/password`: asks for a new password without echoing it; an empty one
-/// generates a new password.
-fn consolePassword(s: *Screen, r: *Remote) Error!?[]const u8 {
-    if (!r.listening()) return "There is no password without --listen.";
-    try s.writeLower("New password (Return to generate one): ");
+/// Shows `prompt` and reads a line without echoing it, into `buf`; then
+/// moves to a new line. Without a terminal, reads a piped line.
+pub fn readHidden(s: *Screen, prompt: []const u8, buf: []u8) Error![]u8 {
+    try s.writeLower(prompt);
     try s.out.flush();
-    var text: [Password.max_len + 1]u8 = undefined;
     var len: usize = 0;
     if (s.tty_input) {
         const raw: terminal.RawMode = try .enter();
@@ -768,8 +758,8 @@ fn consolePassword(s: *Screen, r: *Remote) Error!?[]const u8 {
             .key => |c| switch (c) {
                 '\r', '\n' => break,
                 127, 8 => len -|= 1,
-                else => if (c >= 0x20 and len < text.len) {
-                    text[len] = c;
+                else => if (c >= 0x20 and len < buf.len) {
+                    buf[len] = c;
                     len += 1;
                 },
             },
@@ -778,8 +768,8 @@ fn consolePassword(s: *Screen, r: *Remote) Error!?[]const u8 {
         while (true) switch (try s.input.takeKey(&s.keys, true, false)) {
             .none => s.pause(),
             .line => |line| {
-                len = @min(line.len, text.len);
-                @memcpy(text[0..len], line[0..len]);
+                len = @min(line.len, buf.len);
+                @memcpy(buf[0..len], line[0..len]);
                 break;
             },
             else => break,
@@ -787,45 +777,30 @@ fn consolePassword(s: *Screen, r: *Remote) Error!?[]const u8 {
     }
     try s.writeLower(if (s.ansi) "\r\n" else "\n");
     if (s.lower_row < s.height) s.lower_row += 1;
-    r.changePassword(.console, if (len > 0) text[0..len] else null) catch |err| return switch (err) {
-        error.NotAllowed => "That password is too long.",
-        else => "Could not change the password.",
-    };
-    return if (len > 0)
-        "Password changed. Remote players need the new one."
-    else
-        "New password made; type /showpassword to see it. Remote players need the new one.";
+    return buf[0..len];
 }
 
-/// `/showpassword`: shows the password on the bottom row until a key is
-/// pressed, then clears the row. The terminal has just echoed the command,
-/// so the cursor is on a fresh line and any rows below it are blank. The
-/// password never scrolls into the terminal's history.
-fn showPassword(s: *Screen, r: *Remote) Error!?[]const u8 {
-    if (!r.listening()) return "There is no password without --listen.";
-    if (!s.ansi) return "The password shows only on a full-screen terminal; copy an invite link with ⚭ on the play page here.";
-    var buf: [Password.max_len]u8 = undefined;
-    const password = r.readPassword(.console, &buf, "showed") catch return "Could not read the password.";
-    var line_buf: [160]u8 = undefined;
-    const line = std.fmt.bufPrint(&line_buf, " Password: {s}   (press a key to hide it)", .{password}) catch password;
+/// Shows `text` on the bottom row, in the status line's look, until a key
+/// is pressed, then clears the row. The cursor must be on a fresh line, so
+/// any rows below it are blank; the text never scrolls into the
+/// terminal's history. Only on a full-screen terminal.
+pub fn flashBottom(s: *Screen, text: []const u8) Error!void {
+    if (!s.ansi) return;
     var sgr: [64]u8 = undefined;
     // Save the cursor, draw on the bottom row in the status line's look,
     // and fill the rest of the row.
-    try s.out.print("\x1b7\x1b[{d};1H{s}{s}", .{ s.height, s.looks.header.sgr(&sgr), line });
-    try s.out.splatByteAll(' ', s.width -| @as(u16, @intCast(@min(line.len, s.width))));
+    try s.out.print("\x1b7\x1b[{d};1H{s}{s}", .{ s.height, s.looks.header.sgr(&sgr), text });
+    try s.out.splatByteAll(' ', s.width -| @as(u16, @intCast(@min(text.len, s.width))));
     try s.out.writeAll("\x1b[0m");
     try s.out.flush();
-    try s.waitForKey();
+    {
+        const raw: ?terminal.RawMode = if (s.tty_input) try .enter() else null;
+        defer if (raw) |mode| mode.leave();
+        while (try s.input.takeKey(&s.keys, !s.tty_input, false) == .none) s.pause();
+    }
     try s.out.print("\x1b[{d};1H\x1b[2K\x1b8", .{s.height});
     try s.writeSgrDirect();
     s.restore_lower = true;
-    return null;
-}
-
-fn waitForKey(s: *Screen) Error!void {
-    const raw: ?terminal.RawMode = if (s.tty_input) try .enter() else null;
-    defer if (raw) |mode| mode.leave();
-    while (try s.input.takeKey(&s.keys, !s.tty_input, false) == .none) s.pause();
 }
 
 /// Puts an escape sequence in front of the pending word, the prompt. The

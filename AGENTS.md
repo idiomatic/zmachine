@@ -98,14 +98,14 @@ Keep this file up to date with every specification.
 
 ## Build and release
 
-* Builds and runs on Linux, macOS and Windows, x86_64 and aarch64.
+* Builds and runs on Linux, macOS and Windows, x86_64 and aarch64 (six targets).
 * `zig build stories` (`tools/fetch.zig`): downloads Zork I–III (MIT, Microsoft) from historicalsource at pinned commits, checked by pinned SHA-256 and cached, into `games/` as `zork1.r119-880429.z3` etc. Only `stories` and `walkthrough` download; `-Dstories=false` skips.
 * `zig build walkthrough` (`tools/walkthrough.zig`) plays `tests/walkthroughs-local/walkthroughs.zon` and `tests/walkthroughs/walkthroughs.zon` entries (script, story path or `zork1`–`zork3`, seeds, an expected line).
     * Scripts are named `<story>.r<release>-<serial>[.<topic>].txt`; another release fails.
     * Each seed (or one unseeded run) plays with and without `--web`; outputs must match each other and the saved `<script name>.seed<n>.expected`.
     * `-Dwalkthrough=<name>` plays that name or names starting `<name>.`; `-Dupdate-walkthroughs` saves transcripts; anything missing is skipped and passes.
     * `tests/walkthroughs/` is checked out without line-ending conversion (`.gitattributes`).
-* GitHub Actions: formatting, build, unit tests and walkthroughs on x86_64-linux, aarch64-linux, aarch64-macos, x86_64-windows and aarch64-windows; then stripped ReleaseSafe archives (with README and LICENSE) for all six targets, published as a release by a `v<version>` tag matching `build.zig.zon`.
+* GitHub Actions: formatting, build, unit tests and walkthroughs on each target; then stripped ReleaseSafe archives (with README and LICENSE), published as a release by a `v<version>` tag matching `build.zig.zon`.
 
 ## Rules
 

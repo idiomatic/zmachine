@@ -30,6 +30,7 @@ Prebuilt binaries for Linux, macOS and Windows are on the
 | --- | --- |
 | `-w`, `--web [port]` | Play together on `http://127.0.0.1:<port>/`, with the inspector at `/inspector`; the port defaults to 9675 |
 | `--listen <address>` | Also let players on other machines join with a password (see [Players on other machines](#players-on-other-machines)); implies `--web` |
+| `--grant-inspector` | Let every AI partner read the inspector (see [Web inspector](#web-inspector)); implies `--web` |
 | `--seed <n>` | Seed the random number generator for reproducible runs |
 | `-t`, `--transcript <file>` | Write a transcript from the start of the story |
 | `--plain` | Plain text output, without escape sequences |
@@ -132,17 +133,32 @@ updates each time the game waits for input:
 
 - **Map**: rooms you have visited, laid out by the compass directions you
   moved in. Up/down/in/out moves are dashed; moves with no direction (such as
-  teleports) are dotted. Drag to pan, scroll to zoom. Fit shows the whole
-  map (or centers on you) and follows you again; Reset erases the map and
-  starts it again from the room you're in.
+  teleports) are dotted. A move is labeled with its direction where the
+  layout can't show it, as in deliberately twisty mazes (north from one
+  room, but west to come back), and an arrowhead marks a way you've only
+  gone one way: perhaps one-way by design, perhaps the way back is
+  untried. Drag to pan, scroll to zoom. Fit shows the whole map (or
+  centers on you) and follows you again; Reset erases the map and starts
+  it again from the room you're in.
 - **Objects**: the full object tree, with recently changed objects
   highlighted. Selecting an object shows its links, attributes and
   properties.
 - **Globals** and **History**: global variables, with changes highlighted,
   and the commands entered so far.
 
+Drag a tab onto the other panel's tab bar to move it there, and drag the
+boundary between the panels to resize them. The browser remembers the
+layout; **Default layout** puts it back. On a phone-sized screen the
+panels simply stack.
+
 The current location is read from global variable 0, which Infocom and
 Inform stories use for the status line.
+
+AI partners can't read the inspector unless you let them: either all of
+them, with `--grant-inspector`, or one at a time, with **⌕ Let … read the
+inspector** in the partner's ▼ menu on the play page (on this machine).
+The others see a note in the discussion, and every read is still logged
+as suspicious.
 
 ## Playing together
 
@@ -183,7 +199,8 @@ lists everyone playing, starting with the console, and marks the leader
 with ♛, the leader's mark throughout the page. It wraps onto as many lines
 as the players need. A small robot icon before the name marks AI partners, as ♛ marks the
 leader; a chip's tooltip says where a person plays from. When you lead, each remote player's and AI partner's
-chip has a ▼ menu to pass the lead to them or kick them.
+chip has a ▼ menu to pass the lead to them or kick them. On this
+machine, an AI partner's menu can also let it read the inspector.
 
 Along the top, after the room and score and the live indicator:
 
@@ -311,6 +328,7 @@ the other tools wait until it has.
 | `set_mode` | Leader only: `debate` or `turns` |
 | `kick_player` | Leader only: kick a remote player or AI partner, with a reason posted to the discussion |
 | `new_password` | Leader only: make three new random words. The AI never sees them, so it announces the change |
+| `read_inspector` | Only when let: the room it's in with everything in it, what changed this turn and the map; one object's details; or the globals |
 
 The instructions ask partners to use the leader's powers with discretion:
 
@@ -339,6 +357,7 @@ curl -d 'open mailbox' http://127.0.0.1:9675/command
 | `GET /inspector` | The object inspector (this machine only; logged as suspicious). |
 | `GET /state?since=<n>` | The inspector's snapshots (this machine only; logged as suspicious). |
 | `POST /erase-map` | Erase the inspector's map, starting it again from the current room (this machine only; logged). |
+| `POST /grant-inspector`, `POST /revoke-inspector` | Let the AI partner the body names read the inspector, or stop it (people on this machine; posted and logged). |
 | `GET /me` | Who the server takes you for, and whether you lead. |
 | `POST /login` | A remote player gives the password; `204` sets the session cookie, `401` is wrong and `429` is too soon. |
 | `POST /join` | A person chooses a name (the body); `409` if it is taken. |

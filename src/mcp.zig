@@ -56,8 +56,11 @@ const instructions =
     \\what you think the puzzle is, and what you would try. Keep it short.
     \\
     \\Play fair: know only what the game text tells you. The web server's
-    \\object inspector (/inspector and /state) shows hidden game state; reading it is
-    \\logged as cheating.
+    \\object inspector shows hidden game state (objects, attributes,
+    \\globals, the map). You may read it with read_inspector only when a
+    \\person on the console's machine lets you (read_game says so), and
+    \\every read is logged. When you use it, say so in the discussion, and
+    \\don't spoil puzzles the others want to solve.
 ;
 
 /// One line, since each message is one line.
@@ -70,7 +73,8 @@ const tools_json = oneLine(
     \\{"name":"pass_leadership","description":"Leader only: pass the leadership to another player by name, or to \"console\" for the console and the people on its machine.","inputSchema":{"type":"object","properties":{"to":{"type":"string","description":"A player's name, or \"console\"."}},"required":["to"]}},
     \\{"name":"set_mode","description":"Leader only: set the mode to debate (only the leader sends commands) or turns (anyone may).","inputSchema":{"type":"object","properties":{"mode":{"type":"string","enum":["debate","turns"]}},"required":["mode"]}},
     \\{"name":"kick_player","description":"Leader only: remove a disruptive remote player or AI partner, after warning them. Your reason is posted to the discussion.","inputSchema":{"type":"object","properties":{"name":{"type":"string"},"reason":{"type":"string","description":"Why, in a sentence."}},"required":["name","reason"]}},
-    \\{"name":"new_password","description":"Leader only: replace the password for players on other machines with three new random words, ending every remote session but the leader's. You never see it; announce the change.","inputSchema":{"type":"object","properties":{}}}]
+    \\{"name":"new_password","description":"Leader only: replace the password for players on other machines with three new random words, ending every remote session but the leader's. You never see it; announce the change.","inputSchema":{"type":"object","properties":{}}},
+    \\{"name":"read_inspector","description":"Only when a person on the console's machine lets you: read hidden game state from the object inspector. With no arguments, the room you're in with everything in it, what changed this turn, and the map of visited rooms; or one object's details; or the globals. Every read is logged.","inputSchema":{"type":"object","properties":{"object":{"type":"string","description":"An object's number, or its name (or part of it), for its parent, children, attributes and properties."},"globals":{"type":"boolean","description":"List the 240 global variables instead."}}},"annotations":{"readOnlyHint":true}}]
 );
 
 fn oneLine(comptime text: []const u8) []const u8 {
@@ -130,11 +134,13 @@ const Member = struct {
     ai: bool = false,
     local: bool = false,
     leader: bool = false,
+    inspector: bool = false,
 };
 
 const Discussion = struct {
     last: u64,
     mode: []const u8,
+    inspector_for_all: bool = false,
     leader: []const u8 = "console",
     players: []const Member = &.{},
     posts: []const Post,
@@ -301,6 +307,13 @@ fn call(s: *Session, arena: Allocator, name: []const u8, args: ?json.ObjectMap) 
         _ = try request(s, arena, "POST", "/say", body.written());
         return result;
     }
+    if (std.mem.eql(u8, name, "read_inspector")) {
+        var globals = false;
+        if (args) |a| if (a.get("globals")) |v| if (v == .bool) {
+            globals = v.bool;
+        };
+        return readInspector(s, arena, stringArg(args, "object"), globals);
+    }
     if (std.mem.eql(u8, name, "new_password")) {
         return leaderAction(s, arena, "/password", "", "New password made. You can't see it: announce the change, and if " ++
             "nobody on the console's machine is on the web page to share it, pass the lead to the console.");
@@ -455,13 +468,16 @@ fn writeLeadership(s: *Session, w: *Io.Writer, d: Discussion) !void {
     }
     try w.writeAll("Playing:");
     if (d.players.len == 0) try w.writeAll(" the console");
+    var inspects = false;
     for (d.players, 0..) |p, i| {
         try w.print("{s} {s} ({s}{s})", .{
             if (i > 0) "," else "",                                                                          p.name,
             if (p.ai) "AI partner" else if (p.local) "person on the console's machine" else "remote person", if (std.ascii.eqlIgnoreCase(p.name, me)) ", you" else "",
         });
+        if (std.ascii.eqlIgnoreCase(p.name, me)) inspects = p.inspector;
     }
     try w.writeAll("\n");
+    if (inspects) try w.writeAll("You may read the inspector with read_inspector; say so when you use it.\n");
 }
 
 fn isMine(p: Post, name: []const u8) bool {
@@ -508,6 +524,14 @@ fn writeMessages(w: *Io.Writer, posts: []const Post, name: []const u8) !void {
             try w.print("({s} changed the password for remote players)\n", .{who});
             continue;
         }
+        if (std.mem.eql(u8, p.kind, "granted")) {
+            try w.print("({s} let {s} read the inspector)\n", .{ who, p.text });
+            continue;
+        }
+        if (std.mem.eql(u8, p.kind, "revoked")) {
+            try w.print("({s} stopped {s} reading the inspector)\n", .{ who, p.text });
+            continue;
+        }
         const thinks = std.mem.eql(u8, p.kind, "thought");
         try w.print("{s}{s}: {s}\n", .{ who, if (thinks) " (thinking)" else "", p.text });
         if (p.suggestions.len > 0) {
@@ -518,6 +542,149 @@ fn writeMessages(w: *Io.Writer, posts: []const Post, name: []const u8) !void {
             try w.writeAll("\n");
         }
     }
+}
+
+const Snapshot = struct {
+    location: u16 = 0,
+    objects: []const Object = &.{},
+    changed: []const u16 = &.{},
+    globals: []const u16 = &.{},
+    rooms: []const Room = &.{},
+    edges: []const Edge = &.{},
+
+    const Object = struct {
+        id: u16,
+        name: []const u8,
+        parent: u16 = 0,
+        sibling: u16 = 0,
+        child: u16 = 0,
+        attrs: []const u16 = &.{},
+        props: []const Property = &.{},
+    };
+    const Property = struct { n: u16, d: []const u8 };
+    const Room = struct { id: u16, name: []const u8 };
+    const Edge = struct { from: u16, to: u16, dir: []const u8 };
+
+    fn get(snap: Snapshot, id: u16) ?Object {
+        if (id == 0 or id > snap.objects.len) return null;
+        return snap.objects[id - 1];
+    }
+
+    fn label(snap: Snapshot, w: *Io.Writer, id: u16) !void {
+        const o = snap.get(id) orelse return w.print("#{d}", .{id});
+        try w.print("#{d} {s}", .{ id, if (o.name.len > 0) o.name else "(unnamed)" });
+    }
+};
+
+/// The most lines an object tree takes up.
+const max_tree_lines = 120;
+
+/// Reads the inspector, which the server allows only when a person on the
+/// console's machine has let this partner (or `--grant-inspector`).
+fn readInspector(s: *Session, arena: Allocator, object: ?[]const u8, globals: bool) !Result {
+    const response = try request(s, arena, "GET", "/state?since=0", "");
+    switch (response.status) {
+        200 => {},
+        403 => return .{
+            .text = "Nobody has let you read the inspector. A person on the console's machine can, from your name's menu on the play page.",
+            .is_error = true,
+        },
+        else => return .{ .text = "The inspector has nothing yet; try again once the game waits for a command.", .is_error = true },
+    }
+    const snap = try json.parseFromSliceLeaky(Snapshot, arena, response.body, .{ .ignore_unknown_fields = true });
+    var out: Io.Writer.Allocating = .init(arena);
+    const w = &out.writer;
+    if (globals) {
+        try w.writeAll("Globals (G00 is usually the current room):\n");
+        for (snap.globals, 0..) |g, i| {
+            try w.print("G{X:0>2}={d}{s}", .{ i, g, if (i % 8 == 7) "\n" else "  " });
+        }
+    } else if (object) |query| {
+        try writeObjects(w, snap, std.mem.trim(u8, query, " #"));
+    } else {
+        try w.writeAll("Location: ");
+        try snap.label(w, snap.location);
+        try w.writeAll("\nIn it:\n");
+        var lines: usize = 0;
+        if (snap.get(snap.location)) |room| try writeTree(w, snap, room.child, 1, &lines);
+        if (snap.changed.len > 0) {
+            try w.writeAll("Changed this turn:");
+            for (snap.changed, 0..) |id, i| {
+                try w.writeAll(if (i > 0) ", " else " ");
+                try snap.label(w, id);
+            }
+            try w.writeAll("\n");
+        }
+        try w.print("Map ({d} rooms visited):\n", .{snap.rooms.len});
+        for (snap.edges) |e| {
+            try w.writeAll("  ");
+            try snap.label(w, e.from);
+            try w.print(" --{s}--> ", .{e.dir});
+            try snap.label(w, e.to);
+            try w.writeAll("\n");
+        }
+    }
+    return .{ .text = out.written() };
+}
+
+/// Writes the objects from `first` along its siblings, each with what it
+/// holds, indented by depth.
+fn writeTree(w: *Io.Writer, snap: Snapshot, first: u16, depth: usize, lines: *usize) !void {
+    var id = first;
+    var guard: usize = 0;
+    while (snap.get(id)) |o| : (id = o.sibling) {
+        guard += 1;
+        if (guard > snap.objects.len) return;
+        if (lines.* >= max_tree_lines) return w.writeAll("  …\n");
+        lines.* += 1;
+        try w.splatByteAll(' ', depth * 2);
+        try snap.label(w, id);
+        try w.writeAll("\n");
+        if (depth < 6) try writeTree(w, snap, o.child, depth + 1, lines);
+    }
+}
+
+/// Writes the object numbered `query`, or those whose names contain it.
+fn writeObjects(w: *Io.Writer, snap: Snapshot, query: []const u8) !void {
+    if (std.fmt.parseInt(u16, query, 10)) |id| {
+        const o = snap.get(id) orelse return w.print("There is no object #{d}.\n", .{id});
+        return writeObject(w, snap, o);
+    } else |_| {}
+    var found: usize = 0;
+    for (snap.objects) |o| {
+        if (std.ascii.findIgnoreCase(o.name, query) == null) continue;
+        found += 1;
+        if (found <= 5) {
+            if (found > 1) try w.writeAll("\n");
+            try writeObject(w, snap, o);
+        }
+    }
+    if (found == 0) return w.print("No object's name contains \"{s}\".\n", .{query});
+    if (found > 5) try w.print("\n…and {d} more; give a number or more of the name.\n", .{found - 5});
+}
+
+fn writeObject(w: *Io.Writer, snap: Snapshot, o: Snapshot.Object) !void {
+    try snap.label(w, o.id);
+    try w.writeAll("\nIn: ");
+    try snap.label(w, o.parent);
+    try w.writeAll("\nHolds:");
+    var id = o.child;
+    var guard: usize = 0;
+    while (snap.get(id)) |c| : (id = c.sibling) {
+        guard += 1;
+        if (guard > snap.objects.len) break;
+        try w.writeAll(" ");
+        try snap.label(w, id);
+        try w.writeAll(";");
+    }
+    if (o.child == 0) try w.writeAll(" nothing");
+    try w.writeAll("\nAttributes set:");
+    for (o.attrs) |a| try w.print(" {d}", .{a});
+    if (o.attrs.len == 0) try w.writeAll(" none");
+    try w.writeAll("\nProperties:");
+    for (o.props) |p| try w.print(" {d}={s}", .{ p.n, p.d });
+    if (o.props.len == 0) try w.writeAll(" none");
+    try w.writeAll("\n");
 }
 
 fn transcript(s: *Session, arena: Allocator, since: u64) !Transcript {
@@ -572,6 +739,6 @@ fn request(s: *Session, arena: Allocator, method: []const u8, path: []const u8, 
 test "tool list is valid JSON" {
     const parsed = try json.parseFromSlice(json.Value, std.testing.allocator, tools_json, .{});
     defer parsed.deinit();
-    try std.testing.expectEqual(@as(usize, 9), parsed.value.array.items.len);
+    try std.testing.expectEqual(@as(usize, 10), parsed.value.array.items.len);
     try std.testing.expect(std.mem.indexOfScalar(u8, tools_json, '\n') == null);
 }

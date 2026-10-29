@@ -26,7 +26,14 @@ Keep this file up to date with every specification.
 
 * `--web [port]` (default 9675) listens on 127.0.0.1; `--listen <address>` (implies `--web`) adds that address. Refuse and log requests whose `Host` isn't this server or whose `Origin` doesn't match `Host`.
 * Without `--web`, input is unchanged; with it, a piped walkthrough gives the same output, and quitting exits cleanly with requests open.
-* `/` is the play page (below); `/inspector` is a live inspector: object tree, attributes, properties and globals with recent changes highlighted, a map of visited rooms laid out by direction (pan, zoom, Fit to show it all or follow the player, and Reset, which erases it and starts again from the current room: `POST /erase-map`, logged), and the command history.
+* `/` is the play page and `/inspector` the inspector (both below).
+
+## Inspector
+
+* Live: object tree, attributes, properties and globals with recent changes highlighted, the command history, and a map of visited rooms laid out by direction.
+* Map: pan, zoom, Fit (show it all, or follow the player) and Reset (erase it and start again from the current room; `POST /erase-map`, logged). One line per pair of rooms; a pair traveled only one way has an arrowhead. A move is labeled with its direction, at the end it was taken from: up, down, in and out always; a compass direction only when the layout doesn't match it.
+* Tabs (Map, Globals, History, Objects) in two panels: drag a tab onto the other tab bar to move it there (a panel keeps one tab at least), and drag the boundary to resize them. The browser remembers the layout; Default layout restores it. Screens 860 px wide or less keep a fixed, stacked layout.
+* Answers only this machine; opening it and reading snapshots are logged as suspicious. AI partners read only `/state`, and only with `--grant-inspector` (every partner; implies `--web`) or when a person on this machine lets them from their chip menu (`POST /grant-inspector`, `POST /revoke-inspector`). Grants are posted and logged; a kick drops one.
 
 ## Playing together
 
@@ -61,11 +68,12 @@ Keep this file up to date with every specification.
 
 * `POST /command`: one line of printable text (empty is Return for single-key reads), queued with the keyboard and echoed in the terminal; replies with JSON of the response and status line. A waiting command dismisses `[MORE]`.
 * `GET /transcript?since=<offset>[&wait=1]`: the game text a player sees.
-* `POST /say`, `GET /discussion?since=<n>[&wait=1]`: thoughts with up to 8 suggested commands, messages, every command, and mode, leader, join, leave, kick and password posts, each with its author. `/discussion` also gives the mode, leader and players.
+* `POST /say`, `GET /discussion?since=<n>[&wait=1]`: thoughts with up to 8 suggested commands, messages, every command, and mode, leader, join, leave, kick, password and inspector-grant posts, each with its author. `/discussion` also gives the mode, leader and players.
 * `POST /mode`, `POST /lead`, `POST /kick`: leader actions.
 * `GET /me`: who the server takes the client for, and whether they lead.
 * `GET /invite`: an invite link carrying the password. `POST /password`: change the password.
-* `GET /log`, `GET /events?since=<n>`: live audit log of every command and keyboard line, joins, leaves, leadership, kicks, and password logins, changes, copies and reveals. Clients are named by player name and `User-Agent`. Suspicious: opening the inspector, reading its snapshots, wrong passwords, refused requests.
+* `POST /grant-inspector`, `POST /revoke-inspector`: let an AI partner read the inspector, or stop it (people on this machine).
+* `GET /log`, `GET /events?since=<n>`: live audit log of every command and keyboard line, joins, leaves, leadership, kicks, inspector grants, and password logins, changes, copies and reveals. Clients are named by player name and `User-Agent`. Suspicious: opening the inspector, reading its snapshots, wrong passwords, refused requests.
 
 ### The play page (`/`)
 
@@ -74,7 +82,7 @@ Keep this file up to date with every specification.
 * Game pane: game text, command box, text size menu (12–20 px, default 14).
 * Discussion pane: a header with "Discussion", the mode switch (locked unless leading, explained in its tooltip), and, for local clients and a human leader with `--listen`, ⚄ (new password) and ⚭ (copy an invite link), enlarged to match the other symbols; under it, a strip of player chips; then each player's posts in their own color, "You" on your own, suggestions as buttons that send them, and a message box.
     * The strip lists the console first, then each player in their color, with ♛ on whoever leads and then a drawn, monochrome robot icon on AI partners, both before the name (where a person plays from is in the tooltip, not on the chip) (♛ marks the leader throughout the page). It wraps onto as many rows as needed, without a scrollbar.
-    * The leader's actions sit in one menu on each chip, opened by a ▼ button (a plain button and a menu the page draws, so it looks the same in every browser): ♛ pass the lead and ✕ kick, on remote players and AI partners; on the Console chip, ♛ pass the lead to this machine, or, for a local client not leading, take it back.
+    * The leader's actions sit in one menu on each chip, opened by a ▼ button (a plain button and a menu the page draws, so it looks the same in every browser): ♛ pass the lead and ✕ kick, on remote players and AI partners; on the Console chip, ♛ pass the lead to this machine, or, for a local client not leading, take it back. For a person on this machine, an AI partner's menu also has ⌕ let it read the inspector, or stop it (not with `--grant-inspector`); its tooltip says when it may.
 * ⊟ hides a pane, ⊞ in the other restores it; never both hidden. A hidden discussion's ⊞ shows a dot on others' posts.
 * The browser remembers name, hidden panes, text size and theme; `?game=`, `?discussion=` (`hide`/`show`) and `?theme=` (`auto`/`light`/`dark`) override them.
 
@@ -109,11 +117,11 @@ Keep this file up to date with every specification.
 ## MCP
 
 * `--mcp [port]` (default 9675): MCP server over stdio (newline-delimited JSON-RPC) for the game served with `--web`.
-* Tools: `introduce`, `read_game`, `send_command`, `share_thoughts`, `wait_for_player`; for the leader, `pass_leadership`, `set_mode`, `kick_player` (reason posted after the kick) and `new_password`.
+* Tools: `introduce`, `read_game`, `send_command`, `share_thoughts`, `wait_for_player`; for the leader, `pass_leadership`, `set_mode`, `kick_player` (reason posted after the kick) and `new_password`; when granted, `read_inspector` (the room's contents, this turn's changes and the map; an object by number or name; or the globals).
 * `introduce` names the partner (same name rules, renamable); other tools refuse until then.
 * `read_game` and `wait_for_player` report the leader, the players, and gaining or losing leadership; messages name their speaker.
-* Sends `X-Player: <name>`; shows the partner others' posts; never reads the inspector.
-* Instructions cover multiple players, modes, leader powers and fair play: warn before kicking; kick only for real disruption (spam, abuse, deliberate derailing), never disagreement, and say why; make a new password if a kicked player returns; hand back leadership when asked; change the mode only when the group wants.
+* Sends `X-Player: <name>`; shows the partner others' posts; never reads the inspector unless granted (`read_game` says when).
+* Instructions cover multiple players, modes, leader powers and fair play: warn before kicking; kick only for real disruption (spam, abuse, deliberate derailing), never disagreement, and say why; make a new password if a kicked player returns; hand back leadership when asked; change the mode only when the group wants; read the inspector only when let, say so, and don't spoil puzzles.
 
 ## Build and release
 

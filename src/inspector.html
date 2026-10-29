@@ -67,11 +67,22 @@ header h1 { font-size: 15px; margin: 0; font-weight: 650; letter-spacing: .01em;
 main {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr);
+  grid-template-columns: minmax(0, 1.35fr) 5px minmax(0, 1fr);
   min-height: 0;
 }
 section { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
-section + section { border-left: 1px solid var(--border); }
+/* The boundary between the panels, dragged to resize them. */
+.splitter { cursor: col-resize; background: var(--border); background-clip: content-box; padding: 0 2px; touch-action: none; }
+.splitter:hover, .splitter.dragging { background: var(--accent); padding: 0 1px; }
+.tab[draggable="true"] { cursor: grab; }
+.tab.dragging { opacity: .45; }
+.tabs.drop-target { background: var(--accent-soft); }
+.tab.drop-before { box-shadow: inset 2px 0 0 var(--accent); }
+.tabs.drop-end::after { content: ""; width: 2px; align-self: stretch; margin: 4px 0; background: var(--accent); }
+#default-layout {
+  border: 1px solid var(--border); background: var(--panel); color: var(--muted);
+  font: inherit; font-size: 12px; padding: 2px 8px; border-radius: 6px; cursor: pointer;
+}
 .tabs { display: flex; gap: 2px; padding: 8px 12px 0; background: var(--panel); border-bottom: 1px solid var(--border); }
 .tab {
   border: 0; background: none; color: var(--muted); font: inherit; font-weight: 550;
@@ -96,7 +107,11 @@ section + section { border-left: 1px solid var(--border); }
 .edge { stroke: var(--edge); stroke-width: 1.6; fill: none; }
 .edge.vertical { stroke-dasharray: 5 4; }
 .edge.unknown { stroke-dasharray: 2 4; }
-.edge-label { fill: var(--muted); font: 600 10px var(--mono); text-anchor: middle; dominant-baseline: middle; }
+.edge-label {
+  fill: var(--muted); font: 600 10px var(--mono); text-anchor: middle; dominant-baseline: middle;
+  paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round;
+}
+.arrowhead { fill: var(--edge); }
 #objects-pane { flex-direction: column; }
 .toolbar { display: flex; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--panel); }
 .toolbar input {
@@ -140,12 +155,14 @@ td.hex { word-break: break-all; }
 .g { background: var(--panel); border: 1px solid var(--border); border-radius: 5px; padding: 3px 7px; display: flex; justify-content: space-between; gap: 6px; }
 .g .k { color: var(--muted); }
 .g.flash { animation: flash 2.4s ease-out; }
-#history { overflow: auto; padding: 12px 16px; font: 13px/1.7 var(--mono); margin: 0; }
+#history { overflow: auto; padding: 12px 16px 12px 3.5em; font: 13px/1.7 var(--mono); margin: 0; }
 #history li { color: var(--text); }
 #history li::marker { color: var(--muted); }
+/* Space-constrained screens keep a fixed, stacked layout. */
 @media (max-width: 860px) {
-  main { grid-template-columns: 1fr; grid-template-rows: minmax(320px, 1fr) minmax(420px, 1fr); }
-  section + section { border-left: 0; border-top: 1px solid var(--border); }
+  main { grid-template-columns: 1fr !important; grid-template-rows: minmax(320px, 1fr) minmax(420px, 1fr); }
+  section + .splitter + section { border-top: 1px solid var(--border); }
+  .splitter, #default-layout { display: none; }
 }
 </style>
 </head>
@@ -157,7 +174,10 @@ td.hex { word-break: break-all; }
     <span>Turn <b id="turn">0</b></span>
     <span>Location <b id="location">-</b></span>
   </div>
-  <div class="status"><span class="dot" id="dot"></span><span id="conn">connecting</span></div>
+  <div class="status">
+    <button id="default-layout" title="Put the tabs and panels back where they started">Default layout</button>
+    <span class="dot" id="dot"></span><span id="conn">connecting</span>
+  </div>
 </header>
 <main>
   <section>
@@ -167,7 +187,7 @@ td.hex { word-break: break-all; }
       <button class="tab" data-pane="history-pane">History</button>
     </div>
     <div class="pane active" id="map-pane">
-      <svg id="map"><g id="viewport"><g id="edges"></g><g id="rooms"></g></g></svg>
+      <svg id="map"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="arrowhead" d="M0,0 L10,5 L0,10 z"/></marker></defs><g id="viewport"><g id="edges"></g><g id="rooms"></g></g></svg>
       <div class="map-tools">
         <button id="zoom-in" title="Zoom in">+</button>
         <button id="zoom-out" title="Zoom out">&minus;</button>
@@ -179,8 +199,9 @@ td.hex { word-break: break-all; }
     <div class="pane" id="globals-pane"><div id="globals"></div></div>
     <div class="pane" id="history-pane"><ol id="history"></ol></div>
   </section>
+  <div class="splitter" id="splitter" title="Drag to resize the panels"></div>
   <section>
-    <div class="tabs"><button class="tab active">Objects</button></div>
+    <div class="tabs"><button class="tab active" data-pane="objects-pane">Objects</button></div>
     <div class="pane active" id="objects-pane">
       <div class="toolbar">
         <input id="search" type="search" placeholder="Filter by name or number" autocomplete="off">
@@ -206,16 +227,188 @@ let expanded = new Set();
 let lastGlobals = null;
 let flashObjects = new Set();
 
-// Tabs
+// Tabs and panels
 
-for (const tab of document.querySelectorAll(".tab[data-pane]")) {
+const LAYOUT_KEY = "zmachine-inspector-layout";
+const panels = [...document.querySelectorAll("main > section")];
+const DEFAULT_LAYOUT = {
+  panels: panels.map((p) => [...p.querySelectorAll(".tab")].map((t) => t.dataset.pane)),
+  active: panels.map((p) => p.querySelector(".tab.active").dataset.pane),
+  split: 1.35 / 2.35,
+};
+let layoutState = DEFAULT_LAYOUT;
+// Tiling is off on space-constrained screens, which keep the stacked layout.
+const tiling = window.matchMedia("(min-width: 861px)");
+
+function activate(tab) {
+  const section = tab.closest("section");
+  for (const t of section.querySelectorAll(".tab")) t.classList.toggle("active", t === tab);
+  for (const p of section.querySelectorAll(".pane")) p.classList.toggle("active", p.id === tab.dataset.pane);
+  if (tab.dataset.pane === "map-pane") applyView();
+}
+
+function tabFor(pane) {
+  return document.querySelector(`.tab[data-pane="${pane}"]`);
+}
+
+// Puts each tab and its pane in its panel, in order, and sizes the panels.
+function applyLayout(layout) {
+  layout.panels.forEach((ids, i) => {
+    const bar = panels[i].querySelector(".tabs");
+    for (const id of ids) {
+      bar.append(tabFor(id));
+      panels[i].append($(id));
+    }
+    activate(tabFor(layout.active[i]));
+  });
+  const r = layout.split;
+  document.querySelector("main").style.gridTemplateColumns = `minmax(0, ${r}fr) 5px minmax(0, ${1 - r}fr)`;
+  layoutState = layout;
+}
+
+function currentLayout() {
+  return {
+    panels: panels.map((p) => [...p.querySelectorAll(".tab")].map((t) => t.dataset.pane)),
+    active: panels.map((p) => p.querySelector(".tab.active").dataset.pane),
+    split: layoutState.split,
+  };
+}
+
+function saveLayout() {
+  layoutState = currentLayout();
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layoutState)); } catch {}
+}
+
+// A saved layout is used only if it still names every tab once, with none
+// of the panels empty.
+function loadLayout() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LAYOUT_KEY));
+    const ids = DEFAULT_LAYOUT.panels.flat().sort().join();
+    if (!saved || saved.panels.length !== panels.length) return DEFAULT_LAYOUT;
+    if (saved.panels.flat().sort().join() !== ids || saved.panels.some((p) => !p.length)) return DEFAULT_LAYOUT;
+    if (!saved.active.every((a, i) => saved.panels[i].includes(a))) return DEFAULT_LAYOUT;
+    if (!(saved.split >= 0.15 && saved.split <= 0.85)) return DEFAULT_LAYOUT;
+    return saved;
+  } catch {
+    return DEFAULT_LAYOUT;
+  }
+}
+
+for (const tab of document.querySelectorAll(".tab")) {
   tab.addEventListener("click", () => {
-    const group = tab.parentElement;
-    for (const t of group.querySelectorAll(".tab")) t.classList.toggle("active", t === tab);
-    for (const p of group.parentElement.querySelectorAll(".pane")) p.classList.toggle("active", p.id === tab.dataset.pane);
-    if (tab.dataset.pane === "map-pane") applyView();
+    activate(tab);
+    if (tiling.matches) saveLayout();
   });
 }
+
+// Dragging a tab onto a tab bar moves it there, before the tab it is
+// dropped on, and brings it to the front. A panel keeps at least one tab.
+(() => {
+  let dragged = null;
+  const clearMarks = () => {
+    for (const el of document.querySelectorAll(".drop-target, .drop-before, .drop-end")) {
+      el.classList.remove("drop-target", "drop-before", "drop-end");
+    }
+  };
+  const setDraggable = () => {
+    for (const tab of document.querySelectorAll(".tab")) tab.draggable = tiling.matches;
+  };
+  setDraggable();
+  tiling.addEventListener("change", () => {
+    setDraggable();
+    applyLayout(tiling.matches ? loadLayout() : DEFAULT_LAYOUT);
+  });
+  // Where a drop at clientX would land: before a tab, or at the end.
+  const dropPoint = (bar, x) => {
+    for (const t of bar.querySelectorAll(".tab")) {
+      if (t === dragged) continue;
+      const r = t.getBoundingClientRect();
+      if (x < r.left + r.width / 2) return t;
+    }
+    return null;
+  };
+  const allowed = (bar) => {
+    const from = dragged.closest("section");
+    return bar.closest("section") === from || from.querySelectorAll(".tab").length > 1;
+  };
+  for (const tab of document.querySelectorAll(".tab")) {
+    tab.addEventListener("dragstart", (ev) => {
+      dragged = tab;
+      tab.classList.add("dragging");
+      ev.dataTransfer.effectAllowed = "move";
+      ev.dataTransfer.setData("text/plain", tab.dataset.pane);
+    });
+    tab.addEventListener("dragend", () => {
+      tab.classList.remove("dragging");
+      dragged = null;
+      clearMarks();
+    });
+  }
+  for (const bar of document.querySelectorAll(".tabs")) {
+    bar.addEventListener("dragover", (ev) => {
+      if (!dragged || !allowed(bar)) return;
+      ev.preventDefault();
+      ev.dataTransfer.dropEffect = "move";
+      clearMarks();
+      bar.classList.add("drop-target");
+      const before = dropPoint(bar, ev.clientX);
+      if (before) before.classList.add("drop-before");
+      else bar.classList.add("drop-end");
+    });
+    bar.addEventListener("dragleave", (ev) => {
+      if (!bar.contains(ev.relatedTarget)) clearMarks();
+    });
+    bar.addEventListener("drop", (ev) => {
+      if (!dragged || !allowed(bar)) return;
+      ev.preventDefault();
+      const from = dragged.closest("section");
+      const to = bar.closest("section");
+      const before = dropPoint(bar, ev.clientX);
+      bar.insertBefore(dragged, before);
+      to.append($(dragged.dataset.pane));
+      if (from !== to) {
+        const rest = from.querySelector(".tab.active") || from.querySelector(".tab");
+        activate(rest);
+      }
+      activate(dragged);
+      clearMarks();
+      saveLayout();
+    });
+  }
+})();
+
+// Dragging the boundary between the panels resizes them.
+(() => {
+  const splitter = $("splitter");
+  const main = document.querySelector("main");
+  let dragging = false;
+  splitter.addEventListener("pointerdown", (ev) => {
+    dragging = true;
+    splitter.setPointerCapture(ev.pointerId);
+    splitter.classList.add("dragging");
+  });
+  splitter.addEventListener("pointermove", (ev) => {
+    if (!dragging) return;
+    const r = main.getBoundingClientRect();
+    const split = Math.min(0.85, Math.max(0.15, (ev.clientX - r.left) / r.width));
+    main.style.gridTemplateColumns = `minmax(0, ${split}fr) 5px minmax(0, ${1 - split}fr)`;
+    layoutState = { ...layoutState, split };
+  });
+  const end = () => {
+    if (!dragging) return;
+    dragging = false;
+    splitter.classList.remove("dragging");
+    saveLayout();
+  };
+  splitter.addEventListener("pointerup", end);
+  splitter.addEventListener("pointercancel", end);
+})();
+
+$("default-layout").addEventListener("click", () => {
+  applyLayout(DEFAULT_LAYOUT);
+  try { localStorage.removeItem(LAYOUT_KEY); } catch {}
+});
 
 // Polling
 
@@ -577,28 +770,47 @@ function renderMap() {
     return [x * CELL_W, y * CELL_H];
   };
 
-  const drawn = new Map();
+  // One line per pair of rooms. A pair travelled only one way gets an
+  // arrowhead; it may be one-way by design, or the way back untried.
+  const pairs = new Map();
   for (const e of edges) {
-    if (!positions.has(e.from) || !positions.has(e.to)) continue;
+    if (!positions.has(e.from) || !positions.has(e.to) || e.from === e.to) continue;
     const pair = e.from < e.to ? `${e.from}-${e.to}` : `${e.to}-${e.from}`;
-    if (drawn.has(pair)) continue;
-    drawn.set(pair, true);
-    const [x1, y1] = center(e.from);
-    const [x2, y2] = center(e.to);
+    if (!pairs.has(pair)) pairs.set(pair, []);
+    pairs.get(pair).push(e);
+  }
+  for (const list of pairs.values()) {
+    const first = list[0];
+    const oneWay = list.every((e) => e.from === first.from);
+    const [x1, y1] = center(first.from);
+    const [x2, y2] = center(first.to);
+    const [ax, ay] = roomEdge(x1, y1, x2, y2);
+    const [bx, by] = roomEdge(x2, y2, x1, y1);
     const line = document.createElementNS(svgNS, "line");
-    line.setAttribute("x1", x1); line.setAttribute("y1", y1);
-    line.setAttribute("x2", x2); line.setAttribute("y2", y2);
+    line.setAttribute("x1", ax); line.setAttribute("y1", ay);
+    line.setAttribute("x2", bx); line.setAttribute("y2", by);
     let cls = "edge";
-    if (e.dir === "up" || e.dir === "down" || e.dir === "in" || e.dir === "out") cls += " vertical";
-    if (e.dir === "unknown") cls += " unknown";
+    if (list.some((e) => !DIRS[e.dir] && e.dir !== "unknown")) cls += " vertical";
+    else if (list.every((e) => e.dir === "unknown")) cls += " unknown";
     line.setAttribute("class", cls);
+    if (oneWay) line.setAttribute("marker-end", "url(#arrow)");
     edgesG.append(line);
-    if (!DIRS[e.dir] && e.dir !== "unknown") {
+    // Label the direction taken, at the end it was taken from, unless the
+    // map already shows it.
+    for (const e of list) {
+      const text = edgeLabel(e);
+      if (!text) continue;
+      const [fx, fy] = center(e.from);
+      const [tx, ty] = center(e.to);
+      const [sx, sy] = roomEdge(fx, fy, tx, ty);
+      const len = Math.hypot(tx - fx, ty - fy) || 1;
+      const ux = (tx - fx) / len, uy = (ty - fy) / len;
       const t = document.createElementNS(svgNS, "text");
-      const lx = x1 + (x2 - x1) * 0.5, ly = y1 + (y2 - y1) * 0.5;
-      t.setAttribute("x", lx); t.setAttribute("y", ly - 8);
+      // A little along the line, and off to its side.
+      t.setAttribute("x", sx + ux * 16 - uy * 9);
+      t.setAttribute("y", sy + uy * 16 + ux * 9);
       t.setAttribute("class", "edge-label");
-      t.textContent = { up: "U", down: "D", in: "IN", out: "OUT" }[e.dir];
+      t.textContent = text;
       edgesG.append(t);
     }
   }
@@ -633,6 +845,29 @@ function renderMap() {
     if (!view.userMoved) fitOrCenter();
   }
   applyView();
+}
+
+// Where the line from (x1, y1) toward (x2, y2) leaves the room centered at
+// (x1, y1).
+function roomEdge(x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const hw = ROOM_W / 2 + 2, hh = ROOM_H / 2 + 2;
+  const t = Math.min(dx ? hw / Math.abs(dx) : Infinity, dy ? hh / Math.abs(dy) : Infinity);
+  return t < 1 ? [x1 + dx * t, y1 + dy * t] : [x1, y1];
+}
+
+// The label for the direction an edge was taken in: always for up, down, in
+// and out; for a compass direction, only when the rooms aren't laid out
+// that way (as in many deliberately twisty maps); never for an unknown one.
+function edgeLabel(e) {
+  const vertical = { up: "U", down: "D", in: "IN", out: "OUT" }[e.dir];
+  if (vertical) return vertical;
+  const v = DIRS[e.dir];
+  if (!v) return null;
+  const [fx, fy] = positions.get(e.from);
+  const [tx, ty] = positions.get(e.to);
+  if (Math.sign(tx - fx) === v[0] && Math.sign(ty - fy) === v[1]) return null;
+  return e.dir.toUpperCase();
 }
 
 function centerOn(id) {
@@ -725,12 +960,14 @@ function zoom(factor) {
       renderMap();
     }
   });
-  window.addEventListener("resize", applyView);
+  // The map's panel changes size with the window and the splitter.
+  new ResizeObserver(applyView).observe(svg);
 })();
 
 $("search").addEventListener("input", () => state && renderTree());
 $("follow").addEventListener("click", () => state && select(state.location, true));
 
+applyLayout(tiling.matches ? loadLayout() : DEFAULT_LAYOUT);
 poll();
 </script>
 </body>

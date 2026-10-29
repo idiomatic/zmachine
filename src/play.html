@@ -308,6 +308,8 @@ let me = { local: true, listening: false };
 // latest /discussion.
 let leader = "console";
 let players = [];
+// Whether every AI partner may read the inspector (--grant-inspector).
+let inspectorForAll = false;
 let stopped = false;
 
 function api(path, options = {}) {
@@ -468,9 +470,17 @@ function updatePlayers() {
           [`✕ Kick ${p.name}…`, () => kickPlayer(p.name)],
         ]
       : [];
+    // People on this machine decide which AI partners may read the
+    // inspector, unless --grant-inspector lets them all.
+    if (p.ai && me.local && !inspectorForAll) {
+      actions.push(p.inspector
+        ? [`⌕ Stop ${p.name} reading the inspector`, () => inspectorAccess(p.name, false)]
+        : [`⌕ Let ${p.name} read the inspector`, () => inspectorAccess(p.name, true)]);
+    }
     // Where people play from is in the tooltip, not on the chip.
     const kind = p.ai ? "AI partner" : p.local ? "person on the console's machine" : "person on another machine";
-    chips.push(playerChip(mine ? "You" : p.name, p.ai, p.leader, mine, mine ? null : colorFor(p.name), `${p.name}: ${kind}`, actions));
+    const reads = p.ai && p.inspector ? "; may read the inspector" : "";
+    chips.push(playerChip(mine ? "You" : p.name, p.ai, p.leader, mine, mine ? null : colorFor(p.name), `${p.name}: ${kind}${reads}`, actions));
   }
   document.getElementById("players").replaceChildren(...chips);
   const label = others.length ? listNames(others.map((p) => p.name)) : "the others";
@@ -485,6 +495,11 @@ function updatePlayers() {
   // The inspector answers only this machine.
   document.getElementById("inspector-link").hidden = !me.local;
   setMode(mode);
+}
+
+async function inspectorAccess(name, grant) {
+  const res = await api(grant ? "/grant-inspector" : "/revoke-inspector", { method: "POST", body: name });
+  if (!res.ok) toast((await res.text()).trim());
 }
 
 async function passLead(to) {
@@ -688,6 +703,8 @@ function eventText(p) {
     case "left": return `${by} left`;
     case "kicked": return `${by} removed ${isMe(p.text) ? "you" : p.text}`;
     case "password": return `${by} changed the password`;
+    case "granted": return `${by} let ${p.text} read the inspector`;
+    case "revoked": return `${by} stopped ${p.text} reading the inspector`;
   }
   return null;
 }
@@ -784,6 +801,7 @@ async function pollFeed() {
       const data = await res.json();
       leader = data.leader;
       players = data.players;
+      inspectorForAll = data.inspector_for_all;
       data.posts.forEach(addPost);
       // A new password makes the fetched invite link stale.
       if (data.posts.some((p) => p.kind === "password")) {

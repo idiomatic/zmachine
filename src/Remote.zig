@@ -56,6 +56,10 @@ next_order: u64 = 1,
 leader: ?[]u8 = null,
 /// AI partners kicked out, refused from then on.
 banned: std.ArrayList([]u8) = .empty,
+/// Whether every AI partner may read the inspector (`--grant-inspector`),
+/// and the AI partners a person on this machine let read it.
+inspector_for_all: bool = false,
+inspector_grants: std.ArrayList([]u8) = .empty,
 
 /// With `--listen`, the password remote players give, their sessions, and
 /// sessions ended by a kick, so their pages can say so.
@@ -135,6 +139,10 @@ pub const PostKind = enum {
     kicked,
     /// The author changed the password.
     password,
+    /// The author let the AI partner the text names read the inspector.
+    granted,
+    /// The author stopped the AI partner the text names reading it.
+    revoked,
 };
 
 pub const Post = struct {
@@ -220,6 +228,8 @@ pub const Kind = enum {
     kick,
     /// The password was changed, read or shown.
     password,
+    /// An AI partner was let read the inspector, or stopped.
+    access,
 };
 
 pub const Event = struct {
@@ -251,6 +261,8 @@ pub fn deinit(r: *Remote) void {
     if (r.leader) |name| r.gpa.free(name);
     for (r.banned.items) |name| r.gpa.free(name);
     r.banned.deinit(r.gpa);
+    for (r.inspector_grants.items) |name| r.gpa.free(name);
+    r.inspector_grants.deinit(r.gpa);
     for (r.sessions.items) |s| if (s.name) |name| r.gpa.free(name);
     r.sessions.deinit(r.gpa);
     for (r.kicked.items) |k| r.gpa.free(k.why);
@@ -695,16 +707,18 @@ pub fn writePosts(r: *Remote, w: *Io.Writer, since: u64) !void {
     r.mutex.lockUncancelable(r.io);
     defer r.mutex.unlock(r.io);
     r.pruneLocked();
-    try w.print("{{\"last\":{d},\"mode\":\"{s}\",\"leader\":", .{ r.next_post - 1, @tagName(r.mode) });
+    try w.print("{{\"last\":{d},\"mode\":\"{s}\",\"inspector_for_all\":{},\"leader\":", .{
+        r.next_post - 1, @tagName(r.mode), r.inspector_for_all,
+    });
     try writeString(w, r.leader orelse "console");
     try w.writeAll(",\"players\":[");
     for (r.members.items, 0..) |m, i| {
         if (i > 0) try w.writeAll(",");
         try w.writeAll("{\"name\":");
         try writeString(w, m.name);
-        try w.print(",\"ai\":{},\"local\":{},\"leader\":{}}}", .{
-            m.ai, m.local, r.leadsLocked(.{ .name = m.name, .ai = m.ai, .local = m.local }),
-        });
+        const leader = r.leadsLocked(.{ .name = m.name, .ai = m.ai, .local = m.local });
+        const inspects = m.ai and r.mayInspectLocked(m.name);
+        try w.print(",\"ai\":{},\"local\":{},\"leader\":{},\"inspector\":{}}}", .{ m.ai, m.local, leader, inspects });
     }
     try w.writeAll("],\"posts\":[");
     var first = true;
@@ -876,13 +890,66 @@ pub fn kick(r: *Remote, from: Player, name: []const u8) LeaderError!void {
     var name_buf: [64]u8 = undefined;
     const target = name_buf[0..m.name.len];
     @memcpy(target, m.name);
-    if (m.ai) try r.banned.append(r.gpa, try r.gpa.dupe(u8, target));
+    if (m.ai) {
+        try r.banned.append(r.gpa, try r.gpa.dupe(u8, target));
+        r.dropGrantLocked(target);
+    }
     r.postLocked(from, .kicked, target, &.{}) catch {};
     r.logPlayerLocked(.kick, from, "kicked {s}", .{target}, false);
     r.removeMemberLocked(i, false);
     if (!m.ai) {
         var why_buf: [96]u8 = undefined;
         r.endSessionsLocked(target, std.fmt.bufPrint(&why_buf, "{s} removed you from the game", .{displayName(from)}) catch "You were removed from the game");
+    }
+}
+
+pub const AccessError = error{ NotAllowed, UnknownPlayer, OutOfMemory };
+
+/// Whether `p` may read the inspector. People are checked by address
+/// instead; an AI partner needs `--grant-inspector` or a grant.
+pub fn mayInspect(r: *Remote, p: Player) bool {
+    if (!p.ai) return true;
+    r.mutex.lockUncancelable(r.io);
+    defer r.mutex.unlock(r.io);
+    return r.mayInspectLocked(p.name orelse return false);
+}
+
+fn mayInspectLocked(r: *const Remote, name: []const u8) bool {
+    if (r.inspector_for_all) return true;
+    for (r.inspector_grants.items) |g| if (std.ascii.eqlIgnoreCase(g, name)) return true;
+    return false;
+}
+
+fn dropGrantLocked(r: *Remote, name: []const u8) void {
+    for (r.inspector_grants.items, 0..) |g, i| if (std.ascii.eqlIgnoreCase(g, name)) {
+        r.gpa.free(r.inspector_grants.orderedRemove(i));
+        return;
+    };
+}
+
+/// Lets the AI partner `name` read the inspector, or stops it. Only a
+/// person on this machine may.
+pub fn setInspectorAccess(r: *Remote, from: Player, name: []const u8, grant: bool) AccessError!void {
+    r.mutex.lockUncancelable(r.io);
+    defer r.mutex.unlock(r.io);
+    r.pruneLocked();
+    if (!from.local or from.ai) return error.NotAllowed;
+    const i = r.findMember(name) orelse return error.UnknownPlayer;
+    const m = r.members.items[i];
+    if (!m.ai) return error.UnknownPlayer;
+    var has = false;
+    for (r.inspector_grants.items) |g| has = has or std.ascii.eqlIgnoreCase(g, m.name);
+    if (has == grant) return;
+    if (grant) {
+        try r.inspector_grants.append(r.gpa, try r.gpa.dupe(u8, m.name));
+    } else {
+        r.dropGrantLocked(m.name);
+    }
+    r.postLocked(from, if (grant) .granted else .revoked, m.name, &.{}) catch {};
+    if (grant) {
+        r.logPlayerLocked(.access, from, "let {s} read the inspector", .{m.name}, false);
+    } else {
+        r.logPlayerLocked(.access, from, "stopped {s} reading the inspector", .{m.name}, false);
     }
 }
 
@@ -1133,7 +1200,7 @@ test "debate mode and discussion" {
     var out: Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
     try r.writePosts(&out.writer, 1);
-    try std.testing.expect(std.mem.startsWith(u8, out.written(), "{\"last\":3,\"mode\":\"debate\",\"leader\":\"console\",\"players\":[],\"posts\":[{\"seq\":2,"));
+    try std.testing.expect(std.mem.startsWith(u8, out.written(), "{\"last\":3,\"mode\":\"debate\",\"inspector_for_all\":false,\"leader\":\"console\",\"players\":[],\"posts\":[{\"seq\":2,"));
     try std.testing.expect(std.mem.indexOf(u8, out.written(), "\"suggestions\":[\"open mailbox\",\"north\"]") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.written(), "\"ai\":true,\"author\":\"Claude\",\"kind\":\"thought\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.written(), "\"ai\":false,\"author\":\"console\",\"kind\":\"command\",\"text\":\"open mailbox\"") != null);
@@ -1171,6 +1238,35 @@ test "leadership and kicks" {
     try r.kick(ana, "Claude");
     try std.testing.expectError(error.Kicked, r.touch(claude));
     try std.testing.expect(r.leads(ana));
+}
+
+test "inspector access" {
+    var r: Remote = .init(std.testing.allocator, std.testing.io);
+    defer r.deinit();
+    const ana: Player = .{ .name = "Ana", .local = true };
+    const bo: Player = .{ .name = "Bo", .local = false };
+    try r.touch(ana);
+    try r.touch(bo);
+    try r.touch(claude);
+
+    // AI partners need a grant; people are checked by address instead.
+    try std.testing.expect(!r.mayInspect(claude) and r.mayInspect(ana));
+    // Only a person on this machine grants it, and only to an AI partner.
+    try std.testing.expectError(error.NotAllowed, r.setInspectorAccess(bo, "Claude", true));
+    try std.testing.expectError(error.NotAllowed, r.setInspectorAccess(claude, "Claude", true));
+    try std.testing.expectError(error.UnknownPlayer, r.setInspectorAccess(ana, "Bo", true));
+    try r.setInspectorAccess(ana, "claude", true);
+    try std.testing.expect(r.mayInspect(claude));
+    try std.testing.expectEqual(PostKind.granted, r.posts.items[r.posts.items.len - 1].kind);
+    try r.setInspectorAccess(.console, "Claude", false);
+    try std.testing.expect(!r.mayInspect(claude));
+    // A kick drops the grant along with the partner.
+    try r.setInspectorAccess(ana, "Claude", true);
+    try r.kick(ana, "Claude");
+    try std.testing.expectEqual(@as(usize, 0), r.inspector_grants.items.len);
+    // --grant-inspector lets every AI partner.
+    r.inspector_for_all = true;
+    try std.testing.expect(r.mayInspect(.{ .name = "Gemini", .ai = true, .local = false }));
 }
 
 test "first remote person leads with nobody local" {

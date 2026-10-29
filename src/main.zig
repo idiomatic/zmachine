@@ -25,6 +25,10 @@ const usage =
     \\                     with a password, on <address> (such as 0.0.0.0);
     \\                     implies --web. ZMACHINE_PASSWORD sets the
     \\                     password; otherwise three random words are used
+    \\  --grant-inspector  Let every AI partner read the inspector (which
+    \\                     shows hidden game state); implies --web. People
+    \\                     on this machine can instead let one partner
+    \\                     at a time, from its menu on the play page
     \\  --seed <n>         Seed the random number generator (the same
     \\                     generator as Frotz, so `dfrotz -s <n>` matches)
     \\  -t, --transcript <file>
@@ -62,6 +66,7 @@ const Options = struct {
     story_path: []const u8,
     web_port: ?u16 = null,
     listen: ?[]const u8 = null,
+    grant_inspector: bool = false,
     seed: ?u64 = null,
     transcript: ?[]const u8 = null,
     plain: bool = false,
@@ -96,6 +101,8 @@ fn parseArgs(args: []const []const u8, style: ?[]const u8) !Command {
             if (i >= args.len) return error.MissingArgument;
             _ = std.Io.net.IpAddress.parse(args[i], 0) catch return error.InvalidListenAddress;
             options.listen = args[i];
+        } else if (std.mem.eql(u8, arg, "--grant-inspector")) {
+            options.grant_inspector = true;
         } else if (std.mem.eql(u8, arg, "--seed")) {
             i += 1;
             if (i >= args.len) return error.MissingArgument;
@@ -119,7 +126,7 @@ fn parseArgs(args: []const []const u8, style: ?[]const u8) !Command {
         }
     }
     if (options.mcp_port) |port| return .{ .mcp = port };
-    if (options.listen != null and options.web_port == null) options.web_port = default_port;
+    if ((options.listen != null or options.grant_inspector) and options.web_port == null) options.web_port = default_port;
     options.story_path = story_path orelse return .usage;
     return .{ .run = options };
 }
@@ -225,6 +232,10 @@ pub fn main(init: std.process.Init) !u8 {
         try remote.startKeyboard();
         screen.remote = &remote;
         try stderr.print("Play at http://127.0.0.1:{d}/ (the inspector is at /inspector)\n", .{port});
+        if (options.grant_inspector) {
+            remote.inspector_for_all = true;
+            try stderr.writeAll("AI partners may read the inspector (--grant-inspector).\n");
+        }
         if (options.listen) |address| {
             // The password stays off the terminal; copy an invite link on
             // the play page on this machine, or type /showpassword.

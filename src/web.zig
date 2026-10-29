@@ -11,6 +11,8 @@
 //!   GET /state?since=N    the latest snapshot, held open until it is newer
 //!                         than generation N (long polling; local only)
 //!   POST /erase-map       erase the map at the next snapshot (local only)
+//!   POST /grant-inspector let the AI partner the body names read /state
+//!   POST /revoke-inspector  stop it (both for people on this machine only)
 //!   GET /me               who the server takes you for, and whether you lead
 //!   POST /login           give the password (remote players, with `--listen`)
 //!   POST /join            choose a name (people on the play page)
@@ -218,6 +220,11 @@ pub const Server = struct {
         const local_only = std.mem.eql(u8, path, "/inspector") or std.mem.eql(u8, path, "/state") or
             std.mem.eql(u8, path, "/erase-map");
         if (local_only and !local) return s.refuse(w, client, method, path, "this page is only for this machine\n");
+        // AI partners read the inspector's snapshots, and only when let.
+        if (local_only and player.ai) {
+            if (!std.mem.eql(u8, path, "/state")) return s.refuse(w, client, method, path, "AI partners only read the inspector's snapshots\n");
+            if (!s.remote.mayInspect(player)) return s.refuse(w, client, method, path, "nobody has let you read the inspector\n");
+        }
         // This machine needs no password; drop one from an invite link.
         if (local and std.mem.eql(u8, method, "GET") and std.mem.eql(u8, path, "/") and queryValue(query, "password") != null) {
             return redirectHome(w, "");
@@ -254,6 +261,15 @@ pub const Server = struct {
             }
             if (std.mem.eql(u8, path, "/kick")) {
                 s.remote.kick(player, text) catch |err| return leaderError(w, err);
+                return sendResponse(w, "204 No Content", "text/plain", "");
+            }
+            if (std.mem.eql(u8, path, "/grant-inspector") or std.mem.eql(u8, path, "/revoke-inspector")) {
+                const grant = std.mem.eql(u8, path, "/grant-inspector");
+                s.remote.setInspectorAccess(player, text, grant) catch |err| return switch (err) {
+                    error.NotAllowed => sendResponse(w, "403 Forbidden", "text/plain", "only people on this machine may do that\n"),
+                    error.UnknownPlayer => sendResponse(w, "404 Not Found", "text/plain", "no AI partner playing has that name\n"),
+                    error.OutOfMemory => error.OutOfMemory,
+                };
                 return sendResponse(w, "204 No Content", "text/plain", "");
             }
             if (std.mem.eql(u8, path, "/erase-map")) {

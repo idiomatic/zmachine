@@ -33,11 +33,17 @@ pub fn size() ?[2]u16 {
     return .{ ws.col, ws.row };
 }
 
+const Mode = if (is_windows) u32 else posix.termios;
+
+/// The input mode raw mode replaced, while it is on, so an interrupt can
+/// put it back.
+var raw_saved: ?Mode = null;
+
 /// Stdin switched to unbuffered, unechoed input until `leave`. On Windows,
 /// arrow keys then arrive as the same escape sequences as on a POSIX
 /// terminal.
 pub const RawMode = struct {
-    saved: if (is_windows) u32 else posix.termios,
+    saved: Mode,
 
     pub fn enter() Error!RawMode {
         const fd = Io.File.stdin().handle;
@@ -46,6 +52,7 @@ pub const RawMode = struct {
             if (kernel32.GetConsoleMode(fd, &mode) == 0) return .{ .saved = 0 };
             const raw = (mode & ~(kernel32.ENABLE_LINE_INPUT | kernel32.ENABLE_ECHO_INPUT)) |
                 kernel32.ENABLE_VIRTUAL_TERMINAL_INPUT;
+            raw_saved = mode;
             _ = kernel32.SetConsoleMode(fd, raw);
             return .{ .saved = mode };
         }
@@ -55,11 +62,13 @@ pub const RawMode = struct {
         raw.lflag.ECHO = false;
         raw.cc[@backingInt(posix.V.MIN)] = 1;
         raw.cc[@backingInt(posix.V.TIME)] = 0;
+        raw_saved = saved;
         try posix.tcsetattr(fd, .NOW, raw);
         return .{ .saved = saved };
     }
 
     pub fn leave(r: RawMode) void {
+        raw_saved = null;
         const fd = Io.File.stdin().handle;
         if (is_windows) {
             if (r.saved != 0) _ = kernel32.SetConsoleMode(fd, r.saved);
@@ -69,14 +78,15 @@ pub const RawMode = struct {
     }
 };
 
-/// On Ctrl-C (and SIGTERM), writes `reset` to stdout and exits with status
-/// 130, so escape-sequence state such as a scroll region doesn't outlive the
-/// process.
+/// On Ctrl-C (and SIGTERM), writes `reset` to stdout, leaves raw mode and
+/// exits with status 130, so neither escape-sequence state such as a scroll
+/// region nor unechoed input outlives the process.
 pub fn restoreOnInterrupt(comptime reset: []const u8) void {
     const Handler = struct {
         fn onSignal(sig: posix.SIG) callconv(.c) void {
             _ = sig;
             _ = posix.system.write(Io.File.stdout().handle, reset.ptr, reset.len);
+            if (raw_saved) |mode| posix.tcsetattr(Io.File.stdin().handle, .NOW, mode) catch {};
             std.process.exit(130);
         }
 
@@ -84,6 +94,7 @@ pub fn restoreOnInterrupt(comptime reset: []const u8) void {
             _ = ctrl_type;
             var written: u32 = 0;
             _ = kernel32.WriteFile(Io.File.stdout().handle, reset.ptr, reset.len, &written, null);
+            if (raw_saved) |mode| _ = kernel32.SetConsoleMode(Io.File.stdin().handle, mode);
             std.process.exit(130);
         }
     };

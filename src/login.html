@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Z-Machine Play Together</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: light-dark(#f6f5f1, #15161a);
+  --panel: light-dark(#ffffff, #1d1f24);
+  --border: light-dark(#dedbd2, #33363e);
+  --text: light-dark(#22211e, #e6e4df);
+  --muted: light-dark(#76726a, #9a978f);
+  --accent: light-dark(#c2410c, #fb923c);
+  --on-button: light-dark(#ffffff, #15161a);
+  --bad: light-dark(#b91c1c, #f87171);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px;
+  background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+form {
+  width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 12px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px;
+}
+h1 { font-size: 17px; margin: 0; }
+p { margin: 0; color: var(--muted); font-size: 13px; }
+input {
+  font: 16px ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--text); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px;
+}
+button {
+  font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 9px 14px;
+  background: var(--accent); color: var(--on-button); cursor: pointer;
+}
+#message { color: var(--bad); font-size: 13px; min-height: 1.2em; }
+</style>
+</head>
+<body>
+<form id="form" autocomplete="off">
+  <h1>Join the game</h1>
+  <p>Ask someone already playing for an invite link, or for the password: three words, such as amber-otter-glide.</p>
+  <input id="password" aria-label="Password" placeholder="Password" autocapitalize="none" spellcheck="false" autofocus>
+  <button>Join</button>
+  <div id="message" role="status"></div>
+</form>
+<script>
+const message = document.getElementById("message");
+// An invite link whose password didn't work: say so, and take the password
+// out of the address bar.
+if (new URLSearchParams(location.search).has("password")) {
+  message.textContent = "That invite link's password didn't work; it may be out of date. Ask for a new one.";
+  history.replaceState(null, "", "/");
+}
+// A kicked player's session tells them so.
+fetch("/me").then(async (res) => {
+  if (res.status === 410) message.textContent = (await res.text()).trim() + ". Ask for the password to come back.";
+});
+// Someone may paste the whole invite link instead of its password: take the
+// password out of it, with or without the http:// part.
+function passwordFrom(text) {
+  const match = text.trim().match(/[?&]password=([^&#\s]*)/);
+  if (!match) return text;
+  try {
+    return decodeURIComponent(match[1].replace(/\+/g, " "));
+  } catch {
+    return match[1];
+  }
+}
+const field = document.getElementById("password");
+field.addEventListener("paste", (e) => {
+  const pasted = e.clipboardData?.getData("text") ?? "";
+  const password = passwordFrom(pasted);
+  if (password === pasted) return;
+  e.preventDefault();
+  field.value = password;
+  message.textContent = "";
+});
+document.getElementById("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  field.value = passwordFrom(field.value);
+  const res = await fetch("/login", { method: "POST", body: field.value });
+  if (res.ok) location.reload();
+  else message.textContent = res.status === 429 ? "Too many tries. Wait a little and try again." : "That isn't the password.";
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,956 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Z-Machine Play Together</title>
+<style>
+/* Each colour is light-dark(light, dark). The theme follows the system
+   unless the theme button sets data-theme. */
+:root {
+  color-scheme: light dark;
+  --bg: light-dark(#f6f5f1, #15161a);
+  --panel: light-dark(#ffffff, #1d1f24);
+  --panel-2: light-dark(#f0eee8, #24272d);
+  --border: light-dark(#dedbd2, #33363e);
+  --text: light-dark(#22211e, #e6e4df);
+  --muted: light-dark(#76726a, #9a978f);
+  --accent: light-dark(#c2410c, #fb923c);
+  --accent-soft: light-dark(#fde7d9, #3d2516);
+  --you: light-dark(#1d4ed8, #93b4ff);
+  --you-soft: light-dark(#e3ebfd, #1c2a47);
+  --game-bg: light-dark(#fbfaf7, #17181c);
+  --on-button: light-dark(#ffffff, #15161a);
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--text); font: 14px/1.45 var(--sans);
+  display: flex; flex-direction: column;
+}
+/* Like the game's status line: the room on the left, the score on the right. */
+header {
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border);
+}
+.status { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 16px; }
+.room { font-size: 15px; font-weight: 650; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.score { margin-left: auto; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.modes { display: inline-flex; flex: none; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.modes button {
+  border: 0; background: none; color: var(--muted); font: inherit; font-size: 12px; font-weight: 400;
+  text-transform: none; letter-spacing: normal; padding: 2px 9px; cursor: pointer;
+}
+.modes button + button { border-left: 1px solid var(--border); }
+.modes button.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+/* Only the leader changes the mode. */
+.modes.locked button { cursor: default; }
+.modes.locked button:not(.active) { opacity: .6; }
+.live { flex: none; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.right { display: flex; align-items: center; gap: 8px; flex: none; font-size: 12px; color: var(--muted); }
+a.toggle { display: inline-block; text-decoration: none; text-align: center; }
+/* Drawn icons, so they match in size whatever the fonts. */
+.toggle:has(.icon) { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 22px; padding: 0 6px; }
+.icon { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.right select {
+  font: 14px var(--sans); color: var(--muted); background: var(--panel); cursor: pointer;
+  border: 1px solid var(--border); border-radius: 6px; padding: 1px 2px;
+}
+.toggle {
+  font: inherit; font-size: 12px; color: var(--muted); background: none; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px;
+}
+.toggle:hover { color: var(--text); }
+.toggle.theme { font-size: 14px; line-height: 1; padding: 3px 7px; min-width: 28px; }
+/* Playing in the terminal: the page is only the conversation. */
+main.chat-only { grid-template-columns: minmax(0, 1fr); }
+main.chat-only #game-pane { display: none; }
+main.chat-only #ai-pane { border-left: 0; border-top: 0; }
+#show-game { display: none; }
+main.chat-only #show-game { display: inline-block; }
+/* The discussion collapsed: the page is only the game. */
+main.game-only { grid-template-columns: minmax(0, 1fr); }
+main.game-only #ai-pane { display: none; }
+#show-discussion { display: none; position: relative; }
+main.game-only #show-discussion { display: inline-block; }
+/* Each pane's hide button goes while the other pane is hidden. */
+main.game-only #hide-game, main.chat-only #hide-discussion { display: none; }
+/* A partner posted while the discussion was collapsed. */
+#show-discussion.unread::after {
+  content: ""; position: absolute; top: -3px; right: -3px; width: 8px; height: 8px;
+  border-radius: 50%; background: var(--accent); border: 2px solid var(--panel);
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; display: inline-block; margin-right: 6px; }
+.dot.live { background: #16a34a; }
+.dot.down { background: #dc2626; }
+main { flex: 1; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(300px, 1fr); min-height: 0; }
+section { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+section + section { border-left: 1px solid var(--border); }
+.pane-title {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em;
+  padding: 0 10px 0 16px; min-height: 35px; border-bottom: 1px solid var(--border); background: var(--panel);
+}
+.pane-title > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pane-button { font-size: 15px; line-height: 1; padding: 2px 6px; flex: none; }
+#copy-invite[hidden], #new-password[hidden], #inspector-link[hidden] { display: none; }
+/* ⚭ and ⚄ draw small in most fonts; enlarge them to match ◐ and ⊟,
+   in a button of the usual height. */
+#copy-invite { font-size: 16px; }
+#new-password { font-size: 18px; }
+/* Every control in a pane header is the same height with its symbol
+   centered. Symbols' ink sits a little low in most fonts, so the bottom
+   padding lifts them. */
+.pane-title .toggle { display: inline-flex; align-items: center; justify-content: center; height: 24px; line-height: 1; padding: 0 6px 2px; }
+.pane-title .pane-button { padding-bottom: 3px; }
+.pane-title .modes { height: 24px; }
+.pane-title .modes button { height: 100%; padding-top: 0; padding-bottom: 0; }
+.pane-title select {
+  flex: none; height: 24px; font: 12px var(--sans); text-transform: none; letter-spacing: normal; color: var(--muted);
+  background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 1px 4px; cursor: pointer;
+}
+#game {
+  flex: 1; overflow-y: auto; margin: 0; padding: 14px 16px; background: var(--game-bg);
+  font: var(--game-size, 14px)/1.5 var(--mono); white-space: pre-wrap; word-break: break-word;
+}
+#game .input { font-weight: 700; }
+#feed { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+/* Who is playing, between the Discussion header and the posts. It wraps
+   onto as many rows as the players need, and the posts take what's left. */
+#players {
+  flex: none; display: flex; flex-wrap: wrap; gap: 4px 6px; padding: 6px 12px; font-size: 12px;
+  background: var(--panel-2); border-bottom: 1px solid var(--border);
+}
+#players:empty { display: none; }
+.player {
+  display: inline-flex; align-items: baseline; gap: 4px; padding: 1px 8px; white-space: nowrap;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--panel); color: var(--p, var(--text));
+}
+.player.leader { border-color: var(--p, var(--accent)); font-weight: 600; }
+.player .robot {
+  width: 12px; height: 12px; align-self: center; margin-right: -1px;
+  fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round;
+}
+.player .robot .dot { fill: currentColor; stroke: none; }
+/* A chip's actions (pass the lead, kick, take it back), in one small menu. */
+/* The menu's ▼ is a plain button, not a select: browsers draw a select's
+   text their own way (Safari shrinks it), but a button's the same
+   everywhere. ▼ at 10px draws about as big as ♛ at 12px. */
+.player .more {
+  font: inherit; font-size: 10px; font-weight: 400; line-height: 1; color: var(--muted);
+  border: 0; border-radius: 4px; background: none; padding: 2px 3px; cursor: pointer; align-self: center;
+}
+.player .more:hover, .player .more:focus-visible, .player .more[aria-expanded="true"] { color: var(--text); background: var(--panel-2); }
+/* The menu a chip's ▼ opens, just below it. */
+#chip-menu {
+  position: fixed; z-index: 20; display: flex; flex-direction: column; min-width: 190px; padding: 4px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 18%);
+}
+#chip-menu[hidden] { display: none; }
+#chip-menu button {
+  font: 13px var(--sans); color: var(--text); text-align: left; white-space: nowrap;
+  background: none; border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer;
+}
+#chip-menu button:hover, #chip-menu button:focus-visible { background: var(--panel-2); outline: none; }
+.post { border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; background: var(--panel); max-width: 100%; }
+/* Each AI partner has its own colour, set as --ai on its posts. */
+.post .who { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--ai, var(--accent)); margin-bottom: 3px; }
+.post .text { white-space: pre-wrap; word-break: break-word; }
+.post.you { align-self: flex-end; background: var(--you-soft); border-color: transparent; max-width: 85%; }
+.post.you .who { color: var(--you); }
+.post.thought .text { color: var(--muted); font-style: italic; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.chip {
+  font: 13px var(--mono); border: 1px solid var(--ai, var(--accent)); color: var(--ai, var(--accent)); background: none;
+  border-radius: 999px; padding: 3px 10px; cursor: pointer;
+}
+.chip:hover { background: color-mix(in srgb, var(--ai, var(--accent)) 14%, transparent); }
+.chip.sent { opacity: .5; cursor: default; }
+.chip.sent::before { content: "✓ "; }
+.stale .chip:not(.sent) { opacity: .7; }
+.command { font: 12px var(--mono); color: var(--muted); }
+.command b { font-weight: 600; }
+.command.you b { color: var(--you); }
+.command.ai b { color: var(--ai, var(--accent)); }
+.divider { font-size: 12px; color: var(--muted); text-align: center; border-top: 1px dashed var(--border); padding-top: 6px; }
+.empty { color: var(--muted); font-size: 13px; }
+.divider.tip { border-top-style: solid; color: var(--accent); }
+#toast {
+  position: fixed; left: 50%; bottom: 72px; transform: translateX(-50%); max-width: calc(100% - 32px);
+  background: var(--text); color: var(--bg); border-radius: 8px; padding: 8px 12px; font-size: 13px;
+  opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+#toast.show { opacity: .92; }
+/* Choosing a name, or being told you were removed. */
+#overlay {
+  position: fixed; inset: 0; display: grid; place-items: center; padding: 16px;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+}
+#overlay[hidden], #overlay [hidden] { display: none; }
+#overlay form {
+  width: 100%; max-width: 340px; flex-direction: column; gap: 10px;
+  border: 1px solid var(--border); border-radius: 12px; padding: 18px;
+}
+#overlay h2 { margin: 0; font-size: 16px; }
+#overlay p { margin: 0; font-size: 13px; color: var(--muted); }
+form { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border); background: var(--panel); }
+form input {
+  flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px;
+}
+#command-input { font-family: var(--mono); font-size: var(--game-size, 14px); }
+form button {
+  font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 7px 14px;
+  background: var(--accent); color: var(--on-button); cursor: pointer;
+}
+form.say button { background: var(--you); }
+@media (max-width: 760px) {
+  /* iOS zooms the page into any text field under 16px when it gets focus. */
+  form input, #command-input { font-size: max(16px, var(--game-size, 14px)); }
+  main { grid-template-columns: 1fr; grid-template-rows: 55% 45%; }
+  main.chat-only, main.game-only { grid-template-rows: 1fr; }
+  section + section { border-left: 0; border-top: 1px solid var(--border); }
+  header { gap: 10px; }
+  .right { gap: 10px; }
+  /* The score goes under the room, which keeps the width for its name. */
+  .status { flex-direction: column; align-items: flex-start; gap: 0; }
+  .room { max-width: 100%; }
+  .score { margin-left: 0; font-size: 12px; line-height: 1.2; }
+  #conn { display: none; }
+  .right { gap: 6px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="status">
+    <div class="room" id="room">—</div>
+    <div class="score" id="score"></div>
+  </div>
+  <span class="live"><span class="dot" id="dot"></span><span id="conn">connecting…</span></span>
+  <div class="right">
+    <a class="toggle theme" id="inspector-link" hidden href="/inspector" target="_blank" aria-label="Object inspector"
+      title="Object inspector: hidden game state, for this machine only; opening it is logged as suspicious"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.8" cy="6.8" r="4.3"/><path d="M10 10l3.8 3.8"/></svg></a>
+    <a class="toggle theme" href="/log" target="_blank" aria-label="Audit log"
+      title="Audit log: every command, and anything a player couldn't see">▤</a>
+    <button class="toggle theme" id="theme-toggle" aria-label="Theme: system theme">◐</button>
+  </div>
+</header>
+<main id="main">
+  <section id="game-pane">
+    <div class="pane-title"><span>Game</span>
+      <select id="font-size" aria-label="Game text size" title="Game text size">
+        <option value="12">12px</option>
+        <option value="14" selected>14px</option>
+        <option value="16">16px</option>
+        <option value="18">18px</option>
+        <option value="20">20px</option>
+      </select>
+      <button class="toggle pane-button" id="show-discussion" aria-label="Show discussion"
+        title="Show the discussion beside the game">⊞</button>
+      <button class="toggle pane-button" id="hide-game" aria-label="Hide game"
+        title="Hide the game, to play in your terminal and use this page only to talk with your AI partners">⊟</button>
+    </div>
+    <pre id="game"></pre>
+    <form id="command-form" autocomplete="off">
+      <input id="command-input" placeholder="Type a command" aria-label="Command">
+      <button>Send</button>
+    </form>
+  </section>
+  <section id="ai-pane">
+    <div class="pane-title"><span id="ai-title">Discussion</span>
+      <div class="modes" id="modes" role="group" aria-label="Mode">
+        <button data-mode="debate">Debate</button>
+        <button data-mode="turns">Take turns</button>
+      </div>
+      <button class="toggle theme" id="new-password" hidden aria-label="New password"
+        title="New password: roll three new random words (or enter your own). Every remote session but the leader's ends, so the others need a new invite link">⚄</button>
+      <button class="toggle theme" id="copy-invite" hidden aria-label="Copy an invite link"
+        title="Copy an invite link for players on other machines; it carries the password, so share it like one">⚭</button>
+      <button class="toggle pane-button" id="show-game" aria-label="Show game" title="Show the game beside the discussion">⊞</button>
+      <button class="toggle pane-button" id="hide-discussion" aria-label="Hide discussion"
+        title="Hide the discussion and give the game the whole page">⊟</button>
+    </div>
+    <div id="players" aria-label="Players"></div>
+    <div id="feed"><div class="empty" id="empty">Thoughts, messages and suggested commands from everyone playing appear here. Click a suggestion to send it to the game.</div></div>
+    <form class="say" id="say-form" autocomplete="off">
+      <input id="say-input" placeholder="Tell your AI partners what you think" aria-label="Message to your AI partners">
+      <button>Say</button>
+    </form>
+  </section>
+</main>
+<div id="toast" role="status"></div>
+<div id="chip-menu" role="menu" hidden></div>
+<div id="overlay" hidden>
+  <form id="name-form" autocomplete="off">
+    <h2 id="overlay-title">Your name</h2>
+    <p id="overlay-text">The others see it beside your messages and commands.</p>
+    <input id="name-input" aria-label="Your name" maxlength="32" placeholder="Name">
+    <button id="name-button">Join</button>
+  </form>
+</div>
+<script>
+const game = document.getElementById("game");
+const feed = document.getElementById("feed");
+const main = document.getElementById("main");
+
+// Who this page plays as. On this machine the name goes with every request
+// as X-Person; on another machine the session cookie carries it.
+let myName = null;
+try { myName = localStorage.getItem("zmachine-name"); } catch {}
+let me = { local: true, listening: false };
+// The leader ("console" for the local side) and everyone playing, from the
+// latest /discussion.
+let leader = "console";
+let players = [];
+let stopped = false;
+
+function api(path, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  if (myName) headers["X-Person"] = myName;
+  return fetch(path, { ...options, headers, cache: "no-store" }).then(async (res) => {
+    // A kick or a new password ended this session.
+    if (res.status === 410) removed((await res.clone().text()).trim());
+    return res;
+  });
+}
+
+function toast(text) {
+  const el = document.getElementById("toast");
+  el.textContent = text;
+  el.classList.add("show");
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => el.classList.remove("show"), 3500);
+}
+
+// Each other player has a colour, in the order they first appeared.
+const seen = [];
+const palette = ["var(--accent)", "#8b5cf6", "#0d9488", "#db2777", "#2563eb", "#ca8a04"];
+
+function colorFor(name) {
+  let i = seen.indexOf(name);
+  if (i < 0) i = seen.push(name) - 1;
+  return palette[i % palette.length];
+}
+
+function isMe(name) { return myName && name && name.toLowerCase() === myName.toLowerCase(); }
+
+// How a post's author is named: "You", "The console", or their name.
+function who(author) {
+  if (isMe(author)) return "You";
+  if (author === "console") return "The console";
+  return author;
+}
+
+function iLead() {
+  if (leader === "console") return me.local;
+  return isMe(leader);
+}
+
+function listNames(names) {
+  if (names.length <= 1) return names.join("");
+  return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+}
+
+// One chip for each player, the console first, with ♛ (the leader's mark
+// everywhere on the page) on whoever leads, and the leader's actions on
+// the others.
+// A small robot drawn in the chip's color marks AI partners.
+const robotIcon = '<svg class="robot" viewBox="0 0 16 16" aria-hidden="true">' +
+  '<path d="M8 2.2v2.3"/><circle class="dot" cx="8" cy="1.9" r="1"/>' +
+  '<rect x="2.8" y="4.5" width="10.4" height="8.6" rx="2.2"/>' +
+  '<circle class="dot" cx="6" cy="8.6" r="1.15"/><circle class="dot" cx="10" cy="8.6" r="1.15"/></svg>';
+
+function playerChip(name, ai, leads, mine, color, title, actions) {
+  // actions: [label, handler] pairs, shown in one ▼ menu.
+  const chip = document.createElement("span");
+  chip.className = "player" + (leads ? " leader" : "");
+  if (color) chip.style.setProperty("--p", color);
+  else if (mine) chip.style.setProperty("--p", "var(--you)");
+  // Marks go before the name: ♛ for the leader, then the robot.
+  if (leads) chip.append("♛ ");
+  if (ai) chip.insertAdjacentHTML("beforeend", robotIcon);
+  chip.append(name);
+  if (actions.length) {
+    const more = document.createElement("button");
+    more.className = "more";
+    more.textContent = "▼";
+    more.title = `Actions for ${name}`;
+    more.setAttribute("aria-label", `Actions for ${name}`);
+    more.setAttribute("aria-haspopup", "menu");
+    more.setAttribute("aria-expanded", "false");
+    more.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openChipMenu(more, actions);
+    });
+    chip.append(more);
+  }
+  chip.title = title + (leads ? "; leads" : "");
+  return chip;
+}
+
+// The menu of a chip's actions. It closes on a choice, Escape, or a click
+// elsewhere.
+const chipMenu = document.getElementById("chip-menu");
+let chipMenuButton = null;
+
+function openChipMenu(button, actions) {
+  const reopening = chipMenuButton === button;
+  closeChipMenu();
+  if (reopening) return;
+  chipMenu.replaceChildren(...actions.map(([label, action]) => {
+    const item = document.createElement("button");
+    item.setAttribute("role", "menuitem");
+    item.textContent = label;
+    item.addEventListener("click", () => {
+      closeChipMenu();
+      action();
+    });
+    return item;
+  }));
+  chipMenu.hidden = false;
+  const r = button.getBoundingClientRect();
+  // Below the ▼, kept on screen.
+  const left = Math.min(r.left, window.innerWidth - chipMenu.offsetWidth - 8);
+  chipMenu.style.left = `${Math.max(8, left)}px`;
+  chipMenu.style.top = `${r.bottom + 4}px`;
+  button.setAttribute("aria-expanded", "true");
+  chipMenuButton = button;
+  chipMenu.querySelector("button").focus();
+}
+
+function closeChipMenu() {
+  if (!chipMenuButton) return;
+  chipMenu.hidden = true;
+  chipMenuButton.setAttribute("aria-expanded", "false");
+  chipMenuButton = null;
+}
+
+document.addEventListener("click", (e) => {
+  if (!chipMenu.contains(e.target)) closeChipMenu();
+});
+document.addEventListener("keydown", (e) => {
+  if (!chipMenuButton) return;
+  const items = [...chipMenu.querySelectorAll("button")];
+  const i = items.indexOf(document.activeElement);
+  if (e.key === "Escape") {
+    const button = chipMenuButton;
+    closeChipMenu();
+    button.focus();
+  } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    const step = e.key === "ArrowDown" ? 1 : items.length - 1;
+    items[(i + step) % items.length].focus();
+  }
+});
+
+function updatePlayers() {
+  const others = players.filter((p) => !isMe(p.name));
+  const consoleLeads = leader === "console";
+  const lead = iLead();
+  // The console's chip hands the lead to this machine, or takes it back.
+  const consoleActions = [];
+  if (lead && !consoleLeads) consoleActions.push(["♛ Pass the lead to this machine", () => passLead("console")]);
+  else if (me.local && !lead) consoleActions.push(["♛ Take back the lead", () => passLead("console")]);
+  const chips = [playerChip("Console", false, consoleLeads, false, null, "The terminal running the game", consoleActions)];
+  for (const p of players) {
+    const mine = isMe(p.name);
+    // Players here are coleaders with the console, so only those elsewhere
+    // and AI partners take a promotion or a kick.
+    const actions = lead && !mine && !p.local && !p.leader
+      ? [
+          [`♛ Pass the lead to ${p.name}`, () => passLead(p.name)],
+          [`✕ Kick ${p.name}…`, () => kickPlayer(p.name)],
+        ]
+      : [];
+    // Where people play from is in the tooltip, not on the chip.
+    const kind = p.ai ? "AI partner" : p.local ? "person on the console's machine" : "person on another machine";
+    chips.push(playerChip(mine ? "You" : p.name, p.ai, p.leader, mine, mine ? null : colorFor(p.name), `${p.name}: ${kind}`, actions));
+  }
+  document.getElementById("players").replaceChildren(...chips);
+  const label = others.length ? listNames(others.map((p) => p.name)) : "the others";
+  const say = document.getElementById("say-input");
+  say.placeholder = `Tell ${label} what you think`;
+  say.setAttribute("aria-label", `Message to ${label}`);
+  // Invites and new passwords: this machine, and a leader who is a person.
+  const passwords = !(me.listening && (me.local || lead));
+  document.getElementById("copy-invite").hidden = passwords;
+  if (!passwords && !inviteLink) loadInvite();
+  document.getElementById("new-password").hidden = passwords;
+  // The inspector answers only this machine.
+  document.getElementById("inspector-link").hidden = !me.local;
+  setMode(mode);
+}
+
+async function passLead(to) {
+  const res = await api("/lead", { method: "POST", body: to });
+  if (!res.ok) toast((await res.text()).trim());
+}
+
+const kicks = [];
+
+async function kickPlayer(name) {
+  if (!confirm(`Kick ${name}? A person needs the password again to come back.`)) return;
+  const res = await api("/kick", { method: "POST", body: name });
+  if (!res.ok) return toast((await res.text()).trim());
+  // Someone kicked again soon after probably came back under a new name.
+  const now = Date.now();
+  kicks.push(now);
+  if (kicks.filter((t) => now - t < 10 * 60_000).length >= 2) {
+    addTip("If someone keeps coming back under new names, make a new password with ⚄ in the Discussion header. The others then need a new invite link.");
+  }
+}
+
+// A new password: the prompt starts with three freshly rolled words, which
+// can be kept or typed over.
+document.getElementById("new-password").addEventListener("click", async () => {
+  const roll = await api("/random-password");
+  if (!roll.ok) return toast((await roll.text()).trim());
+  const text = prompt(
+    "New password: keep these three random words or type your own. Every remote session but the leader's ends.",
+    (await roll.text()).trim(),
+  );
+  if (text === null || !text.trim()) return;
+  const res = await api("/password", { method: "POST", body: text.trim() });
+  if (res.ok) toast("Password changed. Copy a new invite link with ⚭ to share it.");
+  else toast((await res.text()).trim());
+});
+
+// An invite link carries the password, so whoever opens it joins at once.
+// Browsers allow writing to the clipboard only while handling a click, and
+// Safari refuses a copy whose text isn't ready then, so the link is fetched
+// ahead: when the button appears, and again when the password changes.
+let inviteLink = null;
+let inviteLoading = false;
+async function loadInvite() {
+  if (inviteLoading) return;
+  inviteLoading = true;
+  try {
+    const res = await api("/invite");
+    inviteLink = res.ok ? (await res.text()).trim() : null;
+  } catch {
+    inviteLink = null;
+  } finally {
+    inviteLoading = false;
+  }
+}
+
+// Copies text in the same moment as the click: the Clipboard API where the
+// page may use it (secure pages, such as 127.0.0.1), else the older copy
+// command, else a field to copy from.
+function copyText(text) {
+  const done = () => {
+    const button = document.getElementById("copy-invite");
+    button.textContent = "✓";
+    // Show ✓ for a moment, then ⚭ again.
+    setTimeout(() => (button.textContent = "⚭"), 1500);
+    toast("Invite link copied. It carries the password, so share it like one.");
+  };
+  const legacy = () => {
+    const field = document.createElement("textarea");
+    field.value = text;
+    field.setAttribute("readonly", "");
+    field.style.position = "fixed";
+    field.style.opacity = "0";
+    document.body.append(field);
+    field.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch {}
+    field.remove();
+    return ok;
+  };
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(done, () => (legacy() ? done() : prompt("Copy the invite link:", text)));
+  } else if (legacy()) {
+    done();
+  } else {
+    prompt("Copy the invite link:", text);
+  }
+}
+
+document.getElementById("copy-invite").addEventListener("click", async () => {
+  if (inviteLink) return copyText(inviteLink);
+  // Not fetched yet: fetch it now. A browser that refuses the late copy
+  // falls back to the field.
+  await loadInvite();
+  if (inviteLink) copyText(inviteLink);
+  else toast("Could not get an invite link.");
+});
+
+function addTip(text) {
+  const el = document.createElement("div");
+  el.className = "divider tip";
+  el.textContent = text;
+  feed.append(el);
+  feed.scrollTop = feed.scrollHeight;
+}
+
+const hints = {
+  turns: () => "Anyone can send commands.",
+  debate: () => {
+    if (iLead()) return "You send the commands; the others argue and suggest.";
+    const name = leader === "console" ? "The console" : leader;
+    return `${name} sends the commands; everyone else argues and suggests.`;
+  },
+};
+let mode = "debate";
+
+function setMode(m) {
+  mode = m;
+  for (const b of document.querySelectorAll(".modes button")) b.classList.toggle("active", b.dataset.mode === m);
+  // The mode's explanation, such as "Anyone can send commands."
+  const modes = document.getElementById("modes");
+  const hint = (hints[m] ? hints[m]() : "") + (iLead() ? "" : " Only the leader changes the mode.");
+  modes.title = hint;
+  modes.setAttribute("aria-description", hint);
+  modes.classList.toggle("locked", !iLead());
+  const input = document.getElementById("command-input");
+  input.placeholder = m === "debate" && !iLead() ? "Only the leader sends commands in debate" : "Type a command";
+}
+for (const b of document.querySelectorAll(".modes button")) {
+  b.addEventListener("click", async () => {
+    if (!iLead()) return toast("Only the leader changes the mode.");
+    const res = await api("/mode", { method: "POST", body: b.dataset.mode });
+    if (!res.ok) toast((await res.text()).trim());
+  });
+}
+
+function nearBottom(el) { return el.scrollHeight - el.scrollTop - el.clientHeight < 60; }
+
+// The game text so far ends with a prompt, so the next text starts with
+// the command typed at it.
+let atPrompt = false;
+
+function appendGame(text) {
+  const stick = nearBottom(game) || !game.childNodes.length;
+  // Embolden input lines: what follows a ">" prompt at the start of a line.
+  const lines = text.split("\n");
+  lines.forEach((line, i) => {
+    if (i > 0) game.append("\n");
+    const prompted = i === 0 ? atPrompt : line.startsWith(">");
+    const start = i === 0 && atPrompt ? 0 : 1;
+    if (prompted && line.length > start) {
+      if (start) game.append(">");
+      const span = document.createElement("span");
+      span.className = "input";
+      span.textContent = line.slice(start);
+      game.append(span);
+    } else {
+      game.append(line);
+    }
+  });
+  const last = lines[lines.length - 1];
+  atPrompt = last === ">" || (lines.length === 1 && atPrompt && last === "");
+  if (stick) game.scrollTop = game.scrollHeight;
+}
+
+async function sendCommand(text) {
+  const res = await api("/command", { method: "POST", body: text });
+  if (!res.ok && res.status !== 202) toast((await res.text()).trim());
+}
+
+document.getElementById("command-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const input = document.getElementById("command-input");
+  sendCommand(input.value);
+  input.value = "";
+});
+document.getElementById("say-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const input = document.getElementById("say-input");
+  if (!input.value.trim()) return;
+  const res = await api("/say", { method: "POST", body: JSON.stringify({ text: input.value, kind: "message" }) });
+  if (res.ok) input.value = "";
+  else toast((await res.text()).trim());
+});
+
+// A line across the discussion for something that happened.
+function eventText(p) {
+  const by = who(p.author);
+  switch (p.kind) {
+    case "mode":
+      return (p.text === "debate" ? "Debate" : "Take turns") + ` (set by ${by === "You" ? "you" : by})`;
+    case "leader":
+      if (p.text === "console") {
+        // Someone on the console's machine took it back, or the leader
+        // handed it over.
+        const local = p.author === "console" || players.some((m) => m.local && m.name === p.author);
+        return local ? `${by} took back the lead` : `${by} handed the lead to the console's machine`;
+      }
+      if (p.author === p.text) return `${who(p.text)} ${isMe(p.text) ? "lead" : "leads"} now`;
+      return `${by} passed the lead to ${isMe(p.text) ? "you" : p.text}`;
+    case "joined": return `${by} joined`;
+    case "left": return `${by} left`;
+    case "kicked": return `${by} removed ${isMe(p.text) ? "you" : p.text}`;
+    case "password": return `${by} changed the password`;
+  }
+  return null;
+}
+
+function addPost(p) {
+  document.getElementById("empty")?.remove();
+  const stick = nearBottom(feed) || feed.children.length < 2;
+  const mine = isMe(p.author) || (p.author === "console" && !myName);
+  const color = mine ? null : colorFor(p.author);
+  let el;
+  const line = eventText(p);
+  if (line) {
+    el = document.createElement("div");
+    el.className = "divider";
+    el.textContent = line;
+  } else if (p.kind === "command") {
+    el = document.createElement("div");
+    el.className = "command " + (mine ? "you" : "ai");
+    if (color) el.style.setProperty("--ai", color);
+    const name = document.createElement("b");
+    name.textContent = who(p.author);
+    el.append("▶ ", name, " " + p.text);
+  } else {
+    // Older suggestions stay clickable but fade.
+    for (const old of feed.querySelectorAll(".post.thought")) old.classList.add("stale");
+    el = document.createElement("div");
+    el.className = "post " + (mine ? "you" : "ai") + " " + p.kind;
+    if (color) el.style.setProperty("--ai", color);
+    const name = document.createElement("div");
+    name.className = "who";
+    name.textContent = p.kind === "thought" && !mine ? `${who(p.author)} is thinking` : who(p.author);
+    el.append(name);
+    if (p.text) {
+      const text = document.createElement("div");
+      text.className = "text";
+      text.textContent = p.text;
+      el.append(text);
+    }
+    if (p.suggestions.length) {
+      const chips = document.createElement("div");
+      chips.className = "chips";
+      for (const s of p.suggestions) {
+        const chip = document.createElement("button");
+        chip.className = "chip";
+        chip.textContent = s;
+        chip.title = "Send to the game";
+        chip.addEventListener("click", () => {
+          if (chip.classList.contains("sent")) return;
+          if (mode === "debate" && !iLead()) return toast("Only the leader sends commands in debate.");
+          chip.classList.add("sent");
+          sendCommand(s);
+        });
+        chips.append(chip);
+      }
+      el.append(chips);
+    }
+  }
+  feed.append(el);
+  if (stick) feed.scrollTop = feed.scrollHeight;
+}
+
+function connected(ok) {
+  document.getElementById("dot").className = "dot " + (ok ? "live" : "down");
+  document.getElementById("conn").textContent = ok ? "live" : "disconnected; retrying";
+  // On a phone only the dot shows.
+  document.getElementById("dot").title = ok ? "Live" : "Disconnected; retrying";
+}
+
+async function pollGame() {
+  let offset = 0;
+  while (!stopped) {
+    try {
+      const res = await api(`/transcript?since=${offset}&wait=1`);
+      if (!res.ok) throw new Error(res.status);
+      const data = await res.json();
+      if (data.text) appendGame(data.text);
+      offset = data.offset;
+      document.getElementById("room").textContent = data.status[0] || "—";
+      document.getElementById("score").textContent = data.status[1] || "";
+      connected(true);
+    } catch {
+      connected(false);
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+}
+
+async function pollFeed() {
+  let last = 0;
+  while (!stopped) {
+    try {
+      const res = await api(`/discussion?since=${last}&wait=1`);
+      if (!res.ok) throw new Error(res.status);
+      const data = await res.json();
+      leader = data.leader;
+      players = data.players;
+      data.posts.forEach(addPost);
+      // A new password makes the fetched invite link stale.
+      if (data.posts.some((p) => p.kind === "password")) {
+        inviteLink = null;
+        updatePlayers();
+      }
+      // Flag a post from someone else that arrives while the discussion is
+      // hidden.
+      if (last > 0 && data.posts.some((p) => !isMe(p.author)) && main.classList.contains("game-only")) {
+        showDiscussionButton.classList.add("unread");
+        showDiscussionButton.setAttribute("aria-label", "Show discussion (new posts)");
+      }
+      last = data.last;
+      mode = data.mode;
+      updatePlayers();
+    } catch {
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+}
+
+// Choosing a name: the first time, or when the remembered one is taken.
+function askName(why) {
+  const overlay = document.getElementById("overlay");
+  document.getElementById("overlay-title").textContent = "Your name";
+  document.getElementById("overlay-text").textContent = why || "The others see it beside your messages and commands.";
+  document.getElementById("name-input").hidden = false;
+  document.getElementById("name-button").textContent = "Join";
+  overlay.hidden = false;
+  document.getElementById("name-input").value = myName || "";
+  document.getElementById("name-input").focus();
+}
+
+async function join(name) {
+  const res = await fetch("/join", { method: "POST", body: name, headers: { "X-Person": name }, cache: "no-store" });
+  if (res.ok) {
+    myName = name;
+    try { localStorage.setItem("zmachine-name", name); } catch {}
+    document.getElementById("overlay").hidden = true;
+    return true;
+  }
+  askName(res.status === 409 ? `Someone is already playing as ${name}. Choose another name.` : (await res.text()).trim());
+  return false;
+}
+
+document.getElementById("name-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (stopped) return location.reload();
+  const name = document.getElementById("name-input").value.trim();
+  if (name && (await join(name))) start();
+});
+
+// Kicked, or the password changed: say so and stop.
+function removed(text) {
+  if (stopped) return;
+  stopped = true;
+  document.getElementById("overlay-title").textContent = "You left the game";
+  document.getElementById("overlay-text").textContent = text.replace(/\.?$/, ".") + " Reload to give the password again.";
+  // The same box, with Reload in place of the name field.
+  document.getElementById("name-input").hidden = true;
+  document.getElementById("name-button").textContent = "Reload";
+  document.getElementById("overlay").hidden = false;
+  document.getElementById("name-button").focus();
+}
+
+let started = false;
+async function start() {
+  if (started) return;
+  started = true;
+  try {
+    const res = await api("/me");
+    if (res.ok) me = await res.json();
+  } catch {}
+  updatePlayers();
+  pollFeed();
+  pollGame();
+}
+
+// Hiding the game pane is remembered in this browser; `?game=hide` or
+// `?game=show` in the address overrides it.
+function showGame(show) {
+  main.classList.toggle("chat-only", !show);
+  try { localStorage.setItem("zmachine-hide-game", show ? "" : "1"); } catch {}
+  if (show) game.scrollTop = game.scrollHeight;
+  document.getElementById(show ? "command-input" : "say-input").focus();
+}
+document.getElementById("hide-game").addEventListener("click", () => showGame(false));
+document.getElementById("show-game").addEventListener("click", () => showGame(true));
+let hideGame = false;
+try { hideGame = localStorage.getItem("zmachine-hide-game") === "1"; } catch {}
+const gameParam = new URLSearchParams(location.search).get("game");
+if (gameParam) hideGame = gameParam === "hide";
+
+// Hiding the discussion is remembered the same way; `?discussion=hide` or
+// `?discussion=show` overrides it.
+const showDiscussionButton = document.getElementById("show-discussion");
+function showDiscussion(show) {
+  main.classList.toggle("game-only", !show);
+  try { localStorage.setItem("zmachine-hide-discussion", show ? "" : "1"); } catch {}
+  if (show) {
+    showDiscussionButton.classList.remove("unread");
+    showDiscussionButton.setAttribute("aria-label", "Show discussion");
+    feed.scrollTop = feed.scrollHeight;
+  }
+}
+document.getElementById("hide-discussion").addEventListener("click", () => {
+  showDiscussion(false);
+  document.getElementById("command-input").focus();
+});
+showDiscussionButton.addEventListener("click", () => {
+  showDiscussion(true);
+  document.getElementById("say-input").focus();
+});
+let hideDiscussion = false;
+try { hideDiscussion = localStorage.getItem("zmachine-hide-discussion") === "1"; } catch {}
+const discussionParam = new URLSearchParams(location.search).get("discussion");
+if (discussionParam) hideDiscussion = discussionParam === "hide";
+
+// The theme (auto follows the system) is remembered in this browser;
+// `?theme=light`, `?theme=dark` or `?theme=auto` overrides it.
+const themes = ["auto", "light", "dark"];
+const themeSymbols = { auto: "◐", light: "☀︎", dark: "☾" };
+const themeNames = { auto: "system theme", light: "light theme", dark: "dark theme" };
+function setTheme(theme, remember) {
+  if (theme === "auto") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = theme;
+  const toggle = document.getElementById("theme-toggle");
+  const next = themes[(themes.indexOf(theme) + 1) % themes.length];
+  toggle.textContent = themeSymbols[theme];
+  toggle.title = `Using the ${themeNames[theme]}; click for the ${themeNames[next]}`;
+  toggle.setAttribute("aria-label", `Theme: ${themeNames[theme]}`);
+  if (remember) try { localStorage.setItem("zmachine-theme", theme === "auto" ? "" : theme); } catch {}
+}
+document.getElementById("theme-toggle").addEventListener("click", () => {
+  const theme = document.documentElement.dataset.theme || "auto";
+  setTheme(themes[(themes.indexOf(theme) + 1) % themes.length], true);
+});
+let theme = "auto";
+try { theme = localStorage.getItem("zmachine-theme") || "auto"; } catch {}
+const themeParam = new URLSearchParams(location.search).get("theme");
+if (themeParam) theme = themeParam;
+setTheme(themes.includes(theme) ? theme : "auto", false);
+
+// Both panes hidden would leave nothing, so the discussion stays.
+if (hideGame && hideDiscussion) hideDiscussion = false;
+showDiscussion(!hideDiscussion);
+showGame(!hideGame);
+
+// The game text size is remembered in this browser.
+const fontSize = document.getElementById("font-size");
+function setFontSize(px) {
+  document.documentElement.style.setProperty("--game-size", `${px}px`);
+  fontSize.value = px;
+}
+fontSize.addEventListener("change", () => {
+  setFontSize(fontSize.value);
+  try { localStorage.setItem("zmachine-font-size", fontSize.value); } catch {}
+  game.scrollTop = game.scrollHeight;
+});
+let savedSize = null;
+try { savedSize = localStorage.getItem("zmachine-font-size"); } catch {}
+if (savedSize && [...fontSize.options].some((o) => o.value === savedSize)) setFontSize(savedSize);
+
+setMode(mode);
+// Join under the remembered name, or ask for one.
+if (myName) join(myName).then((ok) => ok && start());
+else askName();
+</script>
+</body>
+</html>

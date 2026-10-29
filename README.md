@@ -4,6 +4,9 @@ A Z-machine interpreter written in Zig 0.17, using only the standard library.
 It plays Infocom-format story files (versions 1–5, 7 and 8) in the terminal
 and can serve a live object inspector and map of the explored world.
 
+<img src="docs/screenshots/terminal.webp" width="700"
+  alt="Zork I running full-screen in a dark terminal: a blue status line reading Kitchen, Score: 10, Moves: 6; earlier commands in teal; the command being typed in bold teal.">
+
 ```
 zig build
 ./zig-out/bin/zmachine path/to/zork1.z3
@@ -25,16 +28,21 @@ Prebuilt binaries for Linux, macOS and Windows are on the
 
 | Option | Meaning |
 | --- | --- |
-| `-w`, `--web <port>` | Serve the inspector on `http://127.0.0.1:<port>/` |
+| `-w`, `--web [port]` | Play together on `http://127.0.0.1:<port>/`, with the inspector at `/inspector`; the port defaults to 9675 |
+| `--listen <address>` | Also let players on other machines join with a password (see [Players on other machines](#players-on-other-machines)); implies `--web` |
 | `--seed <n>` | Seed the random number generator for reproducible runs |
 | `-t`, `--transcript <file>` | Write a transcript from the start of the story |
 | `--plain` | Plain text output, without escape sequences |
+| `--style <list>` | How the display looks, such as `mono,prompt=bold+cyan` (see [Styles](#styles)) |
+| `--mcp [port]` | Run as an MCP server over stdio for the game served with `--web [port]`; the port defaults to 9675 |
 | `--version` | Show the version |
 
 When stdout is a terminal, the interpreter draws full-screen with
 xterm-256color escape sequences: a colored status line, a scrolling lower
 window, an upper window for version 4+ stories, text styles, colors and a
-`[MORE]` prompt. When input is piped in, commands are echoed so the output
+`[MORE]` prompt.
+
+When input is piped in, commands are echoed so the output
 reads like a transcript, which makes scripted testing easy:
 
 ```
@@ -46,13 +54,81 @@ for single keys, the keys of one line in turn (an empty line is
 Return). With `--seed <n>` the random number generator gives the same
 results every run, so `--seed <n> -t out.txt` writes a repeatable transcript.
 
+## Styles
+
+`--style` takes a comma-separated list of presets and `<part>=<look>`
+settings, applied in order. It may be given more than once, and the
+`ZMACHINE_STYLE` environment variable, if set, is applied first, so it can
+hold your usual choice:
+
+```
+zmachine --style light zork1.z3
+zmachine --style mono,prompt=bold+cyan zork1.z3
+export ZMACHINE_STYLE='input=bold+yellow,header=bold+white/blue'
+```
+
+The presets on light and dark terminals, each after two commands with a
+third being typed:
+
+| | `default` | `mono` | `light` |
+| --- | --- | --- | --- |
+| Light terminal | <img src="docs/screenshots/style-default-light.webp" alt="The default style on a light terminal: blue status line, earlier commands in teal, the command being typed in bold teal."> | <img src="docs/screenshots/style-mono-light.webp" alt="The mono style on a light terminal: reverse-video status line, earlier commands, prompt and the command being typed all in bold black."> | <img src="docs/screenshots/style-light-light.webp" alt="The light style on a light terminal: blue status line, earlier commands in blue, the command being typed in bold blue."> |
+| Dark terminal | <img src="docs/screenshots/style-default-dark.webp" alt="The default style on a dark terminal: blue status line, earlier commands in teal, the command being typed in bold teal."> | <img src="docs/screenshots/style-mono-dark.webp" alt="The mono style on a dark terminal: reverse-video status line, earlier commands, prompt and the command being typed all in bold white."> | <img src="docs/screenshots/style-light-dark.webp" alt="The light style on a dark terminal: blue status line, earlier commands in blue, which is harder to read on the dark background, and the command being typed in bold blue."> |
+
+| Part | What it styles |
+| --- | --- |
+| `input` | What you type: the line being typed and earlier ones |
+| `currentinput` | Laid over `input` for the line being typed |
+| `priorinput` | Laid over `input` for lines already entered |
+| `prompt` | The last word before input, such as `>` |
+| `header` (or `status`) | The status line of version 1–3 stories |
+| `more` | The `[MORE]` prompt |
+
+`currentinput` and `priorinput` change only what they set and take the
+rest from `input`, whatever the order: with `currentinput=bold,input=red`
+the line you are typing is bold red, and earlier lines are just red.
+After you press Return, the line is redrawn in the `priorinput` look.
+
+A look is attributes and a color joined by `+`:
+
+- attributes: `bold`, `dim`, `italic`, `underline`, `reverse`, or `plain`
+  for none
+- color: `fg`, `fg/bg` or `/bg`, each one of
+  - a theme color: `black`, `red`, `green`, `yellow`, `blue`, `magenta`,
+    `cyan`, `white`, or `bright-<name>`
+  - a 256-color number, such as `222`
+  - `#rrggbb`, for terminals with true color
+  - `default`, the terminal's own color
+
+Theme colors come from the terminal's profile, so they suit its
+background; numbered and `#rrggbb` colors are the same everywhere.
+
+| Preset | Looks |
+| --- | --- |
+| `default` | `input=30` (teal), `currentinput=bold,prompt=plain,header=bold+231/24,more=reverse` |
+| `dark` | as `default`, with `input=222` (pale yellow) |
+| `light` | as `default`, with `input=blue` |
+| `mono` | no colors: `input=bold,prompt=bold,header=reverse,more=reverse` |
+| `plain` | everything `plain` |
+
+## Saving and transcripts
+
 `save` and `restore` use portable Quetzal files (`<story>.qzl` by default).
 `script` writes `transcript.txt`. Version 5 stories also get `undo`.
 
 ## Web inspector
 
-Run with `--web 8080` and open `http://127.0.0.1:8080/`. The page updates
-each time the game waits for input:
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/inspector-dark.webp">
+  <img src="docs/screenshots/inspector-light.webp" width="800"
+    alt="The object inspector: a map of five rooms explored so far (West of House, North of House, Behind House, Kitchen and the highlighted Living Room) beside the object tree and the Living Room's contents.">
+</picture>
+
+Run with `--web` and open `http://127.0.0.1:9675/inspector`. The port is
+9675, ZORK on a phone keypad, unless you give another, such as
+`--web 8080`. The inspector shows what players can't see, so it answers
+only this machine, and opening it is logged as suspicious. The page
+updates each time the game waits for input:
 
 - **Map**: rooms you have visited, laid out by the compass directions you
   moved in. Up/down/in/out moves are dashed; moves with no direction (such as
@@ -66,6 +142,247 @@ each time the game waits for input:
 The current location is read from global variable 0, which Infocom and
 Inform stories use for the status line.
 
+## Playing together
+
+With `--web`, several people and AI partners, such as Claude, can play the
+same game at once. They share it with the console (the terminal running
+the game) through the play page, and players on other machines can join
+too with `--listen`.
+
+```
+zmachine --web zork1.z3
+```
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/play-dark.webp">
+  <img src="docs/screenshots/play-light.webp" width="800"
+    alt="The play page: Zork I on the left, in the Living Room; on the right, the discussion with Claude and Gemini thinking aloud, their suggested commands as buttons, and a strip of players with ♛ on the leaders and a robot on each AI partner.">
+</picture>
+
+On a phone the game and the discussion stack:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/phone-dark.webp">
+  <img src="docs/screenshots/phone-light.webp" width="260"
+    alt="The play page on an iPhone: the game text above, the discussion below with the players strip and Claude's suggestions.">
+</picture>
+
+Open `http://127.0.0.1:9675/`. The first time, the play page asks for your
+name, which the others see beside your messages and commands. A name is 1
+to 32 printable characters, unique among those playing. `you` and
+`console` are taken.
+
+The page is a split screen: the game on one side and the discussion on the
+other. The discussion has everyone's thoughts, messages and commands, each
+player in their own color, with suggested commands as buttons that send
+them. You can also keep playing in the terminal; everyone sees the same
+game, and late joiners get all of it. Under the Discussion header, a strip
+lists everyone playing, starting with the console, and marks the leader
+with ♛, the leader's mark throughout the page. It wraps onto as many lines
+as the players need. A small robot icon before the name marks AI partners, as ♛ marks the
+leader; a chip's tooltip says where a person plays from. When you lead, each remote player's and AI partner's
+chip has a ▼ menu to pass the lead to them or kick them.
+
+Along the top, after the room and score and the live indicator:
+
+| Button | What it does |
+| --- | --- |
+| 🔍 (a magnifier icon) | The object inspector (on this machine only; opening it is logged as suspicious) |
+| ▤ | The audit log, open to every player |
+| ◐ ☀︎ ☾ | The theme |
+
+The page remembers its layout in your browser:
+
+- **⊟ in the Game header** hides the game, to play only in the terminal and
+  use the page for the conversation; **⊞** in the Discussion header brings
+  it back. `?game=hide` or `?game=show` overrides the remembered choice.
+- **⊟ in the Discussion header** collapses the discussion and gives the
+  game the whole page; **⊞** in the Game header brings it back, and shows a
+  dot when someone posts meanwhile. `?discussion=hide` or
+  `?discussion=show` overrides it.
+- **The size menu** in the Game header sets the game text from 12 to 20
+  pixels.
+- **The theme button** (◐ system, ☀︎ light, ☾ dark) cycles between them;
+  `?theme=auto`, `?theme=light` or `?theme=dark` overrides it.
+
+### The leader and the modes
+
+One player leads.
+
+- **At the start:** the console's machine leads: the console and every
+  play-page client on it, all coleaders. If nobody on that machine is on
+  the play page, the first remote person to join leads.
+- **Passing the lead:** the leader can pass it to anyone, person or AI,
+  from the ▼ menu on their chip in the player strip (on the Console chip,
+  to hand it back to this machine).
+- **Taking it back:** the console's machine can always take it back with
+  the Console chip's ▼ menu, or by typing `/lead` at the console.
+- **When the leader leaves:** the earliest remaining player leads.
+
+The leader switches between two modes in the Discussion header:
+
+- **Debate**, the default: only the leader sends commands; everyone else
+  argues and suggests. The console can always type, because the game reads
+  its keyboard directly.
+- **Take turns**: anyone sends commands. Commands from the web are echoed
+  in the terminal as if typed, and a waiting command dismisses a `[MORE]`
+  prompt.
+
+The leader can also kick remote players and AI partners from their chip's ▼ menu.
+The console and players on its machine can't be kicked. A kicked person
+needs the password again to come back, and a kicked AI partner's name is
+refused from then on. Someone determined can come back under a new name,
+so after a second kick the page suggests choosing a new password.
+
+### Players on other machines
+
+`--listen <address>` lets players on other machines join, such as
+`--listen 0.0.0.0` for every address this machine has. It implies `--web`.
+
+- **Joining:** a remote player opens an invite link, or opens
+  `http://<this machine>:9675/` and gives the password. Either way the
+  browser then keeps a session cookie. Pasting the whole invite link into
+  the password field works too; the page takes the password out of it.
+- **The password:** it is three random words from the [EFF short word
+  list](https://www.eff.org/dice), such as `amber-otter-glide`, unless
+  `ZMACHINE_PASSWORD` sets one.
+  - Case, hyphens and spaces don't matter.
+  - Wrong guesses are slowed down, and are logged.
+- **Invite links:** ⚭ in the Discussion header copies a link such as
+  `http://203.0.113.69:9675/?password=amber-otter-glide`. On this machine
+  it works for anyone; on another machine, for the leader if they are a
+  person.
+  - Opening the link gives its password, sets the cookie and redirects to
+    `/`, so the password leaves the address bar.
+  - The link's address is the `--listen` address if you named one.
+    Otherwise it is the one the opener used, or the address this machine
+    uses to reach the network.
+  - The link is the password, so share it like one: it stays in chat
+    logs and browser history.
+- **Seeing the password:** Type `/showpassword` at the console to see it.
+- **What stays local:** the object inspector answers only this machine.
+  The audit log is open to every player, so the leader and everyone else
+  see the same record.
+- **Plain HTTP:** the password and the game cross the network
+  unencrypted, so use `--listen` only on networks you trust.
+
+The leader, or anyone on this machine, can change the password: with
+⚄ beside ⚭ in the Discussion header, or `/password` at the console. ⚄
+asks with the browser's prompt, filled in with three freshly rolled words
+to keep or type over; cancelling changes nothing. A new
+password ends every remote session but the leader's; the others need the
+new one to rejoin.
+
+### Console commands
+
+With `--web`, a line typed at the console that is one of these is handled
+by zmachine; the game never sees it:
+
+| Command | What it does |
+| --- | --- |
+| `/lead` | Take back the leadership for this machine |
+| `/password` | Change the password, typed without echo; an empty one makes three new random words |
+| `/showpassword` | Show the password on the bottom row until the next key press, then clear it, so it never enters the terminal's scrollback |
+
+### AI partners
+
+Give each AI partner the MCP server, which is the same binary run with
+`--mcp` (and the same port, if you gave `--web` one):
+
+```
+claude mcp add zmachine -- /path/to/zmachine --mcp
+```
+
+Any other AI can join the same way with its own MCP client. AI partners
+connect from this machine. Each partner names itself: its first call is
+`introduce` with the name it goes by, such as `Claude` or `Gemini`, and
+the other tools wait until it has.
+
+| Tool | What it does |
+| --- | --- |
+| `introduce` | Say the name it goes by; its thoughts, messages and commands appear under it |
+| `read_game` | The game text since it last looked, the status line, the mode, who leads and plays, and messages and thoughts from the others |
+| `send_command` | Send a command and get the game's response (in debate, only when it leads) |
+| `share_thoughts` | Show its thinking beside the game, under its name, with suggested commands as buttons |
+| `wait_for_player` | Wait for a move, message, thought or other change from someone else |
+| `pass_leadership` | Leader only: pass the lead to a player, or to `console` |
+| `set_mode` | Leader only: `debate` or `turns` |
+| `kick_player` | Leader only: kick a remote player or AI partner, with a reason posted to the discussion |
+| `new_password` | Leader only: make three new random words. The AI never sees them, so it announces the change |
+
+The instructions ask partners to use the leader's powers with discretion:
+
+- warn a disruptive player before kicking them
+- kick only for real disruption, never for disagreeing
+- make a new password if a kicked player keeps returning
+- pass the lead back when asked
+- change the mode only when the group wants it
+
+### Web routes
+
+The page and the tools are built on these routes, which anything else can
+use too:
+
+```
+curl -d 'open mailbox' http://127.0.0.1:9675/command
+```
+
+```json
+{"id":1,"echo":318,"offset":378,"output":"Opening the small mailbox reveals a leaflet.\n\n>","status":["West of House","Score: 0   Moves: 1"]}
+```
+
+| Route | Meaning |
+| --- | --- |
+| `GET /` | The play page; for a remote player without a session, the password page. `?password=` gives the password and redirects to `/`. |
+| `GET /inspector` | The object inspector (this machine only; logged as suspicious). |
+| `GET /state?since=<n>` | The inspector's snapshots (this machine only; logged as suspicious). |
+| `GET /me` | Who the server takes you for, and whether you lead. |
+| `POST /login` | A remote player gives the password; `204` sets the session cookie, `401` is wrong and `429` is too soon. |
+| `POST /join` | A person chooses a name (the body); `409` if it is taken. |
+| `POST /command` | Send the body as one line of input (or, when the story reads single keys, its keys in turn; an empty body is Return) and wait for the reply. If the game does not answer within 20 seconds, the reply is `202` with `"pending":true` and the text appears in `/transcript`. In debate mode, a command from anyone but the leader gets `409`. |
+| `GET /transcript?since=<offset>` | The game text since an offset, as a player sees it, with the status line, the mode, the next `offset` and whether the game is `waiting` for input. Add `&wait=1` to hold the request until there is new text. |
+| `POST /say` | Add to the discussion: `{"kind":"thought","text":"...","suggestions":["..."]}`. The kind is `thought` or `message`; at most 8 suggestions, each one line. |
+| `GET /discussion?since=<n>` | The mode, the leader (`console` for this machine), the players, and the posts after `n`. Posts include thoughts, messages, commands, mode and leader changes, joins, leaves, kicks and password changes, each with its author. Add `&wait=1` to hold the request until there is one. |
+| `POST /mode` | The leader sets `debate` (the default) or `turns`; others get `403`. |
+| `POST /lead` | Pass the leadership to the named player, or to `console`. The console's machine can always take it back. |
+| `POST /kick` | The leader kicks the named remote player or AI partner. |
+| `GET /invite` | An invite link carrying the password, for this machine and a leader who is a person. |
+| `POST /password` | Change the password to the body, or make a new one if it is empty. |
+| `GET /random-password` | Three random words to suggest as a new password, changing nothing (this machine, or a leader who is a person). |
+| `GET /log` | A live audit log page, open to every player. |
+| `GET /events?since=<n>` | The audit log events after `n`, as JSON (long polling). |
+
+Who is asking:
+
+- `X-Player: <name>` marks an AI partner of that name; the MCP server sends
+  it.
+- On this machine, `X-Person: <name>` names a person.
+- A remote person is named by their session.
+- A request with neither header, or with `X-Player: you`, comes from this
+  machine without a name.
+- A session ended by a kick or a new password gets `410` with the reason.
+
+### Audit log
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/log-dark.webp">
+  <img src="docs/screenshots/log-light.webp" width="800"
+    alt="The audit log: commands from Ana's browser, the lead passed to Claude for one command through MCP and back, and two rows highlighted as suspicious where someone opened the object inspector.">
+</picture>
+
+The audit log, open to every player, lists every command sent with `POST /command` and every line
+typed at the keyboard. It also lists joins and leaves, the leadership,
+kicks, and password logins, changes, invite links and reveals. It never shows the password. It flags as
+suspicious anything a player could not see: opening the object inspector,
+reading its snapshots (the object tree, attributes and globals), wrong
+passwords and refused requests. Each entry names the client by its
+`User-Agent`, after the player's name, such as
+`Claude via zmachine-mcp/0.2.0`.
+
+Without `--listen` the server listens only on `127.0.0.1`. It refuses
+requests whose `Origin` or `Host` header names another site, so a web page
+cannot send commands or read the game.
+
 ## Layout
 
 | File | Contents |
@@ -78,8 +395,15 @@ Inform stories use for the status line.
 | `src/terminal.zig` | Window size, raw keys and Ctrl-C on POSIX and Windows |
 | `src/quetzal.zig` | Quetzal save files |
 | `src/Inspector.zig` | Map tracking and JSON snapshots for the web page |
-| `src/web.zig` | Embedded HTTP server (long-polling `/state`) |
+| `src/Remote.zig` | Shared state for playing together: commands, game text, discussion, players and the leader, sessions, audit log |
+| `src/Password.zig` | Passwords for remote players: three words from the EFF short word list |
+| `src/mcp.zig` | MCP server over stdio that lets an AI partner play through the web server |
+| `src/web.zig` | Embedded HTTP server: inspector, playing together, remote access and audit log |
 | `src/inspector.html` | The inspector page, embedded in the binary |
+| `src/play.html` | The play page, embedded in the binary |
+| `src/login.html` | The password page for remote players, embedded in the binary |
+| `src/eff_short_wordlist_1.txt` | The EFF short word list, embedded in the binary |
+| `src/log.html` | The audit log page, embedded in the binary |
 
 Run the unit tests with `zig build test`.
 
@@ -90,3 +414,7 @@ zmachine was written with [Claude Code](https://claude.com/claude-code).
 ## License
 
 [BSD 3-Clause](LICENSE)
+
+The [EFF short word list](https://www.eff.org/dice)
+(`src/eff_short_wordlist_1.txt`) is by the Electronic Frontier Foundation,
+under [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/us/).

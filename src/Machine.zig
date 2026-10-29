@@ -181,7 +181,7 @@ fn setupHeader(m: *Machine) void {
         // Status line available, screen splitting available, fixed pitch.
         mem[0x01] = (mem[0x01] & ~@as(u8, 0x10 | 0x40)) | 0x20;
     } else {
-        // Fixed-space style; colours (v5+), bold and italic only when drawing
+        // Fixed-space style; colors (v5+), bold and italic only when drawing
         // with escape sequences, so plain output gets each story's fallback
         // (such as capitals for emphasis); no timed input.
         const styles: u8 = if (s.ansi) 0x0c | @as(u8, if (m.version >= 5) 0x01 else 0) else 0;
@@ -524,7 +524,7 @@ fn exec2op(m: *Machine, op: u8, ops: []const u16) !void {
         },
         25 => try m.call(a, ops[1..], try m.fetchByte()), // call_2s
         26 => try m.call(a, ops[1..], null), // call_2n
-        27 => try m.screen.setColour(a, b), // set_colour
+        27 => try m.screen.setColor(a, b), // set_colour
         28 => { // throw
             if (b == 0 or b > m.frame_count) return error.StackUnderflow;
             m.frame_count = b;
@@ -678,7 +678,7 @@ fn execVar(m: *Machine, op: u8, ops: []const u16) !void {
         },
         27 => { // tokenise
             const dict = if (arg(ops, 2) != 0) arg(ops, 2) else m.dictionary;
-            try m.tokenise(arg(ops, 0), arg(ops, 1), dict, arg(ops, 3) != 0);
+            try m.tokenize(arg(ops, 0), arg(ops, 1), dict, arg(ops, 3) != 0);
         },
         28 => { // encode_text
             const text = arg(ops, 0) + arg(ops, 2);
@@ -936,11 +936,11 @@ fn read(m: *Machine, ops: []const u16) !void {
     }
     if (m.observer) |o| o.afterInput(o.context, m, line);
 
-    if (parse != 0) try m.tokenise(text, parse, m.dictionary, false);
+    if (parse != 0) try m.tokenize(text, parse, m.dictionary, false);
     if (m.version >= 5) try m.store(13);
 }
 
-fn tokenise(m: *Machine, text: usize, parse: usize, dict: usize, skip_unknown: bool) !void {
+fn tokenize(m: *Machine, text: usize, parse: usize, dict: usize, skip_unknown: bool) !void {
     var start: usize = undefined;
     var len: usize = undefined;
     if (m.version >= 5) {

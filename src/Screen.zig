@@ -69,12 +69,12 @@ pub const Style = struct {
     pub const fixed = 8;
 };
 
-/// 256-colour palette entries for the Z-machine colours 2-12.
+/// 256-color palette entries for the Z-machine colors 2-12.
 const palette = [_]u8{ 16, 160, 34, 220, 33, 164, 44, 255, 250, 244, 238 };
 
-/// How one part of the display is drawn: text attributes and colours.
+/// How one part of the display is drawn: text attributes and colors.
 /// Fields left null are unset: drawn as off and in the terminal's own
-/// colours, or, when one look is laid over another, taken from the one
+/// colors, or, when one look is laid over another, taken from the one
 /// below.
 pub const Look = struct {
     bold: ?bool = null,
@@ -82,24 +82,24 @@ pub const Look = struct {
     italic: ?bool = null,
     underline: ?bool = null,
     reverse: ?bool = null,
-    fg: ?Colour = null,
-    bg: ?Colour = null,
+    fg: ?Color = null,
+    bg: ?Color = null,
 
-    pub const Colour = union(enum) {
-        /// The terminal's own colour.
+    pub const Color = union(enum) {
+        /// The terminal's own color.
         default,
-        /// One of the 16 colours the terminal's theme defines, which suit
+        /// One of the 16 colors the terminal's theme defines, which suit
         /// its background: 0-7 are `names`, 8-15 their bright forms.
         theme: u4,
-        /// An entry in the 256-colour palette.
+        /// An entry in the 256-color palette.
         index: u8,
         rgb: [3]u8,
 
         const names = [_][]const u8{ "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white" };
 
-        /// Parses a colour name such as `blue` or `bright-blue`, a
-        /// 256-colour number, `#rrggbb` or `default`.
-        fn parse(word: []const u8) error{InvalidStyle}!Colour {
+        /// Parses a color name such as `blue` or `bright-blue`, a
+        /// 256-color number, `#rrggbb` or `default`.
+        fn parse(word: []const u8) error{InvalidStyle}!Color {
             if (word.len == 0 or std.mem.eql(u8, word, "default")) return .default;
             const bright = std.mem.startsWith(u8, word, "bright-");
             const name = if (bright) word["bright-".len..] else word;
@@ -116,9 +116,9 @@ pub const Look = struct {
             return .{ .index = std.fmt.parseInt(u8, word, 10) catch return error.InvalidStyle };
         }
 
-        /// Writes the SGR parameters for this colour; `base` is 30 for the
+        /// Writes the SGR parameters for this color; `base` is 30 for the
         /// foreground and 40 for the background.
-        fn write(c: Colour, w: *Io.Writer, base: u8) Io.Writer.Error!void {
+        fn write(c: Color, w: *Io.Writer, base: u8) Io.Writer.Error!void {
             switch (c) {
                 .default => {},
                 .theme => |n| try w.print(";{d}", .{if (n < 8) base + n else base + 60 + (n - 8)}),
@@ -130,7 +130,7 @@ pub const Look = struct {
 
     const attributes = .{ .{ "bold", "1" }, .{ "dim", "2" }, .{ "italic", "3" }, .{ "underline", "4" }, .{ "reverse", "7" } };
 
-    /// No attributes, in the terminal's own colours, even when laid over
+    /// No attributes, in the terminal's own colors, even when laid over
     /// another look.
     const plain: Look = .{
         .bold = false,
@@ -142,9 +142,9 @@ pub const Look = struct {
         .bg = .default,
     };
 
-    /// Parses a spec such as `bold+white/blue`: attributes and a colour
+    /// Parses a spec such as `bold+white/blue`: attributes and a color
     /// (`fg`, `fg/bg` or `/bg`) joined by `+`. `plain` is no attributes in
-    /// the terminal's own colours.
+    /// the terminal's own colors.
     pub fn parse(spec: []const u8) error{InvalidStyle}!Look {
         var look: Look = .{};
         var it = std.mem.splitScalar(u8, spec, '+');
@@ -160,7 +160,7 @@ pub const Look = struct {
                 }
             }
             if (word.len == 0) return error.InvalidStyle;
-            // An empty side of `fg/bg` leaves that colour unset.
+            // An empty side of `fg/bg` leaves that color unset.
             const slash = std.mem.indexOfScalar(u8, word, '/');
             const fg = word[0 .. slash orelse word.len];
             if (fg.len > 0) look.fg = try .parse(fg);
@@ -214,10 +214,10 @@ pub const Looks = struct {
 
     pub const presets = [_]struct { []const u8, Looks }{
         .{ "default", .{} },
-        // The original colours, for dark backgrounds.
+        // The original colors, for dark backgrounds.
         .{ "dark", .{ .input = .{ .fg = .{ .index = 222 } } } },
         .{ "light", .{ .input = .{ .fg = .{ .theme = 4 } } } },
-        // No colours at all.
+        // No colors at all.
         .{ "mono", .{ .input = .{ .bold = true }, .prompt = .{ .bold = true }, .header = .{ .reverse = true } } },
         .{ "plain", .{ .input = .{}, .header = .{}, .more = .{} } },
     };
@@ -595,8 +595,8 @@ pub fn setStyle(s: *Screen, style: u8) Error!void {
     try s.writeSgr();
 }
 
-/// Sets colours using Z-machine colour numbers (0 = unchanged, 1 = default).
-pub fn setColour(s: *Screen, fg: u16, bg: u16) Error!void {
+/// Sets colors using Z-machine color numbers (0 = unchanged, 1 = default).
+pub fn setColor(s: *Screen, fg: u16, bg: u16) Error!void {
     if (fg != 0 and fg <= 12) s.fg = @intCast(fg);
     if (bg != 0 and bg <= 12) s.bg = @intCast(bg);
     try s.writeSgr();
@@ -988,7 +988,7 @@ test "current and prior input are laid over input" {
         try std.testing.expectEqualStrings("\x1b[0;31m", looks.priorinput.over(looks.input).sgr(&buf));
         looks = .{};
     }
-    // A colour or `plain` replaces what input sets.
+    // A color or `plain` replaces what input sets.
     try looks.apply("input=bold+red,priorinput=dim+blue,currentinput=plain");
     try std.testing.expectEqualStrings("\x1b[0;1;2;34m", looks.priorinput.over(looks.input).sgr(&buf));
     try std.testing.expectEqualStrings("\x1b[0m", looks.currentinput.over(looks.input).sgr(&buf));

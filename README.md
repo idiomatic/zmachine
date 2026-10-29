@@ -271,7 +271,7 @@ so after a second kick the page suggests choosing a new password.
 The leader, or anyone on this machine, can change the password: with
 ⚄ beside ⚭ in the Discussion header, or `/password` at the console. ⚄
 asks with the browser's prompt, filled in with three freshly rolled words
-to keep or type over; cancelling changes nothing. A new
+to keep or type over; canceling changes nothing. A new
 password ends every remote session but the leader's; the others need the
 new one to rejoin.
 

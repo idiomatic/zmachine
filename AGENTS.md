@@ -97,7 +97,7 @@ Keep this file up to date with every specification.
     * Its host is the `--listen` address if specific, else the remote requester's `Host`, else the local address a UDP socket toward 192.0.2.1 gets.
     * Without the Clipboard API it falls back to a copyable field. An AI leader never receives it.
 * `GET /?password=` gives the password: right, it sets the session cookie and redirects (303) to `/`; wrong, the password page says so and drops it from the address bar. This machine just redirects.
-* Local clients, the console and the leader can generate or enter one (⚄ in the Discussion header opens the browser's prompt, filled in with three freshly rolled words from `GET /random-password` to keep or type over; cancelling changes nothing. Console `/password`, entered without echo, Return generates). A change ends every remote session but the leader's, and is posted and logged.
+* Local clients, the console and the leader can generate or enter one (⚄ in the Discussion header opens the browser's prompt, filled in with three freshly rolled words from `GET /random-password` to keep or type over; canceling changes nothing. Console `/password`, entered without echo, Return generates). A change ends every remote session but the leader's, and is posted and logged.
 * An AI leader can only generate one (MCP `new_password`); it announces it, and passes leadership to the console if nobody local is on the play page.
 * Console `/showpassword` shows it on the bottom row, in the status line's look, until the next key, then clears the row; never in scrollback; logged.
 * With `--web`, `/lead`, `/password` and `/showpassword` replace a line of input; the game never sees them.

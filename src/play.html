@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Z-Machine Play Together</title>
 <style>
-/* Each colour is light-dark(light, dark). The theme follows the system
+/* Each color is light-dark(light, dark). The theme follows the system
    unless the theme button sets data-theme. */
 :root {
   color-scheme: light dark;
@@ -158,7 +158,7 @@ section + section { border-left: 1px solid var(--border); }
 }
 #chip-menu button:hover, #chip-menu button:focus-visible { background: var(--panel-2); outline: none; }
 .post { border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; background: var(--panel); max-width: 100%; }
-/* Each AI partner has its own colour, set as --ai on its posts. */
+/* Each AI partner has its own color, set as --ai on its posts. */
 .post .who { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--ai, var(--accent)); margin-bottom: 3px; }
 .post .text { white-space: pre-wrap; word-break: break-word; }
 .post.you { align-self: flex-end; background: var(--you-soft); border-color: transparent; max-width: 85%; }
@@ -328,7 +328,7 @@ function toast(text) {
   toast.timer = setTimeout(() => el.classList.remove("show"), 3500);
 }
 
-// Each other player has a colour, in the order they first appeared.
+// Each other player has a color, in the order they first appeared.
 const seen = [];
 const palette = ["var(--accent)", "#8b5cf6", "#0d9488", "#db2777", "#2563eb", "#ca8a04"];
 

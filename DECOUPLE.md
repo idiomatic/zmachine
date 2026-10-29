@@ -82,7 +82,7 @@ a context pointer and a table of functions, the way `Machine.Observer` and
 
 - **`Display`** takes the calls `Machine` makes on `Screen` today:
   - output: `print`, `setWindow`, `splitWindow`, `eraseWindow`,
-    `eraseLine`, `setCursor`, `getCursor`, `setStyle`, `setColour`,
+    `eraseLine`, `setCursor`, `getCursor`, `setStyle`, `setColor`,
     `setBuffered`, `drawStatus`;
   - input: `readLine`, `readKey`;
   - `capabilities()`, so the story header advertises only what the display

@@ -104,6 +104,7 @@ section { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .room text { fill: var(--text); font: 12px var(--sans); text-anchor: middle; dominant-baseline: middle; }
 .room.here rect { stroke: var(--accent); stroke-width: 2.5; fill: var(--accent-soft); }
 .room { cursor: pointer; }
+.room.moving { cursor: grabbing; opacity: .85; }
 .edge { stroke: var(--edge); stroke-width: 1.6; fill: none; }
 .edge.vertical { stroke-dasharray: 5 4; }
 .edge.unknown { stroke-dasharray: 2 4; }
@@ -112,6 +113,8 @@ section { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
   paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round;
 }
 .arrowhead { fill: var(--edge); }
+.edge-label.fixable { cursor: pointer; }
+.edge-label.fixable:hover { fill: var(--accent); }
 #objects-pane { flex-direction: column; }
 .toolbar { display: flex; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--panel); }
 .toolbar input {
@@ -187,7 +190,7 @@ td.hex { word-break: break-all; }
       <button class="tab" data-pane="history-pane">History</button>
     </div>
     <div class="pane active" id="map-pane">
-      <svg id="map"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="arrowhead" d="M0,0 L10,5 L0,10 z"/></marker></defs><g id="viewport"><g id="edges"></g><g id="rooms"></g></g></svg>
+      <svg id="map"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="arrowhead" d="M0,0 L10,5 L0,10 z"/></marker><filter id="shadow-blur" x="-50%" y="-100%" width="200%" height="300%"><feGaussianBlur stdDeviation="10"/></filter></defs><g id="viewport"><g id="edges"></g><g id="rooms"></g></g></svg>
       <div class="map-tools">
         <button id="zoom-in" title="Zoom in">+</button>
         <button id="zoom-out" title="Zoom out">&minus;</button>
@@ -695,6 +698,28 @@ let lastLocation = 0;
 // current room.
 let erasing = false;
 
+// Rooms the viewer has dragged, by story: room number to grid cell. They
+// are placed first, and the automatic layout fills in around them.
+let pins = new Map();
+let pinsKey = null;
+
+function loadPins() {
+  const key = `zmachine-inspector-pins:r${state.release}-${state.serial}`;
+  if (key === pinsKey) return;
+  pinsKey = key;
+  pins = new Map();
+  try {
+    for (const [id, cell] of Object.entries(JSON.parse(localStorage.getItem(key)) || {})) pins.set(Number(id), cell);
+  } catch {}
+}
+
+function savePins() {
+  try {
+    if (pins.size) localStorage.setItem(pinsKey, JSON.stringify(Object.fromEntries(pins)));
+    else localStorage.removeItem(pinsKey);
+  } catch {}
+}
+
 function layout(rooms, edges) {
   const pos = new Map();
   const taken = new Set();
@@ -723,7 +748,11 @@ function layout(rooms, edges) {
     place(toId, x, y);
   };
 
-  if (rooms.length) place(rooms[0].id, 0, 0);
+  for (const r of rooms) {
+    const cell = pins.get(r.id);
+    if (cell && !taken.has(key(...cell))) place(r.id, ...cell);
+  }
+  if (rooms.length && !pos.has(rooms[0].id)) place(rooms[0].id, ...near(0, 0));
   // Exploration order gives a stable, intuitive layout.
   let progress = true;
   while (progress) {
@@ -758,7 +787,10 @@ function renderMap() {
   const rooms = erasing ? state.rooms.filter((r) => r.id === state.location) : state.rooms;
   const edges = erasing ? [] : state.edges;
   $("map-empty").style.display = rooms.length ? "none" : "grid";
+  loadPins();
   positions = layout(rooms, edges);
+  // A room being dragged follows the pointer, between grid cells.
+  if (moving?.dragging && positions.has(moving.id)) positions.set(moving.id, [moving.x / CELL_W, moving.y / CELL_H]);
 
   const edgesG = $("edges");
   const roomsG = $("rooms");
@@ -794,6 +826,34 @@ function renderMap() {
     else if (list.every((e) => e.dir === "unknown")) cls += " unknown";
     line.setAttribute("class", cls);
     if (oneWay) line.setAttribute("marker-end", "url(#arrow)");
+    // Where the line passes under a room it doesn't connect, that room's
+    // shadow fades it, so it doesn't look like two edges meeting there.
+    const crossed = rooms.filter((r) => r.id !== first.from && r.id !== first.to &&
+      crosses(ax, ay, bx, by, ...center(r.id), ROOM_W / 2 + SHADOW, ROOM_H / 2 + SHADOW));
+    if (crossed.length) {
+      const mask = document.createElementNS(svgNS, "mask");
+      mask.id = `shadow-${first.from}-${first.to}`;
+      mask.setAttribute("maskUnits", "userSpaceOnUse");
+      // The line's surroundings, given explicitly: by default the region is
+      // the viewport's, which misses map coordinates below zero.
+      const region = [["x", Math.min(ax, bx) - 20], ["y", Math.min(ay, by) - 20],
+        ["width", Math.abs(bx - ax) + 40], ["height", Math.abs(by - ay) + 40]];
+      for (const [k, v] of region) mask.setAttribute(k, v);
+      const all = document.createElementNS(svgNS, "rect");
+      for (const [k, v] of [...region, ["fill", "white"]]) all.setAttribute(k, v);
+      mask.append(all);
+      for (const r of crossed) {
+        const [cx, cy] = center(r.id);
+        const shadow = document.createElementNS(svgNS, "rect");
+        for (const [k, v] of [["x", cx - ROOM_W / 2 - SHADOW], ["y", cy - ROOM_H / 2 - SHADOW],
+          ["width", ROOM_W + 2 * SHADOW], ["height", ROOM_H + 2 * SHADOW], ["rx", 8 + SHADOW], ["fill", "#222"],
+          // Blurred, so the line fades gradually toward the room.
+          ["filter", "url(#shadow-blur)"]]) shadow.setAttribute(k, v);
+        mask.append(shadow);
+      }
+      edgesG.append(mask);
+      line.setAttribute("mask", `url(#${mask.id})`);
+    }
     edgesG.append(line);
     // Label the direction taken, at the end it was taken from, unless the
     // map already shows it.
@@ -811,6 +871,14 @@ function renderMap() {
       t.setAttribute("y", sy + uy * 16 + ux * 9);
       t.setAttribute("class", "edge-label");
       t.textContent = text;
+      // A compass label can be clicked to lay the rooms out that way.
+      if (DIRS[e.dir]) {
+        t.classList.add("fixable");
+        const title = document.createElementNS(svgNS, "title");
+        title.textContent = `Put ${roomName(e.to)} ${DIR_WORDS[e.dir]} of ${roomName(e.from)}`;
+        t.append(title);
+        t.addEventListener("click", () => holdDirection(e));
+      }
       edgesG.append(t);
     }
   }
@@ -818,7 +886,8 @@ function renderMap() {
   for (const r of rooms) {
     const [cx, cy] = center(r.id);
     const g = document.createElementNS(svgNS, "g");
-    g.setAttribute("class", "room" + (r.id === state.location ? " here" : ""));
+    g.setAttribute("class", "room" + (r.id === state.location ? " here" : "") + (moving?.dragging && moving.id === r.id ? " moving" : ""));
+    g.dataset.id = r.id;
     g.setAttribute("transform", `translate(${cx - ROOM_W / 2},${cy - ROOM_H / 2})`);
     const rect = document.createElementNS(svgNS, "rect");
     rect.setAttribute("width", ROOM_W); rect.setAttribute("height", ROOM_H);
@@ -836,7 +905,9 @@ function renderMap() {
     const title = document.createElementNS(svgNS, "title");
     title.textContent = `${r.name} (#${r.id})`;
     g.append(title);
-    g.addEventListener("click", () => select(r.id, true));
+    g.addEventListener("click", () => {
+      if (!dragged) select(r.id, true);
+    });
     roomsG.append(g);
   }
 
@@ -845,6 +916,58 @@ function renderMap() {
     if (!view.userMoved) fitOrCenter();
   }
   applyView();
+}
+
+const DIR_WORDS = { n: "north", s: "south", e: "east", w: "west", ne: "northeast", nw: "northwest", se: "southeast", sw: "southwest" };
+
+function roomName(id) {
+  return state.rooms.find((r) => r.id === id)?.name || `#${id}`;
+}
+
+// Pins every room where it is now, before moving one by hand, so the
+// automatic layout doesn't move the others.
+function freezeLayout() {
+  for (const [id, [x, y]] of positions) {
+    if (Number.isInteger(x) && Number.isInteger(y)) pins.set(id, [x, y]);
+  }
+}
+
+// Moves the room a move led to into the cell that direction points to from
+// where it was taken. A room already there swaps into the moved room's old
+// cell.
+function holdDirection(e) {
+  freezeLayout();
+  const [fx, fy] = positions.get(e.from);
+  const v = DIRS[e.dir];
+  const cell = [fx + v[0], fy + v[1]];
+  const old = positions.get(e.to);
+  for (const [id, [x, y]] of positions) {
+    if (id !== e.to && id !== e.from && x === cell[0] && y === cell[1]) pins.set(id, old);
+  }
+  pins.set(e.to, cell);
+  savePins();
+  renderMap();
+}
+
+// How far a room's shadow reaches past it, in map units.
+const SHADOW = 16;
+
+// Whether the segment from (x1, y1) to (x2, y2) passes through the box
+// centered at (cx, cy) with half-sizes hw and hh (Liang-Barsky clipping).
+function crosses(x1, y1, x2, y2, cx, cy, hw, hh) {
+  let t0 = 0, t1 = 1;
+  const dx = x2 - x1, dy = y2 - y1;
+  for (const [p, q] of [[-dx, x1 - (cx - hw)], [dx, cx + hw - x1], [-dy, y1 - (cy - hh)], [dy, cy + hh - y1]]) {
+    if (p === 0) {
+      if (q < 0) return false;
+    } else {
+      const t = q / p;
+      if (p < 0) t0 = Math.max(t0, t);
+      else t1 = Math.min(t1, t);
+      if (t0 > t1) return false;
+    }
+  }
+  return true;
 }
 
 // Where the line from (x1, y1) toward (x2, y2) leaves the room centered at
@@ -916,11 +1039,64 @@ function zoom(factor) {
   applyView();
 }
 
+// A room being dragged: where it is in map coordinates, once it has moved
+// far enough to count as a drag rather than a click.
+let moving = null;
+// A drag just ended, so the click that follows it doesn't select.
+let dragged = false;
+
 (() => {
   const svg = $("map");
+  const DRAG_THRESHOLD = 4;
+  svg.addEventListener("pointerdown", (ev) => {
+    const room = ev.target.closest(".room");
+    if (!room || ev.button !== 0) return;
+    const id = Number(room.dataset.id);
+    const [gx, gy] = positions.get(id);
+    moving = { id, from: [gx, gy], px: ev.clientX, py: ev.clientY, x: gx * CELL_W, y: gy * CELL_H, x0: gx * CELL_W, y0: gy * CELL_H, dragging: false };
+    dragged = false;
+  });
+  svg.addEventListener("pointermove", (ev) => {
+    if (!moving) return;
+    const dx = ev.clientX - moving.px, dy = ev.clientY - moving.py;
+    if (!moving.dragging) {
+      if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+      // Captured only once it's a drag, so a plain click still reaches
+      // the room.
+      moving.dragging = true;
+      svg.setPointerCapture(ev.pointerId);
+    }
+    moving.x = moving.x0 + dx / view.scale;
+    moving.y = moving.y0 + dy / view.scale;
+    renderMap();
+  });
+  // Dropping snaps the room to the nearest cell; a room already there
+  // swaps into the dragged room's old cell.
+  const drop = (ev) => {
+    if (!moving) return;
+    const m = moving;
+    moving = null;
+    if (!m.dragging || ev.type === "pointercancel") {
+      if (m.dragging) renderMap();
+      return;
+    }
+    dragged = true;
+    setTimeout(() => { dragged = false; }, 0);
+    const cell = [Math.round(m.x / CELL_W), Math.round(m.y / CELL_H)];
+    freezeLayout();
+    for (const [id, [x, y]] of positions) {
+      if (id !== m.id && x === cell[0] && y === cell[1]) pins.set(id, m.from);
+    }
+    pins.set(m.id, cell);
+    savePins();
+    renderMap();
+  };
+  svg.addEventListener("pointerup", drop);
+  svg.addEventListener("pointercancel", drop);
+
   let drag = null;
   svg.addEventListener("pointerdown", (ev) => {
-    if (ev.target.closest(".room")) return;
+    if (ev.target.closest(".room, .fixable")) return;
     drag = { x: ev.clientX, y: ev.clientY, vx: view.x, vy: view.y };
     svg.setPointerCapture(ev.pointerId);
     svg.classList.add("dragging");
@@ -951,7 +1127,10 @@ function zoom(factor) {
   $("erase-map").addEventListener("click", async () => {
     if (!state) return;
     // Clear the map at once; the server erases its copy at the next turn.
+    // Rooms placed by hand go too.
     erasing = true;
+    pins.clear();
+    savePins();
     renderMap();
     fit();
     const ok = await fetch("/erase-map", { method: "POST" }).then((res) => res.ok, () => false);

@@ -133,13 +133,18 @@ updates each time the game waits for input:
 
 - **Map**: rooms you have visited, laid out by the compass directions you
   moved in. Up/down/in/out moves are dashed; moves with no direction (such as
-  teleports) are dotted. A move is labeled with its direction where the
+  teleports) are dotted, and a line passing under a room it doesn't
+  connect fades gradually as it nears the room. A move is labeled with its direction where the
   layout can't show it, as in deliberately twisty mazes (north from one
   room, but west to come back), and an arrowhead marks a way you've only
   gone one way: perhaps one-way by design, perhaps the way back is
-  untried. Drag to pan, scroll to zoom. Fit shows the whole map (or
-  centers on you) and follows you again; Reset erases the map and starts
-  it again from the room you're in.
+  untried. Click a compass label to move the room so that direction holds.
+  Drag a room to move it, snapping to the grid (dropping it on another
+  swaps the two). Either way the other rooms stay put; the browser
+  remembers the layout for each story, and adds new rooms around it. Drag elsewhere to pan,
+  scroll to zoom. Fit shows the whole map (or centers on you) and follows
+  you again; Reset erases the map, and where you put rooms, and starts it
+  again from the room you're in.
 - **Objects**: the full object tree, with recently changed objects
   highlighted. Selecting an object shows its links, attributes and
   properties.

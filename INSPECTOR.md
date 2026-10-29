@@ -10,13 +10,6 @@ Disabled on space-constrained devices, like phase 1.
 * A merge button in a tab bar merges its panel into the one above or below (same width), else to the left or right (same height); the merged tabs stay behind the active one.
 * Minimum panel sizes.
 
-## Non-Euclidean map
-
-* if an edge crosses a room, fade the line (hint: room has an opacity shadow)
-* Clicking a direction label rearranges the map so that direction holds.
-* Rooms can be dragged, snapping to the grid; dragging starts only after a small movement, so a click still selects.
-* Rearranged and dragged positions persist per story and override the automatic layout; Reset clears them with the map.
-
 ## Debugger
 
 The inspector's AI partner access applies. Stepping waits for the VM step API (`runUntilInput`) in DECOUPLE.md.

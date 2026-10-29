@@ -16,11 +16,37 @@
         .seeds = .{ 1, 2, 3 },
         .expect = "Your score is 10 (total of 350 points), in 38 moves.",
     },
+    // The shortest scripts found, each for its own seed.
+    .{
+        .script = "zork1.r119-880429.short8.txt",
+        .story = "zork1",
+        .seeds = .{8},
+        .expect = "Your score is 350 (total of 350 points)",
+    },
+    .{
+        .script = "zork1.r119-880429.short9.txt",
+        .story = "zork1",
+        .seeds = .{9},
+        .expect = "Your score is 350 (total of 350 points)",
+    },
+    .{
+        .script = "zork1.r119-880429.short14.txt",
+        .story = "zork1",
+        .seeds = .{14},
+        .expect = "Your score is 350 (total of 350 points)",
+    },
     .{
         .script = "zork2.r63-860811.opening.txt",
         .story = "zork2",
         .seeds = .{ 1, 2, 3 },
         .expect = "Inside the Barrow",
+    },
+    .{
+        // All 400 points.
+        .script = "zork2.r63-860811.complete0.txt",
+        .story = "zork2",
+        .seeds = .{0},
+        .expect = "Your score would be 400 (total of 400 points)",
     },
     .{
         .script = "zork3.r25-860811.opening.txt",

@@ -1,0 +1,281 @@
+north
+north
+up
+take egg
+down
+south
+east
+open window
+west
+west
+take lamp and sword
+move rug
+open trap door
+turn on lamp
+down
+south
+east
+take painting
+west
+north
+north
+kill troll with sword
+kill troll with sword
+kill troll with sword
+kill troll with sword
+kill troll with sword
+kill troll with sword
+west
+south
+east
+up
+take coins
+southwest
+east
+south
+southeast
+ulysses
+east
+east
+open case
+put all except lamp in case
+open trap door
+down
+north
+east
+east
+east
+echo
+take bar
+up
+east
+north
+take matches
+north
+push yellow button
+look
+take wrench and screwdriver
+south
+south
+turn bolt with wrench
+drop wrench
+west
+wait
+wait
+north
+take trunk
+north
+north
+take trident
+south
+take pump
+south
+south
+east
+down
+inflate plastic with pump
+drop pump
+up
+south
+down
+west
+west
+west
+south
+up
+put all except lamp and matches and screwdriver in case
+east
+look
+open sack
+take garlic
+up
+take rope
+down
+west
+down
+north
+east
+east
+southeast
+east
+tie rope to railing
+down
+take torch
+down
+take bell
+south
+take book and candles
+down
+look
+down
+ring bell
+take candles
+light match
+light candles with match
+read book
+look
+south
+take skull
+drop book and candles
+north
+up
+north
+touch mirror
+north
+west
+north
+west
+north
+east
+put torch and screwdriver in basket
+north
+down
+east
+northeast
+southeast
+southwest
+down
+down
+south
+take coal
+north
+up
+up
+north
+east
+south
+north
+up
+south
+put coal in basket
+lower basket
+north
+down
+east
+northeast
+southeast
+southwest
+down
+down
+west
+drop all
+west
+take all from basket
+south
+open lid
+put coal in machine
+close lid
+turn switch with screwdriver
+open lid
+take diamond
+drop screwdriver
+north
+put all in basket
+east
+take lamp and garlic and skull
+east
+up
+up
+north
+east
+south
+north
+take bracelet
+up
+south
+raise basket
+take all from basket
+west
+take jade
+south
+east
+south
+down
+up
+put all except lamp in case
+take egg and sword
+west
+west
+up
+give egg to thief
+kill thief with sword
+take sword
+kill thief with sword
+kill thief with sword
+take all except sword and stiletto
+down
+east
+east
+put all except lamp and egg and canary in case
+down
+north
+east
+east
+southeast
+east
+down
+down
+down
+take coffin
+up
+south
+pray
+wind canary
+take bauble
+east
+south
+east
+west
+west
+open coffin
+take sceptre
+take canary
+put all except lamp and sceptre in case
+down
+north
+east
+east
+east
+up
+east
+down
+put sceptre in boat
+enter boat
+launch
+wait
+wait
+wait
+wait
+take buoy
+east
+get out of boat
+take sceptre
+open buoy
+take emerald and shovel
+northeast
+dig in sand with shovel
+dig in sand with shovel
+dig in sand with shovel
+dig in sand with shovel
+take scarab
+southwest
+south
+south
+wave sceptre
+west
+west
+take pot
+southwest
+up
+up
+northwest
+west
+west
+west
+put all except lamp in case
+east
+east
+south
+west
+southwest
+west

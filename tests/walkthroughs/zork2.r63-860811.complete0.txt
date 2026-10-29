@@ -1,0 +1,293 @@
+take sword and lantern
+turn on lantern
+south
+south
+northeast
+south
+southwest
+south
+southeast
+enter gazebo
+take teapot, mat, opener and matchbook
+out
+south
+south
+west
+southeast
+answer "a well"
+east
+take necklace
+east
+west
+west
+down
+north
+north
+fill teapot with water
+north
+up
+put mat under door
+open lid
+put opener in keyhole
+pull mat
+take key
+take opener
+unlock door with key
+open door
+north
+drop opener and key
+take sphere
+south
+down
+west
+north
+hit dragon with sword
+south
+hit dragon with sword
+south
+hit dragon with sword
+west
+west
+take ruby
+east
+east
+north
+north
+north
+open chest
+open chest
+take statuette
+south
+east
+east
+wait
+down
+south
+east
+east
+north
+wait
+enter gazebo
+wait
+wait
+drop rose, statuette, ruby, necklace and sphere
+out
+south
+south
+west
+wait
+southeast
+answer "a well"
+east
+east
+enter bucket
+pour water in bucket
+get out of bucket
+east
+take red cake, orange cake and blue cake
+eat green cake
+east
+throw red cake in pool
+take candies
+west
+eat blue cake
+drop orange cake
+northwest
+robot, east
+east
+robot, push triangular button
+robot, push triangular button
+robot, south
+south
+take sphere
+robot, lift cage
+take sphere
+north
+west
+southeast
+west
+enter bucket
+fill teapot with water
+get out of bucket
+west
+west
+down
+open box
+take violin
+southwest
+take string
+southwest
+give candy to lizard
+unlock door with gold key
+open door
+south
+drop violin, key and teapot
+north
+north
+northeast
+east
+north
+north
+enter gazebo
+take sphere and newspaper
+out
+south
+south
+west
+southwest
+southwest
+south
+west
+west
+throw sword at aquarium
+take clear sphere
+east
+put red sphere on ruby stand
+put blue sphere on sapphire stand
+put clear sphere on diamond stand
+take black sphere
+south
+put black sphere in circle
+north
+east
+north
+north
+northeast
+north
+take brick
+south
+northwest
+west
+west
+south
+open receptacle
+put newspaper in receptacle
+enter basket
+light match
+light newspaper with match
+wait
+wait
+west
+tie wire to hook
+get out of basket
+take zorkmid
+south
+open purple book
+take stamp
+north
+enter basket
+untie wire
+wait
+wait
+wait
+west
+tie wire to hook
+get out of basket
+south
+put string in brick
+put brick in hole
+light match
+light string with match
+north
+south
+take crown
+north
+enter basket
+untie wire
+close receptacle
+wait
+wait
+wait
+wait
+wait
+wait
+wait
+get out of basket
+north
+east
+east
+north
+north
+west
+west
+northeast
+east
+south
+take portrait
+north
+walk through north wall
+walk through south wall
+walk through north wall
+take bills
+walk through north wall
+drop portrait and bills
+west
+west
+take portrait and bills
+walk through north wall
+south
+east
+east
+south
+south
+southeast
+east
+north
+north
+enter gazebo
+drop matchbook
+take statuette, necklace and ruby
+out
+south
+south
+west
+southwest
+southwest
+south
+west
+south
+give bills to demon
+give portrait to demon
+give crown to demon
+give stamp to demon
+give zorkmid to demon
+give statuette to demon
+give necklace to demon
+give ruby to demon
+north
+east
+take violin and key
+west
+south
+give violin to demon
+give key to demon
+demon, give me the wand
+take wand
+north
+east
+north
+north
+northeast
+south
+wave wand at menhir
+say "float" to menhir
+southwest
+take collar
+northeast
+south
+down
+north
+southeast
+northeast
+northwest
+southwest
+south
+down
+put collar on dog
+east
+open door
+south
+close door
+turn off lamp
+open secret door
+south

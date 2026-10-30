@@ -89,6 +89,14 @@ pub const Event = struct {
 };
 
 /// `GET /me`: who the server takes the client for.
+/// The web server's answer to a message posted to `/mcp`: a JSON-RPC
+/// response (empty for a notification) and, for a new session, its id.
+pub const McpReply = struct {
+    status: u16,
+    body: []const u8,
+    session: ?[]const u8 = null,
+};
+
 pub const Me = struct {
     name: ?[]const u8,
     ai: bool,

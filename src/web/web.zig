@@ -38,6 +38,9 @@
 //!                         changing nothing
 //!   GET /log              the audit log page, open to every player
 //!   GET /events?since=N   audit log events after N (long polling)
+//!   POST /mcp             a message for an AI partner's MCP session
+//!                         (streamable HTTP, this machine only); DELETE
+//!                         ends the session
 //!
 //! A request comes from an AI partner when it has `X-Player: <name>` (AI
 //! partners connect from this machine). Otherwise it comes from a person:
@@ -85,6 +88,15 @@ pub const Routes = struct {
     }
 };
 
+/// The MCP service, which answers messages posted to `/mcp`.
+pub const Mcp = struct {
+    context: *anyopaque,
+    /// Answers a message; `session` is the request's Mcp-Session-Id.
+    post: *const fn (context: *anyopaque, arena: Allocator, session: ?[]const u8, body: []const u8) anyerror!protocol.McpReply,
+    /// Ends a session, returning whether there was one.
+    end: *const fn (context: *anyopaque, session: []const u8) bool,
+};
+
 pub const Answer = struct {
     status: []const u8,
     content_type: []const u8,
@@ -103,6 +115,8 @@ pub const Server = struct {
     gpa: Allocator,
     io: Io,
     routes: Routes,
+    /// Set before `serve`, or null to have no `/mcp`.
+    mcp: ?Mcp = null,
     hub: *Hub,
     group: *Group,
     port: u16,
@@ -279,6 +293,7 @@ pub const Server = struct {
             if (!std.mem.eql(u8, path, s.routes.ai_path)) return s.refuse(w, client, method, path, "AI partners only read the inspector's snapshots\n");
             if (!s.group.mayInspect(player)) return s.refuse(w, client, method, path, "nobody has let you read the inspector\n");
         }
+        if (std.mem.eql(u8, path, "/mcp")) return s.mcpRoute(w, r, &headers, method, local, client);
         // This machine needs no password; drop one from an invite link.
         if (local and std.mem.eql(u8, method, "GET") and std.mem.eql(u8, path, "/") and queryValue(query, "password") != null) {
             return redirectHome(w, "");
@@ -407,6 +422,36 @@ pub const Server = struct {
             return sendJson(w, arena, try s.group.events(arena, since));
         }
         return sendResponse(w, "404 Not Found", "text/plain", "not found\n");
+    }
+
+    /// Serves the MCP endpoint to partners on this machine. Their game
+    /// requests come back through the other routes, named by X-Player.
+    fn mcpRoute(s: *Server, w: *Io.Writer, r: *Io.Reader, headers: *const Headers, method: []const u8, local: bool, client: []const u8) !void {
+        const mcp = s.mcp orelse return sendResponse(w, "404 Not Found", "text/plain", "not found\n");
+        if (!local) return s.refuse(w, client, method, "/mcp", "MCP clients connect from this machine\n");
+        if (std.mem.eql(u8, method, "DELETE")) {
+            const session = headers.mcp_session orelse return sendResponse(w, "400 Bad Request", "text/plain", "missing Mcp-Session-Id\n");
+            if (!mcp.end(mcp.context, session)) return sendResponse(w, "404 Not Found", "text/plain", "unknown session\n");
+            return sendResponse(w, "204 No Content", "text/plain", "");
+        }
+        // The service sends no messages of its own, so there is no stream
+        // to GET.
+        if (!std.mem.eql(u8, method, "POST")) return sendResponseHeaders(w, "405 Method Not Allowed", "text/plain", "Allow: POST, DELETE\r\n", "use POST\n");
+        const body = (try readBody(r, w, headers)) orelse return;
+        var arena_state: std.heap.ArenaAllocator = .init(s.gpa);
+        defer arena_state.deinit();
+        const arena = arena_state.allocator();
+        const answer = try mcp.post(mcp.context, arena, headers.mcp_session, body);
+        const status = switch (answer.status) {
+            200 => "200 OK",
+            202 => "202 Accepted",
+            404 => "404 Not Found",
+            503 => "503 Service Unavailable",
+            else => "400 Bad Request",
+        };
+        var extra_buf: [96]u8 = undefined;
+        const extra = if (answer.session) |id| try std.fmt.bufPrint(&extra_buf, "Mcp-Session-Id: {s}\r\n", .{id}) else "";
+        return sendResponseHeaders(w, status, "application/json", extra, answer.body);
     }
 
     /// Sends another module's answer, noting it in the audit log.
@@ -701,6 +746,7 @@ const Headers = struct {
     player_name: ?[]u8 = null,
     person_name: ?[]u8 = null,
     cookie: ?[]u8 = null,
+    mcp_session: ?[]u8 = null,
 
     /// The AI partner named by X-Player, or null for a person.
     fn ai(h: *const Headers) ?[]const u8 {
@@ -739,6 +785,8 @@ const Headers = struct {
             &h.person_name
         else if (std.ascii.eqlIgnoreCase(name, "cookie"))
             &h.cookie
+        else if (std.ascii.eqlIgnoreCase(name, "mcp-session-id"))
+            &h.mcp_session
         else {
             if (std.ascii.eqlIgnoreCase(name, "content-length")) {
                 h.content_length = std.fmt.parseInt(usize, value, 10) catch null;
@@ -750,7 +798,7 @@ const Headers = struct {
     }
 
     fn deinit(h: *Headers, gpa: Allocator) void {
-        for ([_]?[]u8{ h.host, h.origin, h.user_agent, h.player_name, h.person_name, h.cookie }) |v| if (v) |slice| gpa.free(slice);
+        for ([_]?[]u8{ h.host, h.origin, h.user_agent, h.player_name, h.person_name, h.cookie, h.mcp_session }) |v| if (v) |slice| gpa.free(slice);
     }
 };
 

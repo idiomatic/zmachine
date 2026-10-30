@@ -1,9 +1,10 @@
-//! A Model Context Protocol server that lets an AI partner, such as
+//! A Model Context Protocol service that lets an AI partner, such as
 //! Claude, play a game running with `--web [port]` alongside the person at
-//! the keyboard and any other AI partners. Each partner runs its own server
-//! and names itself with the `introduce` tool. It speaks JSON-RPC over
-//! standard input and output, one message per line, and talks to the
-//! game's web server on 127.0.0.1.
+//! the keyboard and any other AI partners. The web server hands it the
+//! JSON-RPC messages posted to `/mcp` (streamable HTTP, answered with plain
+//! JSON). Each partner has a session, made by `initialize`, and names itself
+//! with the `introduce` tool. The service talks back to the game's web
+//! server on 127.0.0.1.
 
 const std = @import("std");
 const Io = std.Io;
@@ -93,9 +94,17 @@ fn oneLine(comptime text: []const u8) []const u8 {
 const first_read_limit = 6000;
 
 const Session = struct {
+    /// Sent to the client as Mcp-Session-Id.
+    id: [32]u8,
     gpa: Allocator,
     io: Io,
     port: u16,
+    /// Held while a message is handled, so a partner's calls run in turn.
+    mutex: Io.Mutex = .init,
+    /// How many messages are being handled, and when the session was last
+    /// used (the service's tick), to drop the one idle longest.
+    busy: u32 = 0,
+    used: u64 = 0,
     /// This partner's name, sent as X-Player, once it has introduced
     /// itself.
     name: ?[]const u8 = null,
@@ -117,31 +126,139 @@ const Post = protocol.Post;
 const Discussion = protocol.Discussion;
 const Snapshot = protocol.Snapshot;
 
-/// Serves MCP requests from standard input until it closes.
-pub fn run(gpa: Allocator, io: Io, port: u16) !void {
-    var session: Session = .{ .gpa = gpa, .io = io, .port = port };
-    defer if (session.name) |name| gpa.free(name);
-    var in_buf: [64 * 1024]u8 = undefined;
-    var stdin: Io.File.Reader = .initStreaming(.stdin(), io, &in_buf);
-    var out_buf: [8192]u8 = undefined;
-    var stdout: Io.File.Writer = .initStreaming(.stdout(), io, &out_buf);
-    const w = &stdout.interface;
+/// The most partners connected at once.
+const max_sessions = 64;
 
-    while (try stdin.interface.takeDelimiter('\n')) |line| {
-        if (std.mem.trim(u8, line, " \t\r").len == 0) continue;
-        var arena: std.heap.ArenaAllocator = .init(gpa);
-        defer arena.deinit();
-        try handle(&session, arena.allocator(), line, w);
-        // The client went away.
-        w.flush() catch return;
+/// The partners' sessions.
+pub const Service = struct {
+    gpa: Allocator,
+    io: Io,
+    port: u16,
+    mutex: Io.Mutex = .init,
+    sessions: std.StringHashMapUnmanaged(*Session) = .empty,
+    tick: u64 = 0,
+
+    pub fn init(gpa: Allocator, io: Io, port: u16) Service {
+        return .{ .gpa = gpa, .io = io, .port = port };
     }
-}
 
-fn handle(s: *Session, arena: Allocator, line: []const u8, w: *Io.Writer) !void {
-    const message = json.parseFromSliceLeaky(json.Value, arena, line, .{}) catch
-        return writeError(w, .null, -32700, "parse error");
-    if (message != .object) return writeError(w, .null, -32600, "invalid request");
-    const obj = message.object;
+    pub fn deinit(sv: *Service) void {
+        var it = sv.sessions.valueIterator();
+        while (it.next()) |session| destroy(sv.gpa, session.*);
+        sv.sessions.deinit(sv.gpa);
+    }
+
+    fn destroy(gpa: Allocator, session: *Session) void {
+        if (session.name) |name| gpa.free(name);
+        gpa.destroy(session);
+    }
+
+    /// Answers one message posted to `/mcp`. `session_id` is the request's
+    /// Mcp-Session-Id, if it had one.
+    pub fn post(sv: *Service, arena: Allocator, session_id: ?[]const u8, body: []const u8) !protocol.McpReply {
+        var out: Io.Writer.Allocating = .init(arena);
+        const w = &out.writer;
+        const message = json.parseFromSliceLeaky(json.Value, arena, body, .{}) catch {
+            try writeError(w, .null, -32700, "parse error");
+            return reply(400, &out);
+        };
+        // Batches are gone from the protocol.
+        if (message != .object) {
+            try writeError(w, .null, -32600, "invalid request");
+            return reply(400, &out);
+        }
+        const id = message.object.get("id") orelse .null;
+        const method = message.object.get("method");
+        const opens = method != null and method.? == .string and std.mem.eql(u8, method.?.string, "initialize");
+
+        const session = if (opens) sv.open() catch |err| switch (err) {
+            error.TooManySessions => {
+                try writeError(w, id, -32000, "too many partners are connected");
+                return reply(503, &out);
+            },
+            else => return err,
+        } else sv.find(session_id orelse {
+            try writeError(w, id, -32600, "missing Mcp-Session-Id; initialize first");
+            return reply(400, &out);
+        }) orelse {
+            try writeError(w, id, -32001, "unknown session; initialize again");
+            return reply(404, &out);
+        };
+        defer sv.release(session);
+
+        session.mutex.lockUncancelable(sv.io);
+        defer session.mutex.unlock(sv.io);
+        try handle(session, arena, message.object, w);
+        var answer = reply(200, &out);
+        // A notification or a response gets no message back.
+        if (answer.body.len == 0) answer.status = 202;
+        if (opens) answer.session = try arena.dupe(u8, &session.id);
+        return answer;
+    }
+
+    /// Ends a session, as the client's DELETE asks.
+    pub fn end(sv: *Service, session_id: []const u8) bool {
+        sv.mutex.lockUncancelable(sv.io);
+        defer sv.mutex.unlock(sv.io);
+        const session = sv.sessions.get(session_id) orelse return false;
+        if (session.busy == 0) {
+            _ = sv.sessions.remove(session_id);
+            destroy(sv.gpa, session);
+        }
+        return true;
+    }
+
+    fn reply(status: u16, out: *Io.Writer.Allocating) protocol.McpReply {
+        return .{ .status = status, .body = std.mem.trimEnd(u8, out.written(), "\n") };
+    }
+
+    /// Makes a session with a random id, dropping the one idle longest if
+    /// there are too many.
+    fn open(sv: *Service) !*Session {
+        const session = try sv.gpa.create(Session);
+        errdefer sv.gpa.destroy(session);
+        var raw: [16]u8 = undefined;
+        try sv.io.randomSecure(&raw);
+        session.* = .{ .id = std.fmt.bytesToHex(raw, .lower), .gpa = sv.gpa, .io = sv.io, .port = sv.port };
+
+        sv.mutex.lockUncancelable(sv.io);
+        defer sv.mutex.unlock(sv.io);
+        if (sv.sessions.count() >= max_sessions) {
+            var oldest: ?*Session = null;
+            var it = sv.sessions.valueIterator();
+            while (it.next()) |other| {
+                if (other.*.busy == 0 and (oldest == null or other.*.used < oldest.?.used)) oldest = other.*;
+            }
+            const idle = oldest orelse return error.TooManySessions;
+            _ = sv.sessions.remove(&idle.id);
+            destroy(sv.gpa, idle);
+        }
+        sv.tick += 1;
+        session.used = sv.tick;
+        session.busy = 1;
+        try sv.sessions.put(sv.gpa, &session.id, session);
+        return session;
+    }
+
+    fn find(sv: *Service, id: []const u8) ?*Session {
+        sv.mutex.lockUncancelable(sv.io);
+        defer sv.mutex.unlock(sv.io);
+        const session = sv.sessions.get(id) orelse return null;
+        sv.tick += 1;
+        session.used = sv.tick;
+        session.busy += 1;
+        return session;
+    }
+
+    fn release(sv: *Service, session: *Session) void {
+        sv.mutex.lockUncancelable(sv.io);
+        defer sv.mutex.unlock(sv.io);
+        session.busy -= 1;
+    }
+};
+
+/// Handles one JSON-RPC message, writing its response, if it has one.
+fn handle(s: *Session, arena: Allocator, obj: json.ObjectMap, w: *Io.Writer) !void {
     const method_value = obj.get("method") orelse return; // a response; we send no requests
     // Notifications, such as notifications/initialized, have no id and
     // get no response.
@@ -171,7 +288,7 @@ fn handle(s: *Session, arena: Allocator, line: []const u8, w: *Io.Writer) !void 
         const result = call(s, arena, name.string, args) catch |err| switch (err) {
             error.UnknownTool => return writeError(w, id, -32602, "unknown tool"),
             error.ConnectionRefused => Result{
-                .text = try std.fmt.allocPrint(arena, "Cannot reach the game on port {d}. Is zmachine running with --web {d}?", .{ s.port, s.port }),
+                .text = try std.fmt.allocPrint(arena, "Cannot reach the game on port {d}.", .{s.port}),
                 .is_error = true,
             },
             else => Result{
@@ -679,4 +796,32 @@ test "tool list is valid JSON" {
     defer parsed.deinit();
     try std.testing.expectEqual(@as(usize, 10), parsed.value.array.items.len);
     try std.testing.expect(std.mem.indexOfScalar(u8, tools_json, '\n') == null);
+}
+
+test "a partner initializes, then lists tools" {
+    var service: Service = .init(std.testing.allocator, std.testing.io, 1);
+    defer service.deinit();
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const opened = try service.post(a, null, "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    try std.testing.expectEqual(@as(u16, 200), opened.status);
+    try std.testing.expectEqual(@as(usize, 32), opened.session.?.len);
+
+    const listed = try service.post(a, opened.session, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}");
+    try std.testing.expectEqual(@as(u16, 200), listed.status);
+    try std.testing.expect(std.mem.indexOf(u8, listed.body, "read_game") != null);
+
+    const note = try service.post(a, opened.session, "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
+    try std.testing.expectEqual(@as(u16, 202), note.status);
+    try std.testing.expectEqual(@as(usize, 0), note.body.len);
+
+    try std.testing.expectEqual(@as(u16, 400), (try service.post(a, null, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\"}")).status);
+    try std.testing.expectEqual(@as(u16, 404), (try service.post(a, "nope", "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\"}")).status);
+    try std.testing.expectEqual(@as(u16, 400), (try service.post(a, null, "not json")).status);
+
+    try std.testing.expect(service.end(opened.session.?));
+    try std.testing.expect(!service.end(opened.session.?));
+    try std.testing.expectEqual(@as(u16, 404), (try service.post(a, opened.session, "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"ping\"}")).status);
 }

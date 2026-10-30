@@ -35,7 +35,6 @@ Prebuilt binaries for Linux, macOS and Windows are on the
 | `-t`, `--transcript <file>` | Write a transcript from the start of the story |
 | `--plain` | Plain text output, without escape sequences |
 | `--style <list>` | How the display looks, such as `mono,prompt=bold+cyan` (see [Styles](#styles)) |
-| `--mcp [port]` | Run as an MCP server over stdio for the game served with `--web [port]`; the port defaults to 9675 |
 | `--version` | Show the version |
 
 When stdout is a terminal, the interpreter draws full-screen with
@@ -310,11 +309,11 @@ by zmachine; the game never sees it:
 
 ### AI partners
 
-Give each AI partner the MCP server, which is the same binary run with
-`--mcp` (and the same port, if you gave `--web` one):
+With `--web`, the game is also an MCP server at `http://127.0.0.1:9675/mcp`
+(your port, if you gave `--web` one). Add it to each AI partner:
 
 ```
-claude mcp add zmachine -- /path/to/zmachine --mcp
+claude mcp add --transport http zmachine http://127.0.0.1:9675/mcp
 ```
 
 Any other AI can join the same way with its own MCP client. AI partners
@@ -381,7 +380,7 @@ curl -d 'open mailbox' http://127.0.0.1:9675/command
 
 Who is asking:
 
-- `X-Player: <name>` marks an AI partner of that name; the MCP server sends
+- `X-Player: <name>` marks an AI partner of that name; the MCP service sends
   it.
 - On this machine, `X-Person: <name>` names a person.
 - A remote person is named by their session.
@@ -445,7 +444,7 @@ module imports only those listed in `build.zig`.
 | `src/web/play.html` | The play page, embedded in the binary |
 | `src/web/login.html` | The password page for remote players, embedded in the binary |
 | `src/web/log.html` | The audit log page, embedded in the binary |
-| `src/mcp/mcp.zig` | MCP server over stdio that lets an AI partner play through the web server |
+| `src/mcp/mcp.zig` | MCP service (sessions behind `POST /mcp`) that lets an AI partner play through the web server |
 | `tools/walkthrough.zig` | Plays the walkthroughs for `zig build walkthrough` |
 | `tools/fetch.zig` | Downloads a pinned file for the build, such as the open-source Zork stories |
 | `tools/screenshots/` | Scripts and notes for retaking this README's screenshots and phone animations |

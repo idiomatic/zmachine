@@ -1,6 +1,6 @@
-//! The MCP server for AI partners.
+//! The MCP service for AI partners.
 
-pub const run = @import("mcp.zig").run;
+pub const Service = @import("mcp.zig").Service;
 
 test {
     _ = @import("mcp.zig");

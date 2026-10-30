@@ -14,6 +14,7 @@ const Screen = @import("console").Screen;
 const commands = @import("commands.zig");
 const TerminalInput = @import("console").TerminalInput;
 const mcp = @import("mcp");
+const protocol = @import("protocol");
 const terminal = @import("console").terminal;
 const web = @import("web");
 const build_options = @import("build_options");
@@ -41,8 +42,6 @@ const usage =
     \\  --plain            Plain text output, without escape sequences
     \\  --style <list>     Choose how the display looks (see Styles); may be
     \\                     repeated, and ZMACHINE_STYLE is applied first
-    \\  --mcp [port]       Run as an MCP server over stdio, so an AI partner
-    \\                     can play the game served with `--web [port]`
     \\  -h, --help         Show this help
     \\  --version          Show the version
     \\
@@ -63,7 +62,7 @@ const usage =
     \\
 ;
 
-/// The port `--web` and `--mcp` use when none is given: ZORK on a phone
+/// The port `--web` uses when none is given: ZORK on a phone
 /// keypad.
 const default_port: u16 = 9675;
 
@@ -76,12 +75,10 @@ const Options = struct {
     transcript: ?[]const u8 = null,
     plain: bool = false,
     looks: Screen.Looks = .{},
-    mcp_port: ?u16 = null,
 };
 
 const Command = union(enum) {
     run: Options,
-    mcp: u16,
     usage,
     version,
 };
@@ -116,8 +113,6 @@ fn parseArgs(args: []const []const u8, style: ?[]const u8) !Command {
             i += 1;
             if (i >= args.len) return error.MissingArgument;
             options.transcript = args[i];
-        } else if (std.mem.eql(u8, arg, "--mcp")) {
-            options.mcp_port = optionalPort(args, &i);
         } else if (std.mem.eql(u8, arg, "--plain")) {
             options.plain = true;
         } else if (std.mem.eql(u8, arg, "--style")) {
@@ -130,7 +125,6 @@ fn parseArgs(args: []const []const u8, style: ?[]const u8) !Command {
             return error.InvalidArgument;
         }
     }
-    if (options.mcp_port) |port| return .{ .mcp = port };
     if ((options.listen != null or options.grant_inspector) and options.web_port == null) options.web_port = default_port;
     options.story_path = story_path orelse return .usage;
     return .{ .run = options };
@@ -156,6 +150,16 @@ fn saveName(arena: std.mem.Allocator, story_path: []const u8) ![]const u8 {
 }
 
 /// The inspector's routes, for the web server.
+fn mcpPost(context: *anyopaque, arena: std.mem.Allocator, session: ?[]const u8, body: []const u8) anyerror!protocol.McpReply {
+    const service: *mcp.Service = @ptrCast(@alignCast(context));
+    return service.post(arena, session, body);
+}
+
+fn mcpEnd(context: *anyopaque, session: []const u8) bool {
+    const service: *mcp.Service = @ptrCast(@alignCast(context));
+    return service.end(session);
+}
+
 fn inspectorRoutes(inspector: *Inspector) web.Routes {
     return .{
         .context = inspector,
@@ -206,10 +210,6 @@ pub fn main(init: std.process.Init) !u8 {
         },
         .version => {
             try Io.File.stdout().writeStreamingAll(io, "zmachine " ++ build_options.version ++ "\n");
-            return 0;
-        },
-        .mcp => |port| {
-            try mcp.run(gpa, io, port);
             return 0;
         },
     };
@@ -265,6 +265,9 @@ pub fn main(init: std.process.Init) !u8 {
             try stderr.flush();
             return 1;
         };
+        const service = try arena.create(mcp.Service);
+        service.* = .init(gpa, io, port);
+        server.mcp = .{ .context = service, .post = mcpPost, .end = mcpEnd };
         const thread = try std.Thread.spawn(.{}, web.Server.serve, .{server});
         thread.detach();
         machine.observer = inspector.observer();
@@ -332,6 +335,5 @@ test "ports default to 9675" {
     try std.testing.expectEqualStrings("zork1.z3", run.story_path);
     const given = (try parseArgs(&.{ "zmachine", "-w", "8080", "zork1.z3" }, null)).run;
     try std.testing.expectEqual(8080, given.web_port.?);
-    try std.testing.expectEqual(9675, (try parseArgs(&.{ "zmachine", "--mcp" }, null)).mcp);
-    try std.testing.expectEqual(1980, (try parseArgs(&.{ "zmachine", "--mcp", "1980" }, null)).mcp);
+    try std.testing.expectError(error.InvalidArgument, parseArgs(&.{ "zmachine", "--mcp" }, null));
 }

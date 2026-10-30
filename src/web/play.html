@@ -290,6 +290,7 @@ form.say button { background: var(--you); }
   <form id="name-form" autocomplete="off">
     <h2 id="overlay-title">Your name</h2>
     <p id="overlay-text">The others see it beside your messages and commands.</p>
+    <p id="overlay-players" hidden></p>
     <input id="name-input" aria-label="Your name" maxlength="32" placeholder="Name">
     <button id="name-button">Join</button>
   </form>
@@ -483,7 +484,8 @@ function updatePlayers() {
     chips.push(playerChip(mine ? "You" : p.name, p.ai, p.leader, mine, mine ? null : colorFor(p.name), `${p.name}: ${kind}${reads}`, actions));
   }
   document.getElementById("players").replaceChildren(...chips);
-  const label = others.length ? listNames(others.map((p) => p.name)) : "the others";
+  // Names, as many as fit the box; otherwise everyone.
+  const label = others.length === 0 ? "the others" : others.length <= 2 ? listNames(others.map((p) => p.name)) : "everyone";
   const say = document.getElementById("say-input");
   say.placeholder = `Tell ${label} what you think`;
   say.setAttribute("aria-label", `Message to ${label}`);
@@ -833,6 +835,25 @@ function askName(why) {
   overlay.hidden = false;
   document.getElementById("name-input").value = myName || "";
   document.getElementById("name-input").focus();
+  warnCrowd();
+}
+
+// Says who is already playing, before a newcomer joins.
+async function warnCrowd() {
+  const note = document.getElementById("overlay-players");
+  note.hidden = true;
+  try {
+    const res = await api("/discussion?since=0");
+    if (!res.ok) return;
+    const here = (await res.json()).players;
+    if (here.length === 0) return;
+    const names = here.map((p) => p.name);
+    const shown = names.length > 4 ? names.slice(0, 4).join(", ") + ` and ${names.length - 4} more` : listNames(names);
+    const ai = here.filter((p) => p.ai).length;
+    note.textContent = `${here.length === 1 ? "1 player is" : `${here.length} players are`} already in this game` +
+      `${ai ? ` (${ai} AI)` : ""}: ${shown}.${here.length >= 5 ? " It may be busy." : ""}`;
+    note.hidden = false;
+  } catch {}
 }
 
 async function join(name) {
@@ -862,6 +883,7 @@ function removed(text) {
   document.getElementById("overlay-text").textContent = text.replace(/\.?$/, ".") + " Reload to give the password again.";
   // The same box, with Reload in place of the name field.
   document.getElementById("name-input").hidden = true;
+  document.getElementById("overlay-players").hidden = true;
   document.getElementById("name-button").textContent = "Reload";
   document.getElementById("overlay").hidden = false;
   document.getElementById("name-button").focus();

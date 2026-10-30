@@ -53,6 +53,10 @@ const instructions =
     \\- Pass the lead back, or to a person, when asked.
     \\- Change the mode only when the group wants it.
     \\
+    \\To start the game over, send_command restart, then y when it asks to
+    \\confirm. That erases everyone's progress, so do it only when the group
+    \\wants it (in debate, suggest it).
+    \\
     \\Think out loud with share_thoughts in either mode: what you noticed,
     \\what you think the puzzle is, and what you would try. Keep it short.
     \\

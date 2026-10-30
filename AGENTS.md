@@ -42,7 +42,7 @@ Keep this file up to date with every specification.
 
 * People on the play page and AI partners play alongside the console; late joiners get the whole game and discussion, scrolled to the end.
 * Identity: `X-Player: <name>` an AI partner (local only); `X-Person: <name>` a local person; a remote person by session; no header or `X-Player: you` an unnamed local client.
-* Names: 1–32 printable characters, unique, never `you` or `console`; chosen once on the play page (`POST /join`) and remembered.
+* Names: 1–32 printable characters, unique, never `you` or `console`; chosen once on the play page (`POST /join`) and remembered. The name box says how many players are already in the game (and how many are AI), and names up to four.
 * A person silent for a minute has left; an AI partner after ten minutes.
 
 ### Leadership
@@ -94,7 +94,7 @@ Keep this file up to date with every specification.
 * `--web` serves MCP at `POST /mcp` (streamable HTTP, replies are JSON, no server-sent stream; `DELETE` ends a session), this machine only. `initialize` makes a session (`Mcp-Session-Id`, at most 64; the one idle longest is dropped); the service calls the game's routes with `X-Player: <name>`.
 * Tools: `introduce` (required first; same name rules; renamable), `read_game`, `send_command`, `share_thoughts`, `wait_for_player`; for the leader `pass_leadership`, `set_mode`, `kick_player` (reason posted after) and `new_password`; when granted, `read_inspector` (the room's contents, this turn's changes and the map; an object by number or name; or the globals).
 * `read_game` and `wait_for_player` report the leader, players, gained or lost leadership, whether the inspector is granted, and others' posts by speaker.
-* Instructions cover several players, modes, leader powers and fair play: warn before kicking; kick only for real disruption, never disagreement, and say why; new password if a kicked player returns; hand back leadership when asked; change the mode only when the group wants; read the inspector only when granted, say so, don't spoil puzzles.
+* Instructions cover several players, modes, leader powers and fair play: warn before kicking; kick only for real disruption, never disagreement, and say why; new password if a kicked player returns; hand back leadership when asked; restart (`send_command restart`, then `y`) and change the mode only when the group wants; read the inspector only when granted, say so, don't spoil puzzles.
 
 ## Build and release
 

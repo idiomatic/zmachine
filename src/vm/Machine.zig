@@ -63,9 +63,14 @@ transcript: ?*Io.Writer = null,
 transcript_name: []const u8 = "transcript.txt",
 undo: ?Snapshot = null,
 observer: ?Observer = null,
+/// Called after the story restarts, from its `restart` or after it ends.
+on_restart: ?Callback = null,
 /// Default file name for saved games.
 save_name: []const u8,
+/// The player left, or input ran out.
 finished: bool = false,
+/// The story ended (its `quit`): the player may restart, restore or leave.
+ended: bool = false,
 /// `runUntilInput` stopped before the input instruction here, which runs
 /// first when it is called again.
 stopped_at: ?u32 = null,
@@ -88,6 +93,11 @@ pub const Observer = struct {
     context: *anyopaque,
     beforeInput: *const fn (context: *anyopaque, m: *Machine) void,
     afterInput: *const fn (context: *anyopaque, m: *Machine, line: []const u8) void,
+};
+
+pub const Callback = struct {
+    context: *anyopaque,
+    call: *const fn (context: *anyopaque) void,
 };
 
 pub const Error = error{
@@ -214,7 +224,44 @@ fn setupHeader(m: *Machine) void {
 }
 
 pub fn run(m: *Machine) !void {
-    while (try m.runUntilInput(std.math.maxInt(usize)) != .finished) {}
+    while (true) switch (try m.runUntilInput(std.math.maxInt(usize))) {
+        .ended => if (!try m.afterEnd()) return,
+        .finished => return,
+        .input, .limit => {},
+    };
+}
+
+/// Waits at the end of the story. Returns true once it runs again
+/// (`restart` or a successful `restore`), false when the player typed
+/// `quit` or input ran out. Piped input stops at the end, so a script's
+/// leftover lines are not played.
+fn afterEnd(m: *Machine) !bool {
+    const interactive = m.display.capabilities().interactive;
+    if (!interactive) {
+        m.finished = true;
+        return false;
+    }
+    var buf: [512]u8 = undefined;
+    while (true) {
+        try m.printAscii("\n[The game has ended. Type RESTART, RESTORE, or QUIT.]\n");
+        const line = (try m.display.readLine(&buf)) orelse {
+            m.finished = true;
+            return false;
+        };
+        const word = std.mem.trim(u8, line, " \t");
+        if (std.ascii.eqlIgnoreCase(word, "quit")) {
+            m.finished = true;
+            return false;
+        }
+        if (std.ascii.eqlIgnoreCase(word, "restart")) {
+            try m.restart();
+        } else if (!std.ascii.eqlIgnoreCase(word, "restore") or !try m.restoreGame()) {
+            continue;
+        }
+        m.ended = false;
+        m.stopped_at = null;
+        return true;
+    }
 }
 
 /// Why `runUntilInput` stopped.
@@ -223,7 +270,9 @@ pub const Stop = enum {
     input,
     /// It ran as many instructions as it was allowed.
     limit,
-    /// The story ended.
+    /// The story ended (its `quit`); `run` waits for a restart.
+    ended,
+    /// The player left, or input ran out.
     finished,
 };
 
@@ -233,7 +282,7 @@ pub const Stop = enum {
 /// there, reading the input first.
 pub fn runUntilInput(m: *Machine, max_steps: usize) !Stop {
     var steps: usize = 0;
-    while (!m.finished) : (steps += 1) {
+    while (!m.finished and !m.ended) : (steps += 1) {
         if (steps == max_steps) return .limit;
         const resuming = m.stopped_at == m.pc;
         m.stopped_at = null;
@@ -244,7 +293,7 @@ pub fn runUntilInput(m: *Machine, max_steps: usize) !Stop {
         try m.step();
     }
     try m.flushTranscript();
-    return .finished;
+    return if (m.finished) .finished else .ended;
 }
 
 /// Whether the instruction at the program counter reads input: `read`
@@ -651,7 +700,7 @@ fn exec0op(m: *Machine, op: u8) !void {
                 try m.store(@intCast(m.frame_count)); // catch
             }
         },
-        10 => m.finished = true, // quit
+        10 => m.ended = true, // quit
         11 => try m.printZscii(13), // new_line
         12 => if (m.version <= 3) try m.showStatus(), // show_status
         13 => try m.branch(m.verify()), // verify
@@ -1171,6 +1220,7 @@ fn restart(m: *Machine) !void {
     m.memory[0x11] = (m.memory[0x11] & ~@as(u8, 0x03)) | flags2;
     try m.display.eraseWindow(-1);
     m.reset();
+    if (m.on_restart) |c| c.call(c.context);
 }
 
 fn promptFileName(m: *Machine, prompt: []const u8, buf: []u8) !?[]const u8 {

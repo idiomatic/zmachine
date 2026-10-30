@@ -17,6 +17,8 @@ pub const Capabilities = struct {
     styles: bool,
     width: u16,
     height: u16,
+    /// Someone is typing at a terminal, so end-of-game prompts are shown.
+    interactive: bool = false,
 };
 
 pub const VTable = struct {

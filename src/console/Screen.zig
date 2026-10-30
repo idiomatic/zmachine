@@ -278,7 +278,7 @@ pub fn display(s: *Screen) Display {
 }
 
 pub fn capabilities(s: *const Screen) Display.Capabilities {
-    return .{ .styles = s.ansi, .width = s.width, .height = s.height };
+    return .{ .styles = s.ansi, .width = s.width, .height = s.height, .interactive = s.tty_input };
 }
 
 /// Prepares the terminal: clears it and sets up the scroll region.

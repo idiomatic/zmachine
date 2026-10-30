@@ -36,6 +36,8 @@ pub const Kind = enum {
     password,
     /// An AI partner was let read the inspector, or stopped.
     access,
+    /// The game restarted.
+    game,
 };
 
 pub const Event = struct {

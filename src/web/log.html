@@ -71,7 +71,7 @@ tr.command td.kind { color: var(--accent); }
     <thead><tr><th>Time</th><th>Kind</th><th>What</th><th>Client</th></tr></thead>
     <tbody id="rows"></tbody>
   </table>
-  <div class="empty" id="empty">No requests yet. Commands sent with POST /command, lines typed at the keyboard, players joining and leaving, the leadership, kicks, passwords and any use of the object inspector appear here.</div>
+  <div class="empty" id="empty">No requests yet. Commands sent with POST /command, lines typed at the keyboard, players joining and leaving, the leadership, kicks, passwords, game restarts and any use of the object inspector appear here.</div>
 </main>
 <script>
 const rows = document.getElementById("rows");
@@ -80,7 +80,7 @@ const onlySuspicious = document.getElementById("only-suspicious");
 const labels = {
   command: "command", keyboard: "typed", inspector: "inspector",
   snapshot: "snapshot", refused: "refused", join: "players", login: "password",
-  leader: "leader", kick: "kick", password: "password", access: "inspector",
+  leader: "leader", kick: "kick", password: "password", access: "inspector", game: "game",
 };
 
 onlySuspicious.addEventListener("change", () => {

@@ -119,6 +119,53 @@ test "runUntilInput runs to the end" {
     defer cwd.deinit();
     const m = try Machine.init(testing.allocator, testing.io, &s, display.display(), cwd.storage(), "test.qzl");
     defer m.deinit();
-    try testing.expectEqual(Machine.Stop.finished, try m.runUntilInput(100));
-    try testing.expectEqual(Machine.Stop.finished, try m.runUntilInput(100));
+    try testing.expectEqual(Machine.Stop.ended, try m.runUntilInput(100));
+    try testing.expectEqual(Machine.Stop.ended, try m.runUntilInput(100));
+}
+
+test "run ends at input end after quit, and at a typed quit" {
+    const s = story(&.{0xba}); // quit
+    var cwd: Storage.Cwd = .init(testing.allocator, testing.io);
+    defer cwd.deinit();
+    for ([_][]const []const u8{ &.{}, &.{ "nonsense", "QUIT" } }) |input| {
+        var display: RecordingDisplay = .init(testing.allocator, input);
+        defer display.deinit();
+        display.interactive = true;
+        const m = try Machine.init(testing.allocator, testing.io, &s, display.display(), cwd.storage(), "test.qzl");
+        defer m.deinit();
+        try m.run();
+        try testing.expect(m.finished);
+        try testing.expectEqual(input.len, display.next_input);
+    }
+}
+
+fn countRestart(context: *anyopaque) void {
+    const n: *usize = @ptrCast(@alignCast(context));
+    n.* += 1;
+}
+
+test "restart after the end runs the story again" {
+    const s = story(&.{
+        0xb2, 0xb5, 0xc5, // print "hi"
+        0xba, // quit
+    });
+    var display: RecordingDisplay = .init(testing.allocator, &.{ "RESTART", "quit" });
+    defer display.deinit();
+    display.interactive = true;
+    var cwd: Storage.Cwd = .init(testing.allocator, testing.io);
+    defer cwd.deinit();
+    const m = try Machine.init(testing.allocator, testing.io, &s, display.display(), cwd.storage(), "test.qzl");
+    defer m.deinit();
+    var restarts: usize = 0;
+    m.on_restart = .{ .context = &restarts, .call = countRestart };
+    try m.run();
+    const prompt = "\n[The game has ended. Type RESTART, RESTORE, or QUIT.]\n";
+    try testing.expectEqual(1, restarts);
+    try testing.expectEqualStrings("hi" ++ prompt ++ "RESTART\nhi" ++ prompt ++ "quit\n", display.text.items);
+}
+
+test "piped input stops at the end of the story" {
+    const text = try run(testing.allocator, &.{0xba}, &.{"restart"});
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("", text);
 }

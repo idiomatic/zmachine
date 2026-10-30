@@ -14,6 +14,8 @@ text: std.ArrayList(u8) = .empty,
 /// Lines of input, read in turn; then input ends.
 input: []const []const u8,
 next_input: usize = 0,
+/// Reported to the machine as a person typing.
+interactive: bool = false,
 window: u8 = 0,
 status: [2][]const u8 = .{ "", "" },
 width: u16 = 80,
@@ -87,5 +89,5 @@ pub fn readKey(r: *RecordingDisplay) !?u8 {
 }
 
 pub fn capabilities(r: *RecordingDisplay) Display.Capabilities {
-    return .{ .styles = false, .width = r.width, .height = r.height };
+    return .{ .styles = false, .width = r.width, .height = r.height, .interactive = r.interactive };
 }

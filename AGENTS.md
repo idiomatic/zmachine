@@ -7,6 +7,7 @@ Keep this file up to date with every specification.
 * Story versions 1–5, 7 and 8 (not 6).
 * Zork I prints "You are standing in an open field"; a scripted walkthrough scores 350 of 350.
 * `save`/`restore` (portable Quetzal, default `<story>.qzl`), `script`, `-t <file>` (transcript from the start), `undo` in version 5.
+* When the story ends (its `quit`) on a terminal, `[The game has ended. Type RESTART, RESTORE, or QUIT.]` is shown and input continues: `restart` (same seed) and `restore` play on, `quit` or end of input exits, anything else repeats the prompt. Piped input exits at the story's end.
 * `--seed <n>`: Frotz's generator, so transcripts match `dfrotz -s <n> -I 6 -T`.
 * `-h`/`--help`; `--version` prints `build.zig.zon`'s version (0.3.0).
 
@@ -63,7 +64,7 @@ Keep this file up to date with every specification.
 * `GET /transcript?since=<offset>[&wait=1]`: the game text a player sees.
 * `POST /say`, `GET /discussion?since=<n>[&wait=1]`: thoughts (up to 8 suggested commands), messages, commands, and mode, leader, join, leave, kick, password and inspector-grant posts, each with its author; `/discussion` adds the mode, leader and players.
 * `POST /mode`, `/lead`, `/kick`: leader actions. `GET /me`: who the client is, and whether it leads.
-* `GET /log`, `GET /events?since=<n>` (every player): the audit log of commands, keyboard lines, joins, leaves, leadership, kicks, inspector grants, and password logins, changes, copies and reveals; clients named by player and `User-Agent`; never the password. Suspicious: opening the inspector, reading snapshots, wrong passwords, refused requests.
+* `GET /log`, `GET /events?since=<n>` (every player): the audit log of commands, keyboard lines, joins, leaves, leadership, kicks, inspector grants, game restarts, and password logins, changes, copies and reveals; clients named by player and `User-Agent`; never the password. Suspicious: opening the inspector, reading snapshots, wrong passwords, refused requests.
 
 ### The play page
 

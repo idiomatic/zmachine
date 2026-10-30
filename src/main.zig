@@ -271,6 +271,7 @@ pub fn main(init: std.process.Init) !u8 {
         const thread = try std.Thread.spawn(.{}, web.Server.serve, .{server});
         thread.detach();
         machine.observer = inspector.observer();
+        machine.on_restart = .{ .context = &group, .call = logRestart };
         try hub.startKeyboard();
         screen.commands = commands.commands(&group);
         try stderr.print("Play at http://127.0.0.1:{d}/ (the inspector is at /inspector)\n", .{port});
@@ -327,6 +328,11 @@ pub fn main(init: std.process.Init) !u8 {
         std.process.exit(status);
     }
     return status;
+}
+
+fn logRestart(context: *anyopaque) void {
+    const group: *Group = @ptrCast(@alignCast(context));
+    group.log(.game, "game", "restarted", false);
 }
 
 test "ports default to 9675" {

@@ -164,6 +164,23 @@ test "restart after the end runs the story again" {
     try testing.expectEqualStrings("hi" ++ prompt ++ "RESTART\nhi" ++ prompt ++ "quit\n", display.text.items);
 }
 
+test "SEED at the end sets the seed and asks again" {
+    const s = story(&.{0xba});
+    var display: RecordingDisplay = .init(testing.allocator, &.{ "seed 42", "SEED x", "SEED random", "quit" });
+    defer display.deinit();
+    display.interactive = true;
+    var cwd: Storage.Cwd = .init(testing.allocator, testing.io);
+    defer cwd.deinit();
+    const m = try Machine.init(testing.allocator, testing.io, &s, display.display(), cwd.storage(), "test.qzl");
+    defer m.deinit();
+    try m.run();
+    try testing.expect(m.seed_random);
+    try testing.expect(m.user_seed == null);
+    try testing.expect(std.mem.indexOf(u8, display.text.items, "[Seed set to 42.]") != null);
+    try testing.expect(std.mem.indexOf(u8, display.text.items, "[SEED takes a number.]") != null);
+    try testing.expect(std.mem.indexOf(u8, display.text.items, "[Seed is random.]") != null);
+}
+
 test "piped input stops at the end of the story" {
     const text = try run(testing.allocator, &.{0xba}, &.{"restart"});
     defer testing.allocator.free(text);

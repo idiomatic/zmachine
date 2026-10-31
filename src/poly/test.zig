@@ -54,6 +54,23 @@ test "debate mode and discussion" {
     try testing.expect(!Group.validName("a\tb"));
 }
 
+test "only this machine clears the discussion" {
+    var fake: World.Fake = .{};
+    var g: Group = .init(testing.allocator, testing.io, .{ .fake = &fake });
+    defer g.deinit();
+
+    try g.post(claude, .thought, "Hello.", &.{});
+    try testing.expectError(error.NotAllowed, g.clearDiscussion(claude));
+    try testing.expectError(error.NotAllowed, g.clearDiscussion(bo));
+    try g.clearDiscussion(.console);
+    try g.post(claude, .message, "Again.", &.{});
+    const json = try discussion(&g, 0);
+    defer testing.allocator.free(json);
+    try testing.expect(std.mem.indexOf(u8, json, "Hello.") == null);
+    try testing.expect(std.mem.indexOf(u8, json, "\"kind\":\"cleared\"") != null);
+    try testing.expect(std.mem.indexOf(u8, json, "Again.") != null);
+}
+
 test "keyboard lines are logged; web commands only posted" {
     var fake: World.Fake = .{};
     var g: Group = .init(testing.allocator, testing.io, .{ .fake = &fake });
@@ -62,11 +79,27 @@ test "keyboard lines are logged; web commands only posted" {
     g.heard(claude, "north", false);
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
-    const log = try g.events(arena.allocator(), 0);
+    const log = try g.events(arena.allocator(), 0, true);
     try testing.expectEqual(1, log.last);
     try testing.expectEqualStrings("keyboard", log.events[0].kind);
     try testing.expectEqualStrings("look", log.events[0].detail);
     try testing.expectEqual(2, g.lastPost());
+}
+
+test "events show a remote address only to clients on this machine" {
+    var fake: World.Fake = .{};
+    var g: Group = .init(testing.allocator, testing.io, .{ .fake = &fake });
+    defer g.deinit();
+    g.logFrom(.command, "ana via curl", Group.local_address, "look", false);
+    g.logFrom(.refused, "curl", "203.0.113.9", "GET /x", true);
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const local = try g.events(arena.allocator(), 0, true);
+    try testing.expectEqualStrings("this machine", local.events[0].from);
+    try testing.expectEqualStrings("203.0.113.9", local.events[1].from);
+    const others = try g.events(arena.allocator(), 0, false);
+    try testing.expectEqualStrings("this machine", others.events[0].from);
+    try testing.expectEqualStrings("remote", others.events[1].from);
 }
 
 test "leadership and kicks" {
@@ -175,11 +208,11 @@ test "password and sessions" {
     g.setPassword(Password.fromText("amber-otter-glide").?);
     const key: Group.AddressKey = @splat(7);
 
-    try testing.expectEqual(Group.Login.wrong, try g.login(key, "test", "amber"));
+    try testing.expectEqual(Group.Login.wrong, try g.login(key, "test", "", "amber"));
     // A second guess straight away is too soon.
-    try testing.expectEqual(Group.Login.slow, try g.login(key, "test", "amber otter glide"));
+    try testing.expectEqual(Group.Login.slow, try g.login(key, "test", "", "amber otter glide"));
     fake.advance(1000);
-    const token = (try g.login(key, "test", "Amber Otter Glide")).ok;
+    const token = (try g.login(key, "test", "", "Amber Otter Glide")).ok;
 
     var buf: [64]u8 = undefined;
     try testing.expectEqual(@as(?[]const u8, null), g.session(token, &buf).valid);
@@ -213,11 +246,11 @@ test "wrong guesses double the wait" {
     const key: Group.AddressKey = @splat(9);
     // Waits of one, two and four seconds after each wrong guess.
     for ([_]i64{ 1000, 2000, 4000 }) |wait| {
-        try testing.expectEqual(Group.Login.wrong, try g.login(key, "test", "nope"));
+        try testing.expectEqual(Group.Login.wrong, try g.login(key, "test", "", "nope"));
         fake.advance(wait - 1);
-        try testing.expectEqual(Group.Login.slow, try g.login(key, "test", "nope"));
+        try testing.expectEqual(Group.Login.slow, try g.login(key, "test", "", "nope"));
         fake.advance(1);
     }
     // Another address isn't slowed.
-    try testing.expectEqual(Group.Login.wrong, try g.login(@splat(1), "test", "nope"));
+    try testing.expectEqual(Group.Login.wrong, try g.login(@splat(1), "test", "", "nope"));
 }

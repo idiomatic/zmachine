@@ -24,6 +24,18 @@ pub const Transcript = struct {
     status: []const []const u8,
 };
 
+/// `GET /story`: the story loaded and the seed it runs on.
+pub const StoryInfo = struct {
+    file: []const u8,
+    zversion: u8,
+    release: u16,
+    serial: []const u8,
+    seed: u64,
+    seed_random: bool,
+    /// `debate` or `turns`.
+    mode: []const u8,
+};
+
 /// `POST /command`: the game's reply, or only `pending` while it is still
 /// queued or running (the text then appears in `/transcript`).
 pub const CommandReply = struct {
@@ -85,6 +97,7 @@ pub const Event = struct {
     kind: []const u8,
     suspicious: bool,
     client: []const u8,
+    from: []const u8,
     detail: []const u8,
 };
 
@@ -203,8 +216,8 @@ test "me, transcript and events" {
         Transcript{ .offset = 60, .waiting = true, .mode = "turns", .text = "open mailbox\n", .status = &.{ "", "" } },
     );
     try expectJson(
-        "{\"last\":1,\"events\":[{\"seq\":1,\"time\":1700000000000,\"kind\":\"keyboard\",\"suspicious\":false,\"client\":\"keyboard\",\"detail\":\"look\"}]}",
-        Events{ .last = 1, .events = &.{.{ .seq = 1, .time = 1700000000000, .kind = "keyboard", .suspicious = false, .client = "keyboard", .detail = "look" }} },
+        "{\"last\":1,\"events\":[{\"seq\":1,\"time\":1700000000000,\"kind\":\"keyboard\",\"suspicious\":false,\"client\":\"keyboard\",\"from\":\"\",\"detail\":\"look\"}]}",
+        Events{ .last = 1, .events = &.{.{ .seq = 1, .time = 1700000000000, .kind = "keyboard", .suspicious = false, .client = "keyboard", .from = "", .detail = "look" }} },
     );
 }
 

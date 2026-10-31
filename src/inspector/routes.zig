@@ -1,7 +1,7 @@
 //! The inspector's routes, which the web server guards (this machine only;
 //! AI partners only `/state`, when let):
 //!
-//!   GET /inspector        the inspector page
+//!   GET /inspector        the inspector's panels (an HTML fragment the play page adds)
 //!   GET /state?since=N    the latest snapshot, held open until it is newer
 //!                         than generation N (long polling)
 //!   POST /erase-map       erase the map at the next snapshot

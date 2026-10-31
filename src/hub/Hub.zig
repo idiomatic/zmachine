@@ -42,6 +42,8 @@ text: std.ArrayList(u8) = .empty,
 /// Offset of `text.items[0]` in all the text printed so far.
 text_base: u64 = 0,
 status: [2]std.ArrayList(u8) = .{ .empty, .empty },
+/// Which story is loaded and its random seed, for `GET /story`.
+story: ?Story = null,
 /// The display the game draws on, seen through `display`.
 seen: Seen = undefined,
 
@@ -88,7 +90,54 @@ pub fn deinit(h: *Hub) void {
     h.queue.deinit(h.gpa);
     h.replies.deinit(h.gpa);
     h.text.deinit(h.gpa);
+    if (h.story) |s| h.gpa.free(s.file);
     for (&h.status) |*s| s.deinit(h.gpa);
+}
+
+/// The loaded story, read from its header.
+pub const Story = struct {
+    /// The story file's name.
+    file: []u8,
+    /// The Z-machine version.
+    zversion: u8,
+    release: u16,
+    serial: [6]u8,
+    seed: u64 = 0,
+    seed_random: bool = true,
+};
+
+/// Notes the story loaded from `file`, whose bytes are `bytes`.
+pub fn setStory(h: *Hub, file: []const u8, bytes: []const u8) error{ OutOfMemory, InvalidStory }!void {
+    if (bytes.len < 0x18) return error.InvalidStory;
+    const copy = try h.gpa.dupe(u8, file);
+    h.lock();
+    defer h.unlock();
+    if (h.story) |old| h.gpa.free(old.file);
+    h.story = .{
+        .file = copy,
+        .zversion = bytes[0],
+        .release = std.mem.readInt(u16, bytes[2..4], .big),
+        .serial = bytes[0x12..0x18].*,
+    };
+}
+
+/// Notes the seed the generator last started from.
+pub fn setSeed(h: *Hub, seed: u64, random: bool) void {
+    h.lock();
+    defer h.unlock();
+    if (h.story) |*s| {
+        s.seed = seed;
+        s.seed_random = random;
+    }
+}
+
+/// The story and seed, with the file name copied into `arena`.
+pub fn storyInfo(h: *Hub, arena: Allocator) Allocator.Error!?Story {
+    h.lock();
+    defer h.unlock();
+    var s = h.story orelse return null;
+    s.file = try arena.dupe(u8, s.file);
+    return s;
 }
 
 fn freeCommand(gpa: Allocator, c: Command) void {
@@ -132,12 +181,38 @@ pub const ConsoleCommand = enum {
     password,
     /// Show the password in the status line.
     showpassword,
+    /// Show or set the mode (`/mode turns`).
+    mode,
+    /// Clear the discussion.
+    clear,
+    /// List the console commands.
+    help,
+    /// List the players.
+    who,
+    /// Pass the lead to a player (`/promote name`).
+    promote,
+    /// Remove a remote player or AI partner (`/kick name`).
+    kick,
+    /// Let an AI partner read the inspector (`/grant name`).
+    grant,
+    /// Stop an AI partner reading the inspector (`/revoke name`).
+    revoke,
+    /// Post a message to the discussion as the console (`/say text`).
+    say,
+    /// Show the last lines of the audit log (`/log [n]`).
+    log,
+    /// Show an invite link on the bottom row.
+    invite,
 };
 
-fn consoleCommand(line: []const u8) ?ConsoleCommand {
+/// The text after the slash of a console command (its name, then any
+/// arguments), if `line` is one.
+fn consoleCommand(line: []const u8) ?[]const u8 {
     const text = std.mem.trim(u8, line, " \t");
     if (text.len < 2 or text[0] != '/') return null;
-    return std.meta.stringToEnum(ConsoleCommand, text[1..]);
+    const name = text[1 .. std.mem.indexOfAny(u8, text, " \t") orelse text.len];
+    _ = std.meta.stringToEnum(ConsoleCommand, name) orelse return null;
+    return text[1..];
 }
 
 /// Takes the next complete line from the keyboard or the web, copied into
@@ -146,7 +221,7 @@ pub fn takeLine(h: *Hub, buf: []u8) InputSource.Line {
     h.lock();
     defer h.unlock();
     if (h.takeKeyboardLine(buf)) |line| {
-        if (consoleCommand(line)) |command| return .{ .console = @tagName(command) };
+        if (consoleCommand(line)) |command| return .{ .console = command };
         if (h.hooks) |k| k.taken(k.context, null, line);
         h.appendText(line);
         h.appendText("\n");
@@ -385,6 +460,14 @@ fn appendText(h: *Hub, bytes: []const u8) void {
     h.text_base += cut;
 }
 
+/// Forgets the game text so far (a restart); offsets stay valid.
+pub fn clearText(h: *Hub) void {
+    h.lock();
+    defer h.unlock();
+    h.text_base += h.text.items.len;
+    h.text.clearRetainingCapacity();
+}
+
 // Server side
 
 /// Queues a command from the web, which the caller has checked, and
@@ -470,6 +553,42 @@ fn copyStatus(h: *const Hub, arena: Allocator) Allocator.Error![2][]const u8 {
     return .{ try arena.dupe(u8, h.status[0].items), try arena.dupe(u8, h.status[1].items) };
 }
 
+test "clearing the text keeps offsets" {
+    var h: Hub = .init(std.testing.allocator, std.testing.io);
+    defer h.deinit();
+    h.capture("old game\n");
+    const before = h.textOffset();
+    h.clearText();
+    try std.testing.expectEqual(before, h.textOffset());
+    h.capture("new game\n");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const t = try h.textSince(arena.allocator(), 0);
+    try std.testing.expectEqualStrings("new game\n", t.text);
+}
+
+test "story and seed" {
+    var h: Hub = .init(std.testing.allocator, std.testing.io);
+    defer h.deinit();
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    try std.testing.expect((try h.storyInfo(arena.allocator())) == null);
+    var bytes: [0x40]u8 = undefined;
+    @memset(&bytes, 0);
+    bytes[0] = 3;
+    bytes[3] = 119;
+    @memcpy(bytes[0x12..0x18], "880429");
+    try h.setStory("zork1.z3", &bytes);
+    h.setSeed(69, false);
+    const s = (try h.storyInfo(arena.allocator())).?;
+    try std.testing.expectEqualStrings("zork1.z3", s.file);
+    try std.testing.expectEqual(3, s.zversion);
+    try std.testing.expectEqual(119, s.release);
+    try std.testing.expectEqualStrings("880429", &s.serial);
+    try std.testing.expectEqual(69, s.seed);
+    try std.testing.expect(!s.seed_random);
+}
+
 test "web command and reply" {
     var h: Hub = .init(std.testing.allocator, std.testing.io);
     defer h.deinit();
@@ -520,9 +639,10 @@ test "keyboard lines come first, and hooks hear them" {
     h.hooks = .{ .context = &heard, .taken = Heard.taken };
 
     _ = try h.submit(.{ .name = "Claude", .ai = true }, "north");
-    try h.keyboard.appendSlice(h.gpa, "look\r\n/lead\nin");
+    try h.keyboard.appendSlice(h.gpa, "look\r\n/lead\n/mode turns\nin");
     try std.testing.expectEqualStrings("look", h.takeLine(&buf).keyboard);
     try std.testing.expectEqualStrings("lead", h.takeLine(&buf).console);
+    try std.testing.expectEqualStrings("mode turns", h.takeLine(&buf).console);
     try std.testing.expectEqualStrings("north", h.takeLine(&buf).web);
     try std.testing.expectEqual(InputSource.Line.none, h.takeLine(&buf));
     h.keyboard_closed = true;

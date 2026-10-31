@@ -36,7 +36,7 @@
 //!                         if it is empty
 //!   GET /random-password  three random words to suggest as a new password,
 //!                         changing nothing
-//!   GET /log              the audit log page, open to every player
+//!   GET /log              redirects to the play page's audit log panel, open to every player
 //!   GET /events?since=N   audit log events after N (long polling)
 //!   POST /mcp             a message for an AI partner's MCP session
 //!                         (streamable HTTP, this machine only); DELETE
@@ -61,7 +61,6 @@ const Hub = @import("hub").Hub;
 const Password = @import("poly").Password;
 const protocol = @import("protocol");
 
-const log_html = @embedFile("log.html");
 const play_html = @embedFile("play.html");
 const login_html = @embedFile("login.html");
 
@@ -91,8 +90,9 @@ pub const Routes = struct {
 /// The MCP service, which answers messages posted to `/mcp`.
 pub const Mcp = struct {
     context: *anyopaque,
-    /// Answers a message; `session` is the request's Mcp-Session-Id.
-    post: *const fn (context: *anyopaque, arena: Allocator, session: ?[]const u8, body: []const u8) anyerror!protocol.McpReply,
+    /// Answers a message; `session` is the request's Mcp-Session-Id and
+    /// `profile` the interface asked for ("simple"), when it opens one.
+    post: *const fn (context: *anyopaque, arena: Allocator, session: ?[]const u8, profile: ?[]const u8, body: []const u8) anyerror!protocol.McpReply,
     /// Ends a session, returning whether there was one.
     end: *const fn (context: *anyopaque, session: []const u8) bool,
 };
@@ -214,6 +214,8 @@ pub const Server = struct {
         const peer = stream.socket.address;
         const local = isLoopback(peer);
         const agent = headers.user_agent orelse "unknown client";
+        var from_buf: [64]u8 = undefined;
+        const from = fromText(&from_buf, peer);
 
         const query_start = std.mem.indexOfScalar(u8, target, '?');
         const path = target[0 .. query_start orelse target.len];
@@ -226,7 +228,7 @@ pub const Server = struct {
             const detail = std.fmt.bufPrint(&detail_buf, "{s} {s} from {s}", .{
                 method, path, headers.origin orelse headers.host orelse "?",
             }) catch path;
-            s.group.log(.refused, agent, detail, true);
+            s.group.logFrom(.refused, agent, from, detail, true);
             return sendResponse(w, "403 Forbidden", "text/plain", "forbidden\n");
         }
 
@@ -238,7 +240,7 @@ pub const Server = struct {
             if (!Group.validName(name)) {
                 return sendResponse(w, "400 Bad Request", "text/plain", "X-Player names an AI partner in 1 to 32 printable characters\n");
             }
-            if (!local) return s.refuse(w, agent, method, path, "AI partners connect from this machine\n");
+            if (!local) return s.refuse(w, .{ .client = agent, .from = from }, method, path, "AI partners connect from this machine\n");
             player = .{ .name = name, .ai = true, .local = false };
         } else if (local) {
             if (headers.person_name) |name| {
@@ -283,17 +285,23 @@ pub const Server = struct {
             std.fmt.bufPrint(&client_buf, "{s} via {s}{s}", .{ name, agent, if (player.local or player.ai) "" else " (remote)" }) catch agent
         else
             agent;
+        const who: Who = .{ .client = client, .from = from };
 
         // The inspector shows what players can't see. The audit log is open
         // to everyone, so leaders and the others see the same record.
         const local_only = s.routes.owns(path);
-        if (local_only and !local) return s.refuse(w, client, method, path, "this page is only for this machine\n");
+        if (local_only and !local) return s.refuse(w, who, method, path, "this page is only for this machine\n");
         // AI partners read the inspector's snapshots, and only when let.
         if (local_only and player.ai) {
-            if (!std.mem.eql(u8, path, s.routes.ai_path)) return s.refuse(w, client, method, path, "AI partners only read the inspector's snapshots\n");
-            if (!s.group.mayInspect(player)) return s.refuse(w, client, method, path, "nobody has let you read the inspector\n");
+            if (!std.mem.eql(u8, path, s.routes.ai_path)) return s.refuse(w, who, method, path, "AI partners only read the inspector's snapshots\n");
+            if (!s.group.mayInspect(player)) return s.refuse(w, who, method, path, "nobody has let you read the inspector\n");
         }
-        if (std.mem.eql(u8, path, "/mcp")) return s.mcpRoute(w, r, &headers, method, local, client);
+        if (std.mem.eql(u8, path, "/mcp")) return s.mcpRoute(w, r, &headers, null, method, local, who);
+        if (std.mem.startsWith(u8, path, "/mcp/")) {
+            const profile = path["/mcp/".len..];
+            if (!std.mem.eql(u8, profile, "simple")) return sendResponse(w, "404 Not Found", "text/plain", "not found\n");
+            return s.mcpRoute(w, r, &headers, profile, method, local, who);
+        }
         // This machine needs no password; drop one from an invite link.
         if (local and std.mem.eql(u8, method, "GET") and std.mem.eql(u8, path, "/") and queryValue(query, "password") != null) {
             return redirectHome(w, "");
@@ -306,7 +314,7 @@ pub const Server = struct {
         if (player.name != null) {
             s.group.touch(player) catch |err| switch (err) {
                 error.NameTaken => return sendResponse(w, "409 Conflict", "text/plain", "that name is taken\n"),
-                error.Kicked => return s.refuse(w, client, method, path, "you were removed from the game\n"),
+                error.Kicked => return s.refuse(w, who, method, path, "you were removed from the game\n"),
                 else => return err,
             };
         } else if (!local and std.mem.eql(u8, method, "POST")) {
@@ -316,8 +324,15 @@ pub const Server = struct {
         if (std.mem.eql(u8, method, "POST")) {
             const body = (try readBody(r, w, &headers)) orelse return;
             const text = std.mem.trim(u8, body, " \t\r\n");
-            if (std.mem.eql(u8, path, "/command")) return s.command(w, arena, text, player, client);
+            if (std.mem.eql(u8, path, "/command")) return s.command(w, arena, text, player, who, std.mem.eql(u8, queryValue(query, "format") orelse "", "text"));
             if (std.mem.eql(u8, path, "/say")) return s.say(w, body, player);
+            if (std.mem.eql(u8, path, "/clear-discussion")) {
+                s.group.clearDiscussion(player) catch |err| switch (err) {
+                    error.NotAllowed => return s.refuse(w, who, method, path, "only this machine clears the discussion\n"),
+                    else => return err,
+                };
+                return sendResponse(w, "204 No Content", "text/plain", "");
+            }
             if (std.mem.eql(u8, path, "/mode")) {
                 const mode = std.meta.stringToEnum(Group.Mode, text) orelse
                     return sendResponse(w, "400 Bad Request", "text/plain", "the mode is debate or turns\n");
@@ -341,7 +356,7 @@ pub const Server = struct {
                 };
                 return sendResponse(w, "204 No Content", "text/plain", "");
             }
-            if (local_only) if (try s.routes.handle(s.routes.context, arena, method, path, query)) |answer| return s.send(w, client, answer);
+            if (local_only) if (try s.routes.handle(s.routes.context, arena, method, path, query)) |answer| return s.send(w, who, answer);
             if (std.mem.eql(u8, path, "/password")) {
                 s.group.changePassword(player, if (text.len > 0) text else null) catch |err| return passwordError(w, err);
                 return sendResponse(w, "204 No Content", "text/plain", "");
@@ -352,7 +367,7 @@ pub const Server = struct {
             return sendResponse(w, "405 Method Not Allowed", "text/plain", "method not allowed\n");
         }
 
-        if (local_only) if (try s.routes.handle(s.routes.context, arena, method, path, query)) |answer| return s.send(w, client, answer);
+        if (local_only) if (try s.routes.handle(s.routes.context, arena, method, path, query)) |answer| return s.send(w, who, answer);
         if (std.mem.eql(u8, path, "/")) {
             return sendResponse(w, "200 OK", "text/html; charset=utf-8", play_html);
         }
@@ -382,6 +397,18 @@ pub const Server = struct {
             try percentEncode(&out.writer, password);
             return sendResponse(w, "200 OK", "text/plain; charset=utf-8", out.written());
         }
+        if (std.mem.eql(u8, path, "/story")) {
+            const story = (try s.hub.storyInfo(arena)) orelse return sendResponse(w, "404 Not Found", "text/plain", "no story is loaded\n");
+            return sendJson(w, arena, protocol.StoryInfo{
+                .file = story.file,
+                .zversion = story.zversion,
+                .release = story.release,
+                .serial = &story.serial,
+                .seed = story.seed,
+                .seed_random = story.seed_random,
+                .mode = @tagName(s.group.currentMode()),
+            });
+        }
         if (std.mem.eql(u8, path, "/transcript")) {
             const since = parseSince(query);
             if (queryValue(query, "wait") != null) {
@@ -392,6 +419,8 @@ pub const Server = struct {
                 }
             }
             const t = try s.hub.textSince(arena, since);
+            if (std.mem.eql(u8, queryValue(query, "format") orelse "", "text"))
+                return sendResponse(w, "200 OK", "text/plain; charset=utf-8", plainTail(t.text));
             return sendJson(w, arena, protocol.Transcript{
                 .offset = t.offset,
                 .waiting = t.waiting,
@@ -410,7 +439,7 @@ pub const Server = struct {
             return sendJson(w, arena, try s.group.discussionSince(arena, since));
         }
         if (std.mem.eql(u8, path, "/log")) {
-            return sendResponse(w, "200 OK", "text/html; charset=utf-8", log_html);
+            return sendResponseHeaders(w, "303 See Other", "text/plain", "Location: /?log\r\n", "");
         }
         if (std.mem.eql(u8, path, "/events")) {
             const since = parseSince(query);
@@ -419,16 +448,17 @@ pub const Server = struct {
                 try s.io.sleep(.fromMilliseconds(poll_interval_ms), .awake);
                 waited += poll_interval_ms;
             }
-            return sendJson(w, arena, try s.group.events(arena, since));
+            return sendJson(w, arena, try s.group.events(arena, since, local));
         }
         return sendResponse(w, "404 Not Found", "text/plain", "not found\n");
     }
 
-    /// Serves the MCP endpoint to partners on this machine. Their game
+    /// Serves the MCP endpoint (`/mcp`, or `/mcp/simple` for the simple
+    /// profile) to partners on this machine. Their game
     /// requests come back through the other routes, named by X-Player.
-    fn mcpRoute(s: *Server, w: *Io.Writer, r: *Io.Reader, headers: *const Headers, method: []const u8, local: bool, client: []const u8) !void {
+    fn mcpRoute(s: *Server, w: *Io.Writer, r: *Io.Reader, headers: *const Headers, path_profile: ?[]const u8, method: []const u8, local: bool, who: Who) !void {
         const mcp = s.mcp orelse return sendResponse(w, "404 Not Found", "text/plain", "not found\n");
-        if (!local) return s.refuse(w, client, method, "/mcp", "MCP clients connect from this machine\n");
+        if (!local) return s.refuse(w, who, method, "/mcp", "MCP clients connect from this machine\n");
         if (std.mem.eql(u8, method, "DELETE")) {
             const session = headers.mcp_session orelse return sendResponse(w, "400 Bad Request", "text/plain", "missing Mcp-Session-Id\n");
             if (!mcp.end(mcp.context, session)) return sendResponse(w, "404 Not Found", "text/plain", "unknown session\n");
@@ -441,7 +471,7 @@ pub const Server = struct {
         var arena_state: std.heap.ArenaAllocator = .init(s.gpa);
         defer arena_state.deinit();
         const arena = arena_state.allocator();
-        const answer = try mcp.post(mcp.context, arena, headers.mcp_session, body);
+        const answer = try mcp.post(mcp.context, arena, headers.mcp_session, path_profile orelse headers.mcp_profile, body);
         const status = switch (answer.status) {
             200 => "200 OK",
             202 => "202 Accepted",
@@ -455,16 +485,16 @@ pub const Server = struct {
     }
 
     /// Sends another module's answer, noting it in the audit log.
-    fn send(s: *Server, w: *Io.Writer, client: []const u8, answer: Answer) !void {
-        if (answer.log) |l| s.group.log(l.kind, client, l.detail, l.suspicious);
+    fn send(s: *Server, w: *Io.Writer, who: Who, answer: Answer) !void {
+        if (answer.log) |l| s.group.logFrom(l.kind, who.client, who.from, l.detail, l.suspicious);
         return sendResponse(w, answer.status, answer.content_type, answer.body);
     }
 
     /// Refuses a request, logging it as suspicious.
-    fn refuse(s: *Server, w: *Io.Writer, client: []const u8, method: []const u8, path: []const u8, why: []const u8) !void {
+    fn refuse(s: *Server, w: *Io.Writer, who: Who, method: []const u8, path: []const u8, why: []const u8) !void {
         var detail_buf: [256]u8 = undefined;
         const detail = std.fmt.bufPrint(&detail_buf, "{s} {s}: {s}", .{ method, path, std.mem.trimEnd(u8, why, "\n") }) catch path;
-        s.group.log(.refused, client, detail, true);
+        s.group.logFrom(.refused, who.client, who.from, detail, true);
         return sendResponse(w, "403 Forbidden", "text/plain", why);
     }
 
@@ -472,9 +502,8 @@ pub const Server = struct {
     /// is right.
     fn login(s: *Server, w: *Io.Writer, peer: net.IpAddress, agent: []const u8, body: []const u8) !void {
         if (!s.group.listening()) return sendResponse(w, "404 Not Found", "text/plain", "not found\n");
-        var client_buf: [256]u8 = undefined;
-        const client = std.fmt.bufPrint(&client_buf, "{f} via {s}", .{ peer, agent }) catch agent;
-        switch (try s.group.login(addressKey(peer), client, std.mem.trim(u8, body, " \t\r\n"))) {
+        var from_buf: [64]u8 = undefined;
+        switch (try s.group.login(addressKey(peer), agent, fromText(&from_buf, peer), std.mem.trim(u8, body, " \t\r\n"))) {
             .ok => |token| {
                 var cookie_buf: [128]u8 = undefined;
                 return sendResponseHeaders(w, "204 No Content", "text/plain", try sessionCookie(&cookie_buf, token), "");
@@ -488,9 +517,10 @@ pub const Server = struct {
     /// cookie and redirects to `/`; wrong, it shows the password page.
     fn loginFromLink(s: *Server, w: *Io.Writer, peer: net.IpAddress, agent: []const u8, guess: []const u8) !void {
         if (!s.group.listening()) return redirectHome(w, "");
+        var from_buf: [64]u8 = undefined;
         var client_buf: [256]u8 = undefined;
-        const client = std.fmt.bufPrint(&client_buf, "{f} via {s} (invite link)", .{ peer, agent }) catch agent;
-        switch (try s.group.login(addressKey(peer), client, guess)) {
+        const client = std.fmt.bufPrint(&client_buf, "{s} (invite link)", .{agent}) catch agent;
+        switch (try s.group.login(addressKey(peer), client, fromText(&from_buf, peer), guess)) {
             .ok => |token| {
                 var cookie_buf: [128]u8 = undefined;
                 return redirectHome(w, try sessionCookie(&cookie_buf, token));
@@ -523,6 +553,16 @@ pub const Server = struct {
         };
     }
 
+    /// The invite link for the console, which asks no one: `http://<host>/?password=<password>`.
+    pub fn consoleInviteLink(s: *const Server, buf: []u8, password: []const u8) ?[]const u8 {
+        var host_buf: [128]u8 = undefined;
+        const host = s.inviteHost(null, true, &host_buf) orelse return null;
+        var w: Io.Writer = .fixed(buf);
+        w.print("http://{s}/?password=", .{host}) catch return null;
+        percentEncode(&w, password) catch return null;
+        return w.buffered();
+    }
+
     /// Gives a person on the play page a name.
     fn join(s: *Server, w: *Io.Writer, player: Group.Player, token: ?Group.Token, name: []const u8) !void {
         if (player.ai) return sendResponse(w, "400 Bad Request", "text/plain", "AI partners are named by X-Player\n");
@@ -537,8 +577,9 @@ pub const Server = struct {
     }
 
     /// Queues a command and replies with the game's response once it waits
-    /// for input again.
-    fn command(s: *Server, w: *Io.Writer, arena: Allocator, text: []const u8, player: Group.Player, client: []const u8) !void {
+    /// for input again. With `plain` the reply is only the game text, for
+    /// a client that cannot read JSON.
+    fn command(s: *Server, w: *Io.Writer, arena: Allocator, text: []const u8, player: Group.Player, who: Who, plain: bool) !void {
         if (!Group.validCommand(text)) return sendResponse(
             w,
             "400 Bad Request",
@@ -552,11 +593,11 @@ pub const Server = struct {
             "in debate mode only the leader sends commands; suggest yours with POST /say\n",
         );
         const id = try s.hub.submit(.{ .name = player.name, .ai = player.ai }, text);
-        s.group.log(.command, client, text, false);
+        s.group.logFrom(.command, who.client, who.from, text, false);
 
         var waited: u32 = 0;
         while (true) {
-            if (try s.hub.takeAnswer(arena, id)) |a| return sendJson(w, arena, protocol.CommandReply{
+            if (try s.hub.takeAnswer(arena, id)) |a| if (plain) return sendResponse(w, "200 OK", "text/plain; charset=utf-8", a.output) else return sendJson(w, arena, protocol.CommandReply{
                 .id = id,
                 .echo = a.echo,
                 .offset = a.offset,
@@ -566,6 +607,7 @@ pub const Server = struct {
             if (waited >= poll_timeout_ms) {
                 // Still queued or still running; the text will appear in
                 // /transcript.
+                if (plain) return sendResponse(w, "202 Accepted", "text/plain; charset=utf-8", "The game has not answered yet; try GET /transcript?format=text again shortly.\n");
                 return sendJsonStatus(w, arena, "202 Accepted", protocol.CommandReply{ .id = id, .pending = true });
             }
             try s.io.sleep(.fromMilliseconds(poll_interval_ms / 4), .awake);
@@ -697,6 +739,21 @@ fn passwordError(w: *Io.Writer, err: Group.PasswordError) !void {
     };
 }
 
+/// Who a request is from, as the audit log records it: the client's
+/// description, and its address ("this machine" if local).
+const Who = struct {
+    client: []const u8,
+    from: []const u8,
+};
+
+/// The address without its port, or "this machine" for a local one.
+fn fromText(buf: []u8, address: net.IpAddress) []const u8 {
+    if (isLoopback(address)) return Group.local_address;
+    const text = std.fmt.bufPrint(buf, "{f}", .{address}) catch return "remote";
+    const colon = std.mem.lastIndexOfScalar(u8, text, ':') orelse return text;
+    return std.mem.trim(u8, text[0..colon], "[]");
+}
+
 fn isLoopback(address: net.IpAddress) bool {
     return switch (address) {
         .ip4 => |a| a.bytes[0] == 127,
@@ -747,6 +804,7 @@ const Headers = struct {
     person_name: ?[]u8 = null,
     cookie: ?[]u8 = null,
     mcp_session: ?[]u8 = null,
+    mcp_profile: ?[]u8 = null,
 
     /// The AI partner named by X-Player, or null for a person.
     fn ai(h: *const Headers) ?[]const u8 {
@@ -787,6 +845,8 @@ const Headers = struct {
             &h.cookie
         else if (std.ascii.eqlIgnoreCase(name, "mcp-session-id"))
             &h.mcp_session
+        else if (std.ascii.eqlIgnoreCase(name, "mcp-profile"))
+            &h.mcp_profile
         else {
             if (std.ascii.eqlIgnoreCase(name, "content-length")) {
                 h.content_length = std.fmt.parseInt(usize, value, 10) catch null;
@@ -798,7 +858,7 @@ const Headers = struct {
     }
 
     fn deinit(h: *Headers, gpa: Allocator) void {
-        for ([_]?[]u8{ h.host, h.origin, h.user_agent, h.player_name, h.person_name, h.cookie, h.mcp_session }) |v| if (v) |slice| gpa.free(slice);
+        for ([_]?[]u8{ h.host, h.origin, h.user_agent, h.player_name, h.person_name, h.cookie, h.mcp_session, h.mcp_profile }) |v| if (v) |slice| gpa.free(slice);
     }
 };
 
@@ -824,6 +884,16 @@ fn sendJsonStatus(w: *Io.Writer, arena: Allocator, status: []const u8, value: an
     return sendResponse(w, status, "application/json", try protocol.allocWrite(arena, value));
 }
 
+/// The last few thousand bytes of `text`, starting at a character, for a
+/// client that reads plain text.
+fn plainTail(text: []const u8) []const u8 {
+    const limit = 4000;
+    if (text.len <= limit) return text;
+    var start = text.len - limit;
+    while (start < text.len and text[start] & 0xc0 == 0x80) start += 1;
+    return text[start..];
+}
+
 fn sendResponse(w: *Io.Writer, status: []const u8, content_type: []const u8, body: []const u8) !void {
     return sendResponseHeaders(w, status, content_type, "", body);
 }
@@ -837,6 +907,16 @@ fn sendResponseHeaders(w: *Io.Writer, status: []const u8, content_type: []const 
     );
     try w.writeAll(body);
     try w.flush();
+}
+
+test plainTail {
+    try std.testing.expectEqualStrings("short", plainTail("short"));
+    var long: [6000]u8 = undefined;
+    @memset(long[0..3000], 'a');
+    for (0..1500) |k| @memcpy(long[3000 + 2 * k ..][0..2], "é");
+    const tail = plainTail(&long);
+    try std.testing.expect(tail.len <= 4000);
+    try std.testing.expect(std.unicode.utf8ValidateSlice(tail));
 }
 
 test Headers {

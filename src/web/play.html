@@ -19,6 +19,11 @@
   --accent-soft: light-dark(#fde7d9, #3d2516);
   --you: light-dark(#1d4ed8, #93b4ff);
   --you-soft: light-dark(#e3ebfd, #1c2a47);
+  --link: light-dark(#1d4ed8, #93b4ff);
+  --room: light-dark(#ffffff, #23262c);
+  --room-border: light-dark(#9b968b, #5d606a);
+  --edge: light-dark(#a8a397, #5a5d66);
+  --flash: light-dark(#fef08a, #5b4b0f);
   --game-bg: light-dark(#fbfaf7, #17181c);
   --on-button: light-dark(#ffffff, #15161a);
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -65,31 +70,17 @@ a.toggle { display: inline-block; text-decoration: none; text-align: center; }
   border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px;
 }
 .toggle:hover { color: var(--text); }
+/* A pressed toggle, such as the inspector while its tabs are showing. */
+.toggle[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.modes .size-down, .modes .size-up { display: inline-flex; align-items: center; justify-content: center; line-height: 1; padding-top: 0; padding-bottom: 0; }
+.modes .size-down { font-size: 10px; }
+.modes .size-up { font-size: 18px; }
+.modes button:disabled { opacity: .35; cursor: default; }
+.toggle:disabled { opacity: .35; cursor: default; }
 .toggle.theme { font-size: 14px; line-height: 1; padding: 3px 7px; min-width: 28px; }
-/* Playing in the terminal: the page is only the conversation. */
-main.chat-only { grid-template-columns: minmax(0, 1fr); }
-main.chat-only #game-pane { display: none; }
-main.chat-only #ai-pane { border-left: 0; border-top: 0; }
-#show-game { display: none; }
-main.chat-only #show-game { display: inline-block; }
-/* The discussion collapsed: the page is only the game. */
-main.game-only { grid-template-columns: minmax(0, 1fr); }
-main.game-only #ai-pane { display: none; }
-#show-discussion { display: none; position: relative; }
-main.game-only #show-discussion { display: inline-block; }
-/* Each pane's hide button goes while the other pane is hidden. */
-main.game-only #hide-game, main.chat-only #hide-discussion { display: none; }
-/* A partner posted while the discussion was collapsed. */
-#show-discussion.unread::after {
-  content: ""; position: absolute; top: -3px; right: -3px; width: 8px; height: 8px;
-  border-radius: 50%; background: var(--accent); border: 2px solid var(--panel);
-}
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; display: inline-block; margin-right: 6px; }
 .dot.live { background: #16a34a; }
 .dot.down { background: #dc2626; }
-main { flex: 1; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(300px, 1fr); min-height: 0; }
-section { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
-section + section { border-left: 1px solid var(--border); }
 .pane-title {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em;
@@ -146,17 +137,18 @@ section + section { border-left: 1px solid var(--border); }
 }
 .player .more:hover, .player .more:focus-visible, .player .more[aria-expanded="true"] { color: var(--text); background: var(--panel-2); }
 /* The menu a chip's ▼ opens, just below it. */
-#chip-menu {
+#chip-menu, #panels-menu {
   position: fixed; z-index: 20; display: flex; flex-direction: column; min-width: 190px; padding: 4px;
   background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
   box-shadow: 0 6px 20px rgb(0 0 0 / 18%);
 }
-#chip-menu[hidden] { display: none; }
-#chip-menu button {
+#chip-menu[hidden], #panels-menu[hidden] { display: none; }
+#panels-menu hr { width: 100%; margin: 4px 0; border: 0; border-top: 1px solid var(--border); }
+#chip-menu button, #panels-menu button {
   font: 13px var(--sans); color: var(--text); text-align: left; white-space: nowrap;
   background: none; border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer;
 }
-#chip-menu button:hover, #chip-menu button:focus-visible { background: var(--panel-2); outline: none; }
+#chip-menu button:hover, #chip-menu button:focus-visible, #panels-menu button:hover, #panels-menu button:focus-visible { background: var(--panel-2); outline: none; }
 .post { border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; background: var(--panel); max-width: 100%; }
 /* Each AI partner has its own color, set as --ai on its posts. */
 .post .who { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--ai, var(--accent)); margin-bottom: 3px; }
@@ -198,23 +190,24 @@ section + section { border-left: 1px solid var(--border); }
 }
 #overlay h2 { margin: 0; font-size: 16px; }
 #overlay p { margin: 0; font-size: 13px; color: var(--muted); }
-form { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border); background: var(--panel); }
+form { display: flex; align-items: center; gap: 8px; height: 57px; flex: none; padding: 0 16px; border-top: 1px solid var(--border); background: var(--panel); }
 form input {
   flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--bg);
-  border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px;
+  border: 1px solid var(--border); border-radius: 8px; padding: 0 10px; height: 37px;
 }
-#command-input { font-family: var(--mono); font-size: var(--game-size, 14px); }
+/* The footer keeps its height, so it lines up with the discussion's. */
+#command-input { font-family: var(--mono); font-size: min(var(--game-size, 14px), 20px); }
 form button {
-  font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 7px 14px;
+  font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 0 14px; height: 37px;
   background: var(--accent); color: var(--on-button); cursor: pointer;
 }
 form.say button { background: var(--you); }
+/* A focused box takes its button's color. */
+form input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+form.say input:focus { border-color: var(--you); box-shadow: 0 0 0 2px var(--you-soft); }
 @media (max-width: 760px) {
   /* iOS zooms the page into any text field under 16px when it gets focus. */
-  form input, #command-input { font-size: max(16px, var(--game-size, 14px)); }
-  main { grid-template-columns: 1fr; grid-template-rows: 55% 45%; }
-  main.chat-only, main.game-only { grid-template-rows: 1fr; }
-  section + section { border-left: 0; border-top: 1px solid var(--border); }
+  form input, #command-input { font-size: max(16px, min(var(--game-size, 14px), 20px)); }
   header { gap: 10px; }
   .right { gap: 10px; }
   /* The score goes under the room, which keeps the width for its name. */
@@ -224,57 +217,113 @@ form.say button { background: var(--you); }
   #conn { display: none; }
   .right { gap: 6px; }
 }
+/* The workspace: a tree of splits. Every panel holds tabs that drag between
+   panels; dropped on a panel's body, a tab splits it along its longer side. */
+#ws { flex: 1; min-height: 0; display: flex; }
+#ws > * { flex: 1; min-width: 0; min-height: 0; }
+.wsplit { display: grid; min-height: 0; min-width: 0; }
+.wsplit.h { grid-template-rows: minmax(0, 1fr); }
+.wsplit.v { grid-template-columns: minmax(0, 1fr); }
+.wsplit-handle { background: var(--border); background-clip: content-box; touch-action: none; }
+.wsplit.h > .wsplit-handle { cursor: col-resize; padding: 0 2px; }
+.wsplit.v > .wsplit-handle { cursor: row-resize; padding: 2px 0; }
+.wsplit-handle:hover, .wsplit-handle.dragging { background: var(--accent); }
+.wp { display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
+#ws .wp { position: relative; }
+.drop-preview { position: absolute; z-index: 5; border: 2px dashed var(--accent); background: var(--accent-soft); opacity: .55; pointer-events: none; }
+.tabs { display: flex; gap: 2px; padding: 4px 8px 0; height: 37px; flex: none; background: var(--panel); border-bottom: 1px solid var(--border); overflow: hidden; }
+.tab {
+  display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; color: var(--muted);
+  font: inherit; font-weight: 550; padding: 5px 8px 5px 12px; border-bottom: 2px solid transparent;
+  cursor: pointer; white-space: nowrap; position: relative;
+}
+.tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.tab[draggable="true"] { cursor: grab; }
+.tab.dragging { opacity: .45; }
+.tab .x { font-size: 10px; opacity: .45; padding: 2px 3px; border-radius: 4px; }
+.tab .x:hover { opacity: 1; background: var(--panel-2); }
+.tab.unread::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); position: absolute; top: 3px; right: 18px; }
+.tabs > .pane-title { margin-left: auto; align-self: center; min-height: 0; padding: 0 0 3px 8px; border: 0; background: none; }
+.tabs > .pane-title > span { display: none; }
+.tabs.drop-target { background: var(--accent-soft); }
+.tab.drop-before { box-shadow: inset 2px 0 0 var(--accent); }
+.tabs.drop-end::after { content: ""; width: 2px; align-self: stretch; margin: 4px 0; background: var(--accent); }
+.wbody { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#ws .pane { flex: 1; min-height: 0; min-width: 0; display: none; }
+#ws .pane.active { display: flex; }
+#game-pane, #ai-pane, #log-pane { flex-direction: column; }
+header .meta { color: var(--muted); font-size: 13px; display: flex; gap: 14px; flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; }
+header .meta b { color: var(--text); font-weight: 600; }
+header .insp-status, header .meta[hidden] { display: none; }
+.log-head { display: flex; align-items: center; gap: 14px; padding: 5px 12px; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.log-head b { color: var(--text); }
+.log-head .bad b { color: #b91c1c; }
+.log-head label { margin-left: auto; }
+.log-scroll { flex: 1; overflow: auto; padding: 0 12px 8px; min-height: 0; }
+table.log { width: 100%; border-collapse: collapse; }
+table.log th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); }
+table.log td { padding: 4px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.log td.log-time, table.log td.log-kind { white-space: nowrap; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+table.log td.log-player { white-space: nowrap; font-weight: 600; }
+table.log td.log-detail { font-family: var(--mono); font-size: 13px; word-break: break-word; }
+table.log td.log-from { white-space: nowrap; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+table.log td.log-client { color: var(--muted); font-size: 12px; word-break: break-word; max-width: 18em; }
+table.log tr.suspicious { background: light-dark(#fdecec, #3a1a1a); }
+table.log tr.suspicious td.log-kind { color: #b91c1c; font-weight: 600; }
+table.log tr.log-command td.log-kind { color: var(--accent); }
+@media (max-width: 860px) {
+  #inspector-link, header .meta, header .insp-status { display: none; }
+  /* The panels stack, whatever the splits. */
+  .wsplit { display: flex !important; flex-direction: column; }
+  .wsplit > * { flex: 1; min-height: 0; }
+  .wsplit > .wsplit-handle { display: none; }
+  .wsplit > * + * { border-top: 1px solid var(--border); }
+  .tab { cursor: pointer; }
+}
 </style>
 </head>
 <body>
 <header>
-  <div class="status">
+  <div class="status" id="header-status">
     <div class="room" id="room">—</div>
     <div class="score" id="score"></div>
   </div>
   <span class="live"><span class="dot" id="dot"></span><span id="conn">connecting…</span></span>
   <div class="right">
-    <a class="toggle theme" id="inspector-link" hidden href="/inspector" target="_blank" aria-label="Object inspector"
-      title="Object inspector: hidden game state, for this machine only; opening it is logged as suspicious"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.8" cy="6.8" r="4.3"/><path d="M10 10l3.8 3.8"/></svg></a>
-    <a class="toggle theme" href="/log" target="_blank" aria-label="Audit log"
-      title="Audit log: every command, and anything a player couldn't see">▤</a>
+    <button class="toggle theme" id="inspector-link" hidden aria-pressed="false" aria-label="Object inspector"
+      title="Object inspector: hidden game state, for this machine only; unlocking it is logged as suspicious"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.8" cy="6.8" r="4.3"/><path d="M10 10l3.8 3.8"/></svg></button>
+    <button class="toggle theme" id="panels-toggle" aria-label="Panels" title="Show or hide panels, or restore the default layout">▦</button>
     <button class="toggle theme" id="theme-toggle" aria-label="Theme: system theme">◐</button>
   </div>
 </header>
-<main id="main">
-  <section id="game-pane">
-    <div class="pane-title"><span>Game</span>
-      <select id="font-size" aria-label="Game text size" title="Game text size">
-        <option value="12">12px</option>
-        <option value="14" selected>14px</option>
-        <option value="16">16px</option>
-        <option value="18">18px</option>
-        <option value="20">20px</option>
-      </select>
-      <button class="toggle pane-button" id="show-discussion" aria-label="Show discussion"
-        title="Show the discussion beside the game">⊞</button>
-      <button class="toggle pane-button" id="hide-game" aria-label="Hide game"
-        title="Hide the game, to play in your terminal and use this page only to talk with your AI partners">⊟</button>
+<div id="ws"></div>
+<div id="panels-menu" role="menu" hidden></div>
+<div id="panes" hidden>
+  <div class="pane" id="game-pane">
+    <div class="pane-title"><span></span>
+      <div class="modes" role="group" aria-label="Game text size">
+        <button class="size-down" id="font-smaller" aria-label="Smaller game text" title="Smaller game text">A</button>
+        <button class="size-up" id="font-larger" aria-label="Larger game text" title="Larger game text">A</button>
+      </div>
     </div>
     <pre id="game"></pre>
     <form id="command-form" autocomplete="off">
       <input id="command-input" placeholder="Type a command" aria-label="Command" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" enterkeyhint="send">
       <button>Send</button>
     </form>
-  </section>
-  <section id="ai-pane">
-    <div class="pane-title"><span id="ai-title">Discussion</span>
+  </div>
+  <div class="pane" id="ai-pane">
+    <div class="pane-title"><span id="ai-title"></span>
       <div class="modes" id="modes" role="group" aria-label="Mode">
         <button data-mode="debate">Debate</button>
         <button data-mode="turns">Take turns</button>
       </div>
+      <button class="toggle theme" id="clear-discussion" hidden aria-label="Clear the discussion"
+        title="Clear the discussion for everyone. The game is not affected">⌫</button>
       <button class="toggle theme" id="new-password" hidden aria-label="New password"
         title="New password: roll three new random words (or enter your own). Every remote session but the leader's ends, so the others need a new invite link">⚄</button>
       <button class="toggle theme" id="copy-invite" hidden aria-label="Copy an invite link"
         title="Copy an invite link for players on other machines; it carries the password, so share it like one">⚭</button>
-      <button class="toggle pane-button" id="show-game" aria-label="Show game" title="Show the game beside the discussion">⊞</button>
-      <button class="toggle pane-button" id="hide-discussion" aria-label="Hide discussion"
-        title="Hide the discussion and give the game the whole page">⊟</button>
     </div>
     <div id="players" aria-label="Players"></div>
     <div id="feed"><div class="empty" id="empty">Thoughts, messages and suggested commands from everyone playing appear here. Click a suggestion to send it to the game.</div></div>
@@ -282,8 +331,24 @@ form.say button { background: var(--you); }
       <input id="say-input" placeholder="Tell your AI partners what you think" aria-label="Message to your AI partners">
       <button>Say</button>
     </form>
-  </section>
-</main>
+  </div>
+  <div class="pane" id="log-pane">
+    <div class="log-head">
+      <span>Commands <b id="n-command">0</b></span>
+      <span>Typed <b id="n-keyboard">0</b></span>
+      <span class="bad">Suspicious <b id="n-suspicious">0</b></span>
+      <label><input type="checkbox" id="only-suspicious"> Only suspicious</label>
+      <span id="log-status">connecting…</span>
+    </div>
+    <div class="log-scroll">
+      <table class="log">
+        <thead><tr><th>Time</th><th>Kind</th><th>Player</th><th>What</th><th>Client</th><th>From</th></tr></thead>
+        <tbody id="log-rows"></tbody>
+      </table>
+      <div class="empty" id="log-empty">No requests yet. Commands, typed lines, joins and leaves, leadership, kicks, passwords, game restarts and any use of the object inspector appear here.</div>
+    </div>
+  </div>
+</div>
 <div id="toast" role="status"></div>
 <div id="chip-menu" role="menu" hidden></div>
 <div id="overlay" hidden>
@@ -298,7 +363,6 @@ form.say button { background: var(--you); }
 <script>
 const game = document.getElementById("game");
 const feed = document.getElementById("feed");
-const main = document.getElementById("main");
 
 // Who this page plays as. On this machine the name goes with every request
 // as X-Person; on another machine the session cookie carries it.
@@ -494,8 +558,12 @@ function updatePlayers() {
   document.getElementById("copy-invite").hidden = passwords;
   if (!passwords && !inviteLink) loadInvite();
   document.getElementById("new-password").hidden = passwords;
-  // The inspector answers only this machine.
+  // The inspector and clearing the discussion answer only this machine.
   document.getElementById("inspector-link").hidden = !me.local;
+  // An unlocked inspector comes back after a reload (and is logged again).
+  if (me.local && !inspecting && inspectorWanted()) loadInspector(false);
+  document.getElementById("clear-discussion").hidden = !me.local;
+  colorLog();
   setMode(mode);
 }
 
@@ -522,6 +590,13 @@ async function kickPlayer(name) {
     addTip("If someone keeps coming back under new names, make a new password with ⚄ in the Discussion header. The others then need a new invite link.");
   }
 }
+
+// Clearing the discussion is separate from restarting the game.
+document.getElementById("clear-discussion").addEventListener("click", async () => {
+  if (!confirm("Clear the discussion for everyone? The game is not affected.")) return;
+  const res = await api("/clear-discussion", { method: "POST" });
+  if (!res.ok) toast((await res.text()).trim());
+});
 
 // A new password: the prompt starts with three freshly rolled words, which
 // can be kept or typed over.
@@ -707,12 +782,14 @@ function eventText(p) {
     case "password": return `${by} changed the password`;
     case "granted": return `${by} let ${p.text} read the inspector`;
     case "revoked": return `${by} stopped ${p.text} reading the inspector`;
+    case "cleared": return `${by} cleared the discussion`;
   }
   return null;
 }
 
 function addPost(p) {
   document.getElementById("empty")?.remove();
+  if (p.kind === "cleared") feed.replaceChildren();
   const stick = nearBottom(feed) || feed.children.length < 2;
   const mine = isMe(p.author) || (p.author === "console" && !myName);
   const color = mine ? null : colorFor(p.author);
@@ -782,7 +859,11 @@ async function pollGame() {
       const res = await api(`/transcript?since=${offset}&wait=1`);
       if (!res.ok) throw new Error(res.status);
       const data = await res.json();
-      if (data.text) appendGame(data.text);
+      if (data.text) {
+        appendGame(data.text);
+        // New game text while the game is out of sight (not the first load).
+        if (offset > 0) noteUnread("game");
+      }
       offset = data.offset;
       document.getElementById("room").textContent = data.status[0] || "—";
       document.getElementById("score").textContent = data.status[1] || "";
@@ -811,11 +892,8 @@ async function pollFeed() {
         updatePlayers();
       }
       // Flag a post from someone else that arrives while the discussion is
-      // hidden.
-      if (last > 0 && data.posts.some((p) => !isMe(p.author)) && main.classList.contains("game-only")) {
-        showDiscussionButton.classList.add("unread");
-        showDiscussionButton.setAttribute("aria-label", "Show discussion (new posts)");
-      }
+      // out of sight.
+      if (last > 0 && data.posts.some((p) => !isMe(p.author))) noteUnread("discussion");
       last = data.last;
       mode = data.mode;
       updatePlayers();
@@ -902,46 +980,6 @@ async function start() {
   pollGame();
 }
 
-// Hiding the game pane is remembered in this browser; `?game=hide` or
-// `?game=show` in the address overrides it.
-function showGame(show) {
-  main.classList.toggle("chat-only", !show);
-  try { localStorage.setItem("zmachine-hide-game", show ? "" : "1"); } catch {}
-  if (show) game.scrollTop = game.scrollHeight;
-  document.getElementById(show ? "command-input" : "say-input").focus();
-}
-document.getElementById("hide-game").addEventListener("click", () => showGame(false));
-document.getElementById("show-game").addEventListener("click", () => showGame(true));
-let hideGame = false;
-try { hideGame = localStorage.getItem("zmachine-hide-game") === "1"; } catch {}
-const gameParam = new URLSearchParams(location.search).get("game");
-if (gameParam) hideGame = gameParam === "hide";
-
-// Hiding the discussion is remembered the same way; `?discussion=hide` or
-// `?discussion=show` overrides it.
-const showDiscussionButton = document.getElementById("show-discussion");
-function showDiscussion(show) {
-  main.classList.toggle("game-only", !show);
-  try { localStorage.setItem("zmachine-hide-discussion", show ? "" : "1"); } catch {}
-  if (show) {
-    showDiscussionButton.classList.remove("unread");
-    showDiscussionButton.setAttribute("aria-label", "Show discussion");
-    feed.scrollTop = feed.scrollHeight;
-  }
-}
-document.getElementById("hide-discussion").addEventListener("click", () => {
-  showDiscussion(false);
-  document.getElementById("command-input").focus();
-});
-showDiscussionButton.addEventListener("click", () => {
-  showDiscussion(true);
-  document.getElementById("say-input").focus();
-});
-let hideDiscussion = false;
-try { hideDiscussion = localStorage.getItem("zmachine-hide-discussion") === "1"; } catch {}
-const discussionParam = new URLSearchParams(location.search).get("discussion");
-if (discussionParam) hideDiscussion = discussionParam === "hide";
-
 // The theme (auto follows the system) is remembered in this browser;
 // `?theme=light`, `?theme=dark` or `?theme=auto` overrides it.
 const themes = ["auto", "light", "dark"];
@@ -967,25 +1005,584 @@ const themeParam = new URLSearchParams(location.search).get("theme");
 if (themeParam) theme = themeParam;
 setTheme(themes.includes(theme) ? theme : "auto", false);
 
-// Both panes hidden would leave nothing, so the discussion stays.
-if (hideGame && hideDiscussion) hideDiscussion = false;
-showDiscussion(!hideDiscussion);
-showGame(!hideGame);
-
-// The game text size is remembered in this browser.
-const fontSize = document.getElementById("font-size");
-function setFontSize(px) {
-  document.documentElement.style.setProperty("--game-size", `${px}px`);
-  fontSize.value = px;
+// The game text size is remembered in this browser; steps widen as it grows.
+const fontSizes = [8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32, 40, 48, 64];
+const fontSmaller = document.getElementById("font-smaller");
+const fontLarger = document.getElementById("font-larger");
+let fontStep = fontSizes.indexOf(14);
+function setFontStep(i) {
+  fontStep = Math.max(0, Math.min(fontSizes.length - 1, i));
+  document.documentElement.style.setProperty("--game-size", `${fontSizes[fontStep]}px`);
+  fontSmaller.disabled = fontStep === 0;
+  fontLarger.disabled = fontStep === fontSizes.length - 1;
 }
-fontSize.addEventListener("change", () => {
-  setFontSize(fontSize.value);
-  try { localStorage.setItem("zmachine-font-size", fontSize.value); } catch {}
+function stepFont(by) {
+  setFontStep(fontStep + by);
+  try { localStorage.setItem("zmachine-font-size", String(fontSizes[fontStep])); } catch {}
   game.scrollTop = game.scrollHeight;
-});
+}
+fontSmaller.addEventListener("click", () => stepFont(-1));
+fontLarger.addEventListener("click", () => stepFont(1));
 let savedSize = null;
 try { savedSize = localStorage.getItem("zmachine-font-size"); } catch {}
-if (savedSize && [...fontSize.options].some((o) => o.value === savedSize)) setFontSize(savedSize);
+const savedStep = fontSizes.indexOf(Number(savedSize));
+setFontStep(savedStep >= 0 ? savedStep : fontStep);
+
+// The workspace: a tree of splits whose leaves are panels. Every view (game,
+// discussion, audit log, and the inspector's map, globals, history and
+// objects) is a tab that drags between panels, closes, reopens from the ▦
+// menu, and resizes. A tab dropped on a panel's body splits it along its
+// longer side.
+const $ = (id) => document.getElementById(id);
+const ws = $("ws");
+const LAYOUT_KEY = "zmachine-layout-tree";
+const tabTitles = { game: "Game", discussion: "Discussion", log: "Audit log", map: "Map", globals: "Globals", history: "History", objects: "Objects" };
+const paneIds = { game: "game-pane", discussion: "ai-pane", log: "log-pane", map: "map-pane", globals: "globals-pane", history: "history-pane", objects: "objects-pane" };
+const inspectorTabs = ["map", "globals", "history", "objects"];
+// Dragging and resizing are off on space-constrained screens, which stack the panels.
+const tiling = window.matchMedia("(min-width: 861px)");
+let inspecting = false;
+let inspectorBusy = false;
+let dragged = null;
+const unread = new Set();
+window.onPaneShown = null;
+
+const leaf = (tabs) => ({ tabs, active: tabs[0] });
+const isLeaf = (n) => Array.isArray(n.tabs);
+function defaultLayout() {
+  return {
+    tree: {
+      dir: "v", ratio: 0.58,
+      a: { dir: "h", ratio: 1.2 / 2.2, a: leaf(["game"]), b: leaf(["discussion"]) },
+      b: { dir: "h", ratio: 1.35 / 2.35, a: leaf(["log", "map", "globals", "history"]), b: leaf(["objects"]) },
+    },
+    closed: inspecting ? [] : ["log", ...inspectorTabs],
+  };
+}
+let W = loadLayout();
+
+// Panes are looked up once and kept, since a pane between redraws is out of the document.
+const paneCache = {};
+function paneEl(id) {
+  if (!paneCache[id]) paneCache[id] = document.getElementById(paneIds[id]);
+  return paneCache[id];
+}
+const exists = (id) => !!paneEl(id);
+function leaves(n, out = []) {
+  if (isLeaf(n)) out.push(n);
+  else { leaves(n.a, out); leaves(n.b, out); }
+  return out;
+}
+// A saved layout is used only if it names every tab once.
+function loadLayout() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LAYOUT_KEY));
+    const ids = leaves(saved.tree).flatMap((l) => l.tabs).sort().join();
+    if (ids !== Object.keys(tabTitles).sort().join()) return defaultLayout();
+    return { tree: saved.tree, closed: saved.closed || [] };
+  } catch {
+    return defaultLayout();
+  }
+}
+function saveLayout() {
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(W)); } catch {}
+}
+
+const visIn = (l) => l.tabs.filter((id) => exists(id) && !W.closed.includes(id));
+const hasVisible = (n) => leaves(n).some((l) => visIn(l).length > 0);
+const allVisible = () => leaves(W.tree).flatMap(visIn);
+const shownIn = (l) => {
+  const v = visIn(l);
+  return v.includes(l.active) ? l.active : v[0] || null;
+};
+const shownIds = () => leaves(W.tree).map(shownIn).filter(Boolean);
+const leafOf = (id) => leaves(W.tree).find((l) => l.tabs.includes(id));
+
+function replaceNode(root, old, fresh) {
+  if (root === old) return fresh;
+  if (!isLeaf(root)) {
+    root.a = replaceNode(root.a, old, fresh);
+    root.b = replaceNode(root.b, old, fresh);
+  }
+  return root;
+}
+function removeLeaf(root, target) {
+  if (root === target) return null;
+  if (isLeaf(root)) return root;
+  const a = removeLeaf(root.a, target), b = removeLeaf(root.b, target);
+  if (!a) return b;
+  if (!b) return a;
+  root.a = a;
+  root.b = b;
+  return root;
+}
+// Takes a tab out of its panel; a panel left with no tab goes.
+function detach(id) {
+  const l = leafOf(id);
+  l.tabs.splice(l.tabs.indexOf(id), 1);
+  if (!l.tabs.length && leaves(W.tree).length > 1) W.tree = removeLeaf(W.tree, l);
+}
+function moveTab(id, to, before) {
+  if (leafOf(id) === to) {
+    to.tabs.splice(to.tabs.indexOf(id), 1);
+  } else {
+    detach(id);
+  }
+  const at = before ? to.tabs.indexOf(before) : -1;
+  if (at >= 0) to.tabs.splice(at, 0, id);
+  else to.tabs.push(id);
+  to.active = id;
+}
+function splitLeaf(target, id, dir, first) {
+  if (target.tabs.length === 1 && target.tabs[0] === id) return;
+  detach(id);
+  const fresh = leaf([id]);
+  W.tree = replaceNode(W.tree, target, { dir, ratio: 0.5, a: first ? fresh : target, b: first ? target : fresh });
+}
+
+function noteUnread(id) {
+  if (!unread.has(id) && !shownIds().includes(id)) {
+    unread.add(id);
+    buildTabs();
+  }
+}
+
+function tabButton(id, active) {
+  // Not a <button>: Safari and Firefox won't drag those.
+  const b = document.createElement("div");
+  b.className = "tab" + (active ? " active" : "") + (unread.has(id) ? " unread" : "");
+  b.dataset.id = id;
+  b.setAttribute("role", "tab");
+  b.tabIndex = 0;
+  b.draggable = tiling.matches;
+  const label = document.createElement("span");
+  label.textContent = tabTitles[id];
+  const x = document.createElement("span");
+  x.className = "x";
+  x.textContent = "✕";
+  x.title = `Close ${tabTitles[id]}`;
+  b.append(label, x);
+  return b;
+}
+
+const toolsCache = {};
+function paneTools(id) {
+  if (!(id in toolsCache)) {
+    const pane = paneEl(id);
+    const tools = pane ? pane.querySelector(":scope > .pane-title") : null;
+    if (!tools) return null;
+    toolsCache[id] = tools;
+  }
+  return toolsCache[id];
+}
+
+// Draws the whole tree: a split per branch, a tab bar and body per panel.
+// Each pane's controls (font size, mode, …) sit at the right end of its
+// tab bar while its tab is in front, and go back into the pane otherwise.
+function buildTabs() {
+  for (const id of Object.keys(paneIds)) {
+    if (!exists(id)) continue;
+    const tools = paneTools(id);
+    if (tools) paneEl(id).prepend(tools);
+    $("panes").append(paneEl(id));
+  }
+  if (!allVisible().length) W = defaultLayout();
+  ws.replaceChildren(renderNode(W.tree));
+  const shown = shownIds();
+  for (const id of Object.keys(paneIds)) if (exists(id)) paneEl(id).classList.toggle("active", shown.includes(id));
+  for (const id of shown) unread.delete(id);
+  const inspectorOpen = inspectorTabs.some((id) => allVisible().includes(id));
+  $("inspector-link").setAttribute("aria-pressed", String(inspectorOpen));
+  for (const el of document.querySelectorAll("header .meta")) el.hidden = !inspectorOpen;
+  if (shown.includes("game")) game.scrollTop = game.scrollHeight;
+  if (shown.includes("discussion")) feed.scrollTop = feed.scrollHeight;
+  if (window.onPaneShown) for (const id of shown) window.onPaneShown(paneIds[id]);
+}
+
+function renderNode(n) {
+  if (isLeaf(n)) return renderLeaf(n);
+  if (!hasVisible(n.a)) return renderNode(n.b);
+  if (!hasVisible(n.b)) return renderNode(n.a);
+  const el = document.createElement("div");
+  el.className = `wsplit ${n.dir}`;
+  const handle = document.createElement("div");
+  handle.className = "wsplit-handle";
+  handle.title = "Drag to resize the panels";
+  setRatio(el, n);
+  el.append(renderNode(n.a), handle, renderNode(n.b));
+  dragHandle(handle, el, n);
+  return el;
+}
+function setRatio(el, n) {
+  const t = `minmax(0, ${n.ratio}fr) 5px minmax(0, ${1 - n.ratio}fr)`;
+  if (n.dir === "h") el.style.gridTemplateColumns = t;
+  else el.style.gridTemplateRows = t;
+}
+
+function renderLeaf(l) {
+  const wp = document.createElement("div");
+  wp.className = "wp";
+  const bar = document.createElement("div");
+  bar.className = "tabs";
+  const body = document.createElement("div");
+  body.className = "wbody";
+  wp.append(bar, body);
+  const ids = visIn(l);
+  const shown = shownIn(l);
+  l.active = shown || l.active;
+  bar.replaceChildren(...ids.map((id) => tabButton(id, id === shown)));
+  for (const id of l.tabs) if (exists(id)) body.append(paneEl(id));
+  const tools = shown && paneTools(shown);
+  if (tools) bar.append(tools);
+  wireLeaf(wp, bar, l);
+  return wp;
+}
+
+function closeTab(id) {
+  if (allVisible().length <= 1) return toast("Keep at least one panel open.");
+  W.closed.push(id);
+  saveLayout();
+  buildTabs();
+}
+function openTab(id) {
+  W.closed = W.closed.filter((c) => c !== id);
+  leafOf(id).active = id;
+  saveLayout();
+  buildTabs();
+}
+function toggleTab(id) {
+  if (allVisible().includes(id)) closeTab(id);
+  else openTab(id);
+}
+function toggleInspectorTabs() {
+  const open = inspectorTabs.some((id) => allVisible().includes(id));
+  if (open) {
+    for (const id of inspectorTabs) if (!W.closed.includes(id)) W.closed.push(id);
+    saveLayout();
+    buildTabs();
+  } else {
+    showInspectorTabs();
+  }
+}
+function showInspectorTabs() {
+  W.closed = W.closed.filter((c) => !inspectorTabs.includes(c));
+  leafOf("map").active = "map";
+  saveLayout();
+  buildTabs();
+}
+
+// The ▦ menu lists every view, checked while open, and restores the default layout.
+const panelsMenu = $("panels-menu");
+$("panels-toggle").addEventListener("click", (ev) => {
+  ev.stopPropagation();
+  if (!panelsMenu.hidden) return (panelsMenu.hidden = true);
+  panelsMenu.replaceChildren();
+  const open = allVisible();
+  for (const id of Object.keys(tabTitles)) {
+    if (!exists(id)) continue;
+    const b = document.createElement("button");
+    b.textContent = `${open.includes(id) ? "✓" : " "} ${tabTitles[id]}`;
+    b.addEventListener("click", () => toggleTab(id));
+    panelsMenu.append(b);
+  }
+  panelsMenu.append(document.createElement("hr"));
+  const reset = document.createElement("button");
+  reset.textContent = "  Default layout";
+  reset.addEventListener("click", () => {
+    W = defaultLayout();
+    try { localStorage.removeItem(LAYOUT_KEY); } catch {}
+    buildTabs();
+  });
+  panelsMenu.append(reset);
+  const r = ev.currentTarget.getBoundingClientRect();
+  panelsMenu.style.top = `${r.bottom + 4}px`;
+  panelsMenu.style.right = `${Math.max(8, window.innerWidth - r.right)}px`;
+  panelsMenu.hidden = false;
+});
+document.addEventListener("click", () => { panelsMenu.hidden = true; });
+
+// Dragging a tab onto a tab bar moves it there, before the tab it is
+// dropped on; onto a panel's body, it splits the panel along its longer
+// side, the dropped tab taking the half nearer the pointer.
+const clearMarks = () => {
+  for (const el of ws.querySelectorAll(".drop-target, .drop-before, .drop-end")) {
+    el.classList.remove("drop-target", "drop-before", "drop-end");
+  }
+  for (const el of ws.querySelectorAll(".drop-preview")) el.remove();
+};
+const dropPoint = (bar, x) => {
+  for (const t of bar.querySelectorAll(".tab")) {
+    if (t.dataset.id === dragged) continue;
+    const r = t.getBoundingClientRect();
+    if (x < r.left + r.width / 2) return t.dataset.id;
+  }
+  return null;
+};
+// Where a drop on `body` at (x, y) would split it.
+function splitZone(body, x, y) {
+  const r = body.getBoundingClientRect();
+  const dir = r.width >= r.height ? "h" : "v";
+  const first = dir === "h" ? x < r.left + r.width / 2 : y < r.top + r.height / 2;
+  return { dir, first };
+}
+function endDrag() {
+  dragged = null;
+  ws.classList.remove("dragging");
+  clearMarks();
+}
+function wireLeaf(wp, bar, l) {
+  bar.addEventListener("click", (ev) => {
+    const tab = ev.target.closest(".tab");
+    if (!tab) return;
+    if (ev.target.classList.contains("x")) return closeTab(tab.dataset.id);
+    l.active = tab.dataset.id;
+    saveLayout();
+    buildTabs();
+  });
+  bar.addEventListener("keydown", (ev) => {
+    const tab = ev.target.closest(".tab");
+    if (tab && (ev.key === "Enter" || ev.key === " ")) {
+      ev.preventDefault();
+      tab.click();
+    }
+  });
+  bar.addEventListener("dragstart", (ev) => {
+    const tab = ev.target.closest(".tab");
+    if (!tab || !tiling.matches) return ev.preventDefault();
+    dragged = tab.dataset.id;
+    tab.classList.add("dragging");
+    ev.dataTransfer.effectAllowed = "move";
+    ev.dataTransfer.setData("text/plain", dragged);
+    setTimeout(() => ws.classList.add("dragging"), 0);
+  });
+  bar.addEventListener("dragend", endDrag);
+  bar.addEventListener("dragover", (ev) => {
+    if (!dragged) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.dataTransfer.dropEffect = "move";
+    clearMarks();
+    bar.classList.add("drop-target");
+    const before = dropPoint(bar, ev.clientX);
+    if (before) bar.querySelector(`.tab[data-id="${before}"]`).classList.add("drop-before");
+    else bar.classList.add("drop-end");
+  });
+  bar.addEventListener("dragleave", (ev) => {
+    if (!bar.contains(ev.relatedTarget)) clearMarks();
+  });
+  bar.addEventListener("drop", (ev) => {
+    if (!dragged) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    moveTab(dragged, l, dropPoint(bar, ev.clientX));
+    endDrag();
+    saveLayout();
+    buildTabs();
+  });
+  // The body: a drop splits the panel.
+  const body = wp.querySelector(".wbody");
+  const splittable = () => dragged && !(l.tabs.length === 1 && l.tabs[0] === dragged);
+  wp.addEventListener("dragover", (ev) => {
+    if (!splittable() || bar.contains(ev.target)) return;
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = "move";
+    clearMarks();
+    const { dir, first } = splitZone(body, ev.clientX, ev.clientY);
+    const preview = document.createElement("div");
+    preview.className = "drop-preview";
+    const box = body.getBoundingClientRect(), own = wp.getBoundingClientRect();
+    const w = dir === "h" ? box.width / 2 : box.width, h = dir === "h" ? box.height : box.height / 2;
+    preview.style.left = `${box.left - own.left + (dir === "h" && !first ? box.width / 2 : 0)}px`;
+    preview.style.top = `${box.top - own.top + (dir === "v" && !first ? box.height / 2 : 0)}px`;
+    preview.style.width = `${w}px`;
+    preview.style.height = `${h}px`;
+    wp.append(preview);
+  });
+  wp.addEventListener("dragleave", (ev) => {
+    if (!wp.contains(ev.relatedTarget)) clearMarks();
+  });
+  wp.addEventListener("drop", (ev) => {
+    if (!splittable() || bar.contains(ev.target)) return;
+    ev.preventDefault();
+    const { dir, first } = splitZone(body, ev.clientX, ev.clientY);
+    splitLeaf(l, dragged, dir, first);
+    endDrag();
+    saveLayout();
+    buildTabs();
+  });
+}
+
+// Dragging a boundary between panels resizes them.
+function dragHandle(handle, el, n) {
+  let dragging = false;
+  handle.addEventListener("pointerdown", (ev) => {
+    dragging = true;
+    handle.setPointerCapture(ev.pointerId);
+    handle.classList.add("dragging");
+  });
+  handle.addEventListener("pointermove", (ev) => {
+    if (!dragging) return;
+    const r = el.getBoundingClientRect();
+    const x = n.dir === "h" ? (ev.clientX - r.left) / r.width : (ev.clientY - r.top) / r.height;
+    n.ratio = Math.min(0.85, Math.max(0.15, x));
+    setRatio(el, n);
+  });
+  const end = () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove("dragging");
+    saveLayout();
+  };
+  handle.addEventListener("pointerup", end);
+  handle.addEventListener("pointercancel", end);
+}
+tiling.addEventListener("change", buildTabs);
+{
+  const want = new URLSearchParams(location.search);
+  // `?game=hide|show` and `?discussion=hide|show` override the saved layout.
+  for (const id of ["game", "discussion"]) {
+    const v = want.get(id);
+    if (v === "hide" && !W.closed.includes(id)) W.closed.push(id);
+    if (v === "show") W.closed = W.closed.filter((c) => c !== id);
+  }
+  if (want.has("log")) W.closed = W.closed.filter((c) => c !== "log");
+  // Both closed would leave nothing, so the discussion stays.
+  if (W.closed.includes("game") && W.closed.includes("discussion")) W.closed = W.closed.filter((c) => c !== "discussion");
+  buildTabs();
+}
+
+// The audit log
+
+const logRows = $("log-rows");
+const logCounts = { command: 0, keyboard: 0, suspicious: 0 };
+const onlySuspicious = $("only-suspicious");
+const logLabels = {
+  command: "command", keyboard: "typed", inspector: "inspector",
+  snapshot: "snapshot", refused: "refused", join: "players", login: "password",
+  leader: "leader", kick: "kick", password: "password", access: "inspector", game: "game",
+};
+// The player behind an event: "name via agent" requests, and the events that
+// name their actor as the client. Others (an unnamed client) have none. The
+// Client column then drops the name, which the Player column shows.
+const actorKinds = new Set(["join", "leader", "kick", "password", "access"]);
+function logPlayer(e) {
+  const via = e.client.indexOf(" via ");
+  if (via > 0) return e.client.slice(0, via);
+  return actorKinds.has(e.kind) ? e.client : "";
+}
+function logClient(e) {
+  const via = e.client.indexOf(" via ");
+  if (via > 0) return e.client.slice(via + 5);
+  return actorKinds.has(e.kind) ? "" : e.client;
+}
+onlySuspicious.addEventListener("change", () => {
+  for (const tr of logRows.children) tr.hidden = onlySuspicious.checked && !tr.classList.contains("suspicious");
+});
+function addLogRow(e) {
+  const tr = document.createElement("tr");
+  tr.className = "log-" + e.kind + (e.suspicious ? " suspicious" : "");
+  tr.hidden = onlySuspicious.checked && !e.suspicious;
+  for (const [cls, text] of [
+    ["time", new Date(e.time).toLocaleTimeString()],
+    ["kind", logLabels[e.kind] || e.kind],
+    ["player", logPlayer(e)],
+    ["detail", e.detail],
+    ["client", logClient(e)],
+    ["from", e.from || ""],
+  ]) {
+    const td = document.createElement("td");
+    td.className = "log-" + cls;
+    td.textContent = text;
+    if (cls === "player") td.dataset.name = text;
+    tr.appendChild(td);
+  }
+  logRows.prepend(tr);
+  colorLog(tr);
+  if (e.kind in logCounts) logCounts[e.kind]++;
+  if (e.suspicious) {
+    logCounts.suspicious++;
+    if (logLoaded) noteUnread("log");
+  }
+}
+// A player's name takes the color of their chip in the discussion; a name
+// not yet seen there stays plain until updatePlayers calls this again.
+function colorLog(root = document.getElementById("log-rows")) {
+  for (const td of root.querySelectorAll("td.log-player")) {
+    const name = td.dataset.name;
+    td.style.color = !name ? "" : isMe(name) ? "var(--you)" : seen.includes(name) ? colorFor(name) : "";
+  }
+}
+let logStarted = false;
+let logLoaded = false;
+async function startLog() {
+  if (logStarted) return;
+  logStarted = true;
+  let last = 0;
+  for (;;) {
+    try {
+      const res = await fetch(`/events?since=${last}`, { cache: "no-store" });
+      const data = await res.json();
+      data.events.forEach(addLogRow);
+      logLoaded = true;
+      last = data.last;
+      for (const k in logCounts) $("n-" + k).textContent = logCounts[k];
+      $("log-empty").hidden = logRows.children.length > 0;
+      $("log-status").textContent = "live";
+    } catch {
+      $("log-status").textContent = "disconnected; retrying";
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+}
+
+startLog();
+
+// Unlocking the inspector fetches its panels (this machine only; the server
+// logs it as suspicious) and adds them as tabs.
+function inspectorWanted() {
+  try { return localStorage.getItem("zmachine-inspector") === "1"; } catch { return false; }
+}
+function rememberInspector(on) {
+  try { localStorage.setItem("zmachine-inspector", on ? "1" : ""); } catch {}
+}
+async function unlockInspector() {
+  if (inspecting) {
+    toggleInspectorTabs();
+    rememberInspector(inspectorTabs.some((id) => allVisible().includes(id)));
+    return;
+  }
+  if (inspectorBusy || !tiling.matches) return;
+  if (!confirm("The inspector shows hidden game state: objects, globals and the map. It can spoil puzzles, and unlocking it is logged as suspicious for every player to see.\n\nUnlock it?")) return;
+  await loadInspector(true);
+}
+// Fetches the inspector's panels and adds them as tabs, opening them when `show`.
+async function loadInspector(show) {
+  if (inspectorBusy || inspecting || !tiling.matches) return;
+  inspectorBusy = true;
+  try {
+    const res = await api("/inspector");
+    if (!res.ok) return toast("The inspector answers only this machine.");
+    const tpl = document.createElement("template");
+    tpl.innerHTML = await res.text();
+    const frag = tpl.content;
+    for (const el of frag.querySelectorAll("[data-bar]")) $("header-status").insertBefore(el, $("score"));
+    for (const pane of frag.querySelectorAll(".pane")) $("panes").append(pane);
+    const style = frag.querySelector("style");
+    if (style) document.head.append(style);
+    inspecting = true;
+    rememberInspector(true);
+    if (show) showInspectorTabs();
+    for (const old of frag.querySelectorAll("script")) {
+      const script = document.createElement("script");
+      script.textContent = old.textContent;
+      document.body.append(script);
+    }
+    buildTabs();
+  } finally {
+    inspectorBusy = false;
+  }
+}
+$("inspector-link").addEventListener("click", unlockInspector);
 
 setMode(mode);
 // Join under the remembered name, or ask for one.

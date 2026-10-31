@@ -3,7 +3,7 @@
 //! the keyboard and any other AI partners. The web server hands it the
 //! JSON-RPC messages posted to `/mcp` (streamable HTTP, answered with plain
 //! JSON). Each partner has a session, made by `initialize`, and names itself
-//! with the `introduce` tool. The service talks back to the game's web
+//! with the `introduce_self` tool. The service talks back to the game's web
 //! server on 127.0.0.1.
 
 const std = @import("std");
@@ -19,15 +19,18 @@ const protocol_version = "2025-06-18";
 
 const instructions =
     \\You are playing an interactive fiction game (a Z-machine story such as
-    \\Zork) together with one or more people. They see the game in a
-    \\terminal (the console), or on the game's web page with
-    \\everyone's thoughts beside it; several people may be playing at once,
-    \\some on other machines. Other AI partners may be playing too. Everyone's
-    \\thoughts and messages come with their names, and you can agree or
-    \\argue with them.
+    \\Zork), alone or together with any number of people and other AI
+    \\partners. People see the game in a terminal (the console), or on the
+    \\game's web page with everyone's thoughts beside it; several may be
+    \\playing at once, some on other machines. Everyone's thoughts and
+    \\messages come with their names, and you can agree or argue with them.
     \\
-    \\Start with introduce, giving the name you go by (such as Claude), so the
-    \\others know who you are; then read_game.
+    \\Start with introduce_self, giving the name you go by (your own model name, for example), so the
+    \\others know who you are; then read_game. Tool names contain an
+    \\underscore; game commands never do.
+    \\
+    \\If these tools are too many or too long for you, reconnect to
+    \\/mcp/simple, which has four short ones.
     \\
     \\One player leads: at first the console and the people on its machine.
     \\The leader picks the mode:
@@ -60,18 +63,56 @@ const instructions =
     \\Think out loud with share_thoughts in either mode: what you noticed,
     \\what you think the puzzle is, and what you would try. Keep it short.
     \\
-    \\Play fair: know only what the game text tells you. The web server's
-    \\object inspector shows hidden game state (objects, attributes,
-    \\globals, the map). You may read it with read_inspector only when a
+    \\Play fair, unless a player tells you otherwise: know only what the game
+    \\text tells you. The web server's object inspector shows hidden game
+    \\state (objects, attributes, globals, the map). You may read it with read_inspector only when a
     \\person on the console's machine lets you (read_game says so), and
     \\every read is logged. When you use it, say so in the discussion, and
     \\don't spoil puzzles the others want to solve.
 ;
 
+/// For the simple profile, which small models can follow.
+const simple_instructions =
+    \\You are playing a text adventure game (such as Zork), alone or with other
+    \\players. Call send_command with one short game command, such as "open
+    \\mailbox" or "go north". Read the reply, then call send_command again.
+    \\Add a thought saying why, so the others can follow you. If you forget
+    \\what happened, call read_recent (to see the room, send the command
+    \\look). If a command is not understood, call get_help. If you are
+    \\stuck, call tell_players to ask the others a question. Send the command
+    \\restart, then y, only when the group wants to start over. Tool names
+    \\contain an underscore; game commands never do.
+;
+
+/// The simple profile's tools.
+const simple_tools_json = oneLine(
+    \\[{"name":"send_command","description":"Send one command to the game and read what happens. Add a short thought about why; the others see it.","inputSchema":{"type":"object","properties":{"command":{"type":"string","description":"One command, such as open mailbox or go north."},"thought":{"type":"string","description":"Why you chose it (optional)."}},"required":["command"]}},
+    \\{"name":"read_recent","description":"Read the recent game log and what the others said, without sending anything. This is not the game's look command; to see the room again, call send_command with the command look.","inputSchema":{"type":"object","properties":{}}},
+    \\{"name":"tell_players","description":"Tell the other players something.","inputSchema":{"type":"object","properties":{"text":{"type":"string","description":"Your message."}},"required":["text"]}},
+    \\{"name":"get_help","description":"Common commands and how to save and restore.","inputSchema":{"type":"object","properties":{}}}]
+);
+
+/// What `help` says.
+const help_text =
+    \\Commands are short: a verb and an object. Examples:
+    \\look, inventory, go north (or n), open door, take lamp, drop lamp,
+    \\put key in lock, unlock door with key, read leaflet, examine tree.
+    \\Other verbs: turn on lamp, push button, climb tree, enter house.
+    \\If the game says it does not understand, use simpler words.
+    \\save and restore keep and bring back your place; undo may take back
+    \\a move; restart then y starts over (the group should agree first).
+;
+
+/// The most game text a simple reply holds (the latest), and the most
+/// other players' talk.
+const simple_text_limit = 1500;
+const simple_talk_limit = 800;
+
 /// One line, since each message is one line.
 const tools_json = oneLine(
-    \\[{"name":"introduce","description":"Say who you are before playing: the name you go by, such as Claude. Your thoughts, messages and commands appear under it.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Your name, 1 to 32 characters, such as \"Claude\"."}},"required":["name"]}},
+    \\[{"name":"introduce_self","description":"Say who you are before playing: your own model name, not an example. Your thoughts, messages and commands appear under it.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Your own model name, 1 to 32 characters."}},"required":["name"]}},
     \\{"name":"read_game","description":"Read the game text printed since you last looked (the whole recent game the first time), the status line, the mode, who leads and plays, and any messages from the others.","inputSchema":{"type":"object","properties":{}},"annotations":{"readOnlyHint":true}},
+    \\{"name":"get_story_info","description":"Read-only: which story is loaded (file, Z-machine version, release, serial) the random seed, and the mode. Not game state.","inputSchema":{"type":"object","properties":{}},"annotations":{"readOnlyHint":true}},
     \\{"name":"send_command","description":"Send one command to the game, as if typed, and return the game's response. In debate mode only the leader may; otherwise suggest commands with share_thoughts. When the story waits for a single key, the command's characters are pressed in turn and an empty command is Return.","inputSchema":{"type":"object","properties":{"command":{"type":"string","description":"One line of input, such as \"open mailbox\"."}},"required":["command"]}},
     \\{"name":"share_thoughts","description":"Show your thinking, under your name, beside the game, with suggested commands the others can click to send. Use it to argue for a move in debate mode, to answer someone, or to think out loud.","inputSchema":{"type":"object","properties":{"thoughts":{"type":"string","description":"Your reasoning or reply, in a few sentences."},"suggestions":{"type":"array","items":{"type":"string"},"maxItems":8,"description":"Commands to offer as buttons, best first."}},"required":["thoughts"]}},
     \\{"name":"wait_for_player","description":"Wait until another player makes a move, posts a message or thought, or something else changes, then return what changed, as read_game does.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":600,"description":"How long to wait; 120 by default."}}},"annotations":{"readOnlyHint":true}},
@@ -118,6 +159,10 @@ const Session = struct {
     /// Whether this partner led when it last looked, to say when that
     /// changes.
     led: ?bool = null,
+    /// The simple profile: four tools, no leader powers.
+    simple: bool = false,
+    /// The client's name from `initialize`, to name a simple session by.
+    client: ?[]const u8 = null,
 };
 
 const Result = struct {
@@ -154,12 +199,14 @@ pub const Service = struct {
 
     fn destroy(gpa: Allocator, session: *Session) void {
         if (session.name) |name| gpa.free(name);
+        if (session.client) |name| gpa.free(name);
         gpa.destroy(session);
     }
 
     /// Answers one message posted to `/mcp`. `session_id` is the request's
-    /// Mcp-Session-Id, if it had one.
-    pub fn post(sv: *Service, arena: Allocator, session_id: ?[]const u8, body: []const u8) !protocol.McpReply {
+    /// Mcp-Session-Id, if it had one; `profile` is "simple" (or anything
+    /// else for the full interface), read when the session opens.
+    pub fn post(sv: *Service, arena: Allocator, session_id: ?[]const u8, profile: ?[]const u8, body: []const u8) !protocol.McpReply {
         var out: Io.Writer.Allocating = .init(arena);
         const w = &out.writer;
         const message = json.parseFromSliceLeaky(json.Value, arena, body, .{}) catch {
@@ -175,7 +222,7 @@ pub const Service = struct {
         const method = message.object.get("method");
         const opens = method != null and method.? == .string and std.mem.eql(u8, method.?.string, "initialize");
 
-        const session = if (opens) sv.open() catch |err| switch (err) {
+        const session = if (opens) sv.open(if (profile) |p| std.ascii.eqlIgnoreCase(p, "simple") else false) catch |err| switch (err) {
             error.TooManySessions => {
                 try writeError(w, id, -32000, "too many partners are connected");
                 return reply(503, &out);
@@ -189,6 +236,11 @@ pub const Service = struct {
             return reply(404, &out);
         };
         defer sv.release(session);
+        // A profile named after the session opened must be the same one.
+        if (!opens) if (profile) |p| if (std.ascii.eqlIgnoreCase(p, "simple") != session.simple) {
+            try writeError(w, id, -32600, "this session uses the other profile; initialize again");
+            return reply(400, &out);
+        };
 
         session.mutex.lockUncancelable(sv.io);
         defer session.mutex.unlock(sv.io);
@@ -218,12 +270,12 @@ pub const Service = struct {
 
     /// Makes a session with a random id, dropping the one idle longest if
     /// there are too many.
-    fn open(sv: *Service) !*Session {
+    fn open(sv: *Service, simple: bool) !*Session {
         const session = try sv.gpa.create(Session);
         errdefer sv.gpa.destroy(session);
         var raw: [16]u8 = undefined;
         try sv.io.randomSecure(&raw);
-        session.* = .{ .id = std.fmt.bytesToHex(raw, .lower), .gpa = sv.gpa, .io = sv.io, .port = sv.port };
+        session.* = .{ .id = std.fmt.bytesToHex(raw, .lower), .gpa = sv.gpa, .io = sv.io, .port = sv.port, .simple = simple };
 
         sv.mutex.lockUncancelable(sv.io);
         defer sv.mutex.unlock(sv.io);
@@ -272,18 +324,24 @@ fn handle(s: *Session, arena: Allocator, obj: json.ObjectMap, w: *Io.Writer) !vo
     const params: ?json.ObjectMap = if (obj.get("params")) |p| (if (p == .object) p.object else null) else null;
 
     if (std.mem.eql(u8, method, "initialize")) {
+        if (s.simple) if (params) |p| if (p.get("clientInfo")) |info| if (info == .object) {
+            if (stringArg(info.object, "name")) |client| {
+                if (s.client) |old| s.gpa.free(old);
+                s.client = try s.gpa.dupe(u8, client);
+            }
+        };
         const version = if (params) |p| (if (p.get("protocolVersion")) |v| (if (v == .string) v.string else null) else null) else null;
         var out: Io.Writer.Allocating = .init(arena);
         try out.writer.writeAll("{\"protocolVersion\":");
         try writeString(&out.writer, version orelse protocol_version);
         try out.writer.writeAll(",\"capabilities\":{\"tools\":{}},\"serverInfo\":{\"name\":\"zmachine\",\"version\":\"" ++
             build_options.version ++ "\"},\"instructions\":");
-        try writeString(&out.writer, instructions);
+        try writeString(&out.writer, if (s.simple) simple_instructions else instructions);
         try out.writer.writeAll("}");
         return writeResult(w, id, out.written());
     }
     if (std.mem.eql(u8, method, "ping")) return writeResult(w, id, "{}");
-    if (std.mem.eql(u8, method, "tools/list")) return writeResult(w, id, "{\"tools\":" ++ tools_json ++ "}");
+    if (std.mem.eql(u8, method, "tools/list")) return writeResult(w, id, if (s.simple) "{\"tools\":" ++ simple_tools_json ++ "}" else "{\"tools\":" ++ tools_json ++ "}");
     if (std.mem.eql(u8, method, "tools/call")) {
         const p = params orelse return writeError(w, id, -32602, "missing params");
         const name = p.get("name") orelse return writeError(w, id, -32602, "missing tool name");
@@ -333,17 +391,19 @@ fn stringArg(args: ?json.ObjectMap, name: []const u8) ?[]const u8 {
 }
 
 fn call(s: *Session, arena: Allocator, name: []const u8, args: ?json.ObjectMap) !Result {
-    if (std.mem.eql(u8, name, "introduce")) {
+    if (s.simple) return callSimple(s, arena, name, args);
+    if (std.mem.eql(u8, name, "introduce_self")) {
         const player = stringArg(args, "name") orelse
-            return .{ .text = "introduce needs your name.", .is_error = true };
+            return .{ .text = "introduce_self needs your name.", .is_error = true };
         return introduce(s, arena, std.mem.trim(u8, player, " "));
     }
     // Every request names the partner, so nothing is sent until then.
     if (s.name == null) return .{
-        .text = "Introduce yourself first: call introduce with the name you go by, such as Claude.",
+        .text = "Introduce yourself first: call introduce_self with your own model name, not an example.",
         .is_error = true,
     };
     if (std.mem.eql(u8, name, "read_game")) return readGame(s, arena);
+    if (std.mem.eql(u8, name, "get_story_info")) return getStoryInfo(s, arena);
     if (std.mem.eql(u8, name, "send_command")) {
         const command = stringArg(args, "command") orelse
             return .{ .text = "send_command needs a command.", .is_error = true };
@@ -404,6 +464,162 @@ fn call(s: *Session, arena: Allocator, name: []const u8, args: ?json.ObjectMap) 
     return error.UnknownTool;
 }
 
+// The simple profile
+
+fn callSimple(s: *Session, arena: Allocator, name: []const u8, args: ?json.ObjectMap) !Result {
+    if (std.mem.eql(u8, name, "get_help")) return .{ .text = help_text };
+    if (std.mem.eql(u8, name, "send_command")) {
+        const command = std.mem.trim(u8, stringArg(args, "command") orelse "", " \t\r\n");
+        if (command.len == 0) return .{ .text = "send_command needs a command, such as look or go north.", .is_error = true };
+        try nameSimple(s, arena);
+        return play(s, arena, command, std.mem.trim(u8, stringArg(args, "thought") orelse "", " \t\r\n"));
+    }
+    if (std.mem.eql(u8, name, "read_recent")) {
+        try nameSimple(s, arena);
+        return recent(s, arena);
+    }
+    if (std.mem.eql(u8, name, "tell_players")) {
+        const text = std.mem.trim(u8, stringArg(args, "text") orelse "", " \t\r\n");
+        if (text.len == 0) return .{ .text = "tell_players needs the words to tell the others.", .is_error = true };
+        try nameSimple(s, arena);
+        var body: Io.Writer.Allocating = .init(arena);
+        try json.Stringify.value(.{ .kind = "message", .text = text }, .{}, &body.writer);
+        const response = try request(s, arena, "POST", "/say", body.written());
+        if (response.status != 204) return .{ .text = "The others could not be told; try again.", .is_error = true };
+        return .{ .text = "Said." };
+    }
+    return error.UnknownTool;
+}
+
+/// Gives a simple session its name on first use: the client's, with a
+/// number added if somebody has it.
+fn nameSimple(s: *Session, arena: Allocator) !void {
+    if (s.name != null) return;
+    var base: std.ArrayList(u8) = .empty;
+    for (s.client orelse "") |c| {
+        if (c >= 0x20 and c < 0x7f and base.items.len < 24) try base.append(arena, c);
+    }
+    var trimmed: []const u8 = std.mem.trim(u8, base.items, " ");
+    if (!protocol.validName(trimmed)) trimmed = "AI";
+    var n: usize = 1;
+    while (n < 50) : (n += 1) {
+        const candidate = if (n == 1) trimmed else try std.fmt.allocPrint(arena, "{s}-{d}", .{ trimmed, n });
+        s.name = try s.gpa.dupe(u8, candidate);
+        const response = try request(s, arena, "GET", "/discussion?since=0", "");
+        if (response.status != 409) return;
+        s.gpa.free(s.name.?);
+        s.name = null;
+    }
+    return error.NameTaken;
+}
+
+/// The latest `limit` bytes of `text`, starting at a line when one is near.
+fn tail(arena: Allocator, text: []const u8, limit: usize) ![]const u8 {
+    if (text.len <= limit) return text;
+    var cut = text.len - limit;
+    if (std.mem.indexOfScalarPos(u8, text, cut, '\n')) |nl| {
+        if (nl - cut < limit / 4) cut = nl + 1;
+    }
+    return std.fmt.allocPrint(arena, "…{s}", .{text[cut..]});
+}
+
+/// The others' new posts, as the full profile shows them, in brief.
+fn simpleTalk(s: *Session, arena: Allocator, w: *Io.Writer) !void {
+    const d = try discussion(s, arena, s.post_seq, false);
+    s.post_seq = d.last;
+    var talk: Io.Writer.Allocating = .init(arena);
+    try writeMessages(&talk.writer, d.posts, s.name.?);
+    const text = std.mem.trim(u8, talk.written(), "\n");
+    if (text.len == 0) return;
+    // Drop the heading; keep the latest.
+    const body = if (std.mem.startsWith(u8, text, "--- From the others ---\n")) text["--- From the others ---\n".len..] else text;
+    try w.print("\nThe others say:\n{s}\n", .{try tail(arena, body, simple_talk_limit)});
+}
+
+/// The status line spelled out for the simple profile, as "Score 5, moves
+/// 8, in Up a Tree", or the line as the game gave it when it has no score.
+fn writeLabeledStatus(w: *Io.Writer, status: []const []const u8) !void {
+    if (status.len != 2 or status[0].len == 0) return;
+    const score = numberAfter(status[1], "Score:");
+    const moves = numberAfter(status[1], "Moves:");
+    if (score != null and moves != null) {
+        try w.print("Score {s}, moves {s}, in {s}\n", .{ score.?, moves.?, std.mem.trim(u8, status[0], " ") });
+    } else {
+        try w.print("[{s} | {s}]\n", .{ status[0], status[1] });
+    }
+}
+
+/// The run of digits after `prefix` in `text`, if any.
+fn numberAfter(text: []const u8, prefix: []const u8) ?[]const u8 {
+    const at = std.mem.indexOf(u8, text, prefix) orelse return null;
+    var i = at + prefix.len;
+    while (i < text.len and text[i] == ' ') i += 1;
+    const start = i;
+    while (i < text.len and std.ascii.isDigit(text[i])) i += 1;
+    return if (i > start) text[start..i] else null;
+}
+
+fn writeStatus(w: *Io.Writer, status: []const []const u8) !void {
+    if (status.len == 2 and status[0].len > 0) try w.print("[{s} | {s}]\n", .{ status[0], status[1] });
+}
+
+fn play(s: *Session, arena: Allocator, command: []const u8, thought: []const u8) !Result {
+    if (thought.len > 0) {
+        var body: Io.Writer.Allocating = .init(arena);
+        try json.Stringify.value(.{ .kind = "thought", .text = thought, .suggestions = [_][]const u8{command} }, .{}, &body.writer);
+        _ = try request(s, arena, "POST", "/say", body.written());
+    }
+    const response = try request(s, arena, "POST", "/command", command);
+    switch (response.status) {
+        200 => {},
+        202 => return .{ .text = "Sent, but the game has not answered yet. Call read_recent in a moment." },
+        409 => {
+            // Not the leader in debate: offer the command to the group.
+            if (thought.len == 0) {
+                var body: Io.Writer.Allocating = .init(arena);
+                try json.Stringify.value(.{
+                    .kind = "thought",
+                    .text = "I suggest this next.",
+                    .suggestions = [_][]const u8{command},
+                }, .{}, &body.writer);
+                _ = try request(s, arena, "POST", "/say", body.written());
+            }
+            return .{ .text = "Only the leader sends commands now, so your command was offered to the group as a suggestion. Call read_recent to see their reply." };
+        },
+        else => return .{ .text = "The game did not take that command; try again or call read_recent.", .is_error = true },
+    }
+    const reply = try protocol.parse(protocol.CommandReply, arena, response.body);
+    const echo = reply.echo orelse 0;
+
+    var text: Io.Writer.Allocating = .init(arena);
+    // Moves the others made since this player last looked come first.
+    if (s.offset) |seen| if (echo > seen) {
+        const t = try transcript(s, arena, seen);
+        const missed = std.mem.trim(u8, t.text[0..@min(t.text.len, echo - seen)], " \n>");
+        if (missed.len > 0) try text.writer.print("Meanwhile:\n{s}\n\n", .{missed});
+    };
+    try text.writer.print(">{s}\n{s}", .{ command, reply.output orelse "" });
+    var out: Io.Writer.Allocating = .init(arena);
+    const w = &out.writer;
+    try writeLabeledStatus(w, reply.status orelse &.{});
+    try w.print("{s}\n", .{try tail(arena, std.mem.trimEnd(u8, text.written(), "\n"), simple_text_limit)});
+    s.offset = reply.offset orelse 0;
+    try simpleTalk(s, arena, w);
+    return .{ .text = out.written() };
+}
+
+fn recent(s: *Session, arena: Allocator) !Result {
+    const t = try transcript(s, arena, 0);
+    var out: Io.Writer.Allocating = .init(arena);
+    const w = &out.writer;
+    try w.writeAll("Recent log (to see the room, send the command look):\n");
+    try w.print("{s}\n", .{try tail(arena, std.mem.trimEnd(u8, t.text, "\n"), simple_text_limit)});
+    try writeLabeledStatus(w, t.status);
+    s.offset = t.offset;
+    try simpleTalk(s, arena, w);
+    return .{ .text = out.written() };
+}
+
 fn introduce(s: *Session, arena: Allocator, name: []const u8) !Result {
     if (!protocol.validName(name)) return .{
         .text = "A name is 1 to 32 printable characters, and not \"you\", which stands for the person.",
@@ -425,6 +641,21 @@ fn leaderAction(s: *Session, arena: Allocator, path: []const u8, body: []const u
         403 => .{ .text = "Only the leader may do that, and an AI leader can only make a random password.", .is_error = true },
         else => .{ .text = std.mem.trim(u8, response.body, " \n"), .is_error = true },
     };
+}
+
+fn getStoryInfo(s: *Session, arena: Allocator) !Result {
+    const response = try request(s, arena, "GET", "/story", "");
+    if (response.status != 200) return .{ .text = "The server has no story information.", .is_error = true };
+    const info = try protocol.parse(protocol.StoryInfo, arena, response.body);
+    return .{ .text = try storyText(arena, info) };
+}
+
+fn storyText(arena: Allocator, info: protocol.StoryInfo) ![]const u8 {
+    const seed = if (info.seed_random)
+        try std.fmt.allocPrint(arena, "{d} (drawn at random; --seed {d} replays the game)", .{ info.seed, info.seed })
+    else
+        try std.fmt.allocPrint(arena, "{d} (set with --seed or by the story)", .{info.seed});
+    return std.fmt.allocPrint(arena, "Story: {s} (Z-machine version {d}), release {d}, serial {s}.\nSeed: {s}.\nMode: {s}.", .{ info.file, info.zversion, info.release, info.serial, seed, info.mode });
 }
 
 fn readGame(s: *Session, arena: Allocator) !Result {
@@ -607,6 +838,10 @@ fn writeMessages(w: *Io.Writer, posts: []const Post, name: []const u8) !void {
         }
         if (std.mem.eql(u8, p.kind, "password")) {
             try w.print("({s} changed the password for remote players)\n", .{who});
+            continue;
+        }
+        if (std.mem.eql(u8, p.kind, "cleared")) {
+            try w.print("({s} cleared the discussion)\n", .{who});
             continue;
         }
         if (std.mem.eql(u8, p.kind, "granted")) {
@@ -798,8 +1033,71 @@ fn request(s: *Session, arena: Allocator, method: []const u8, path: []const u8, 
 test "tool list is valid JSON" {
     const parsed = try json.parseFromSlice(json.Value, std.testing.allocator, tools_json, .{});
     defer parsed.deinit();
-    try std.testing.expectEqual(@as(usize, 10), parsed.value.array.items.len);
+    try std.testing.expectEqual(@as(usize, 11), parsed.value.array.items.len);
     try std.testing.expect(std.mem.indexOfScalar(u8, tools_json, '\n') == null);
+}
+
+test "story information reads plainly" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const text = try storyText(arena.allocator(), .{ .file = "zork1.r119-880429.z3", .zversion = 3, .release = 119, .serial = "880429", .seed = 69, .seed_random = false, .mode = "debate" });
+    try std.testing.expectEqualStrings("Story: zork1.r119-880429.z3 (Z-machine version 3), release 119, serial 880429.\nSeed: 69 (set with --seed or by the story).\nMode: debate.", text);
+}
+
+test "the simple status line is labeled" {
+    var out: Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    try writeLabeledStatus(&out.writer, &.{ "Up a Tree", "Score: 5   Moves: 8" });
+    try std.testing.expectEqualStrings("Score 5, moves 8, in Up a Tree\n", out.written());
+    out.clearRetainingCapacity();
+    try writeLabeledStatus(&out.writer, &.{ "Library", "2:15 pm" });
+    try std.testing.expectEqualStrings("[Library | 2:15 pm]\n", out.written());
+}
+
+test "a simple session has four small tools" {
+    var service: Service = .init(std.testing.allocator, std.testing.io, 1);
+    defer service.deinit();
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const init_body = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"clientInfo\":{\"name\":\"tiny\"}}}";
+    const opened = try service.post(a, null, "simple", init_body);
+    try std.testing.expect(std.mem.indexOf(u8, opened.body, "Call send_command") != null);
+    const listed = try service.post(a, opened.session, null, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}");
+    try std.testing.expect(std.mem.indexOf(u8, listed.body, "\"send_command\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, listed.body, "introduce_self") == null);
+    const helped = try service.post(a, opened.session, null, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"get_help\"}}");
+    try std.testing.expect(std.mem.indexOf(u8, helped.body, "go north") != null);
+    const empty = try service.post(a, opened.session, null, "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"send_command\",\"arguments\":{}}}");
+    try std.testing.expect(std.mem.indexOf(u8, empty.body, "\"isError\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, empty.body, "send_command needs a command") != null);
+    // The full interface stays the default.
+    const full = try service.post(a, null, null, init_body);
+    const full_list = try service.post(a, full.session, null, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}");
+    try std.testing.expect(std.mem.indexOf(u8, full_list.body, "introduce_self") != null);
+    // A request naming the other profile is refused; the same one is fine.
+    const list = "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}";
+    const wrong = try service.post(a, opened.session, null, list);
+    try std.testing.expectEqual(200, wrong.status);
+    const refused = try service.post(a, opened.session, "full", list);
+    try std.testing.expectEqual(400, refused.status);
+    try std.testing.expectEqual(200, (try service.post(a, opened.session, "simple", list)).status);
+}
+
+test "simple tools are valid JSON, and replies keep the latest text" {
+    const parsed = try json.parseFromSlice(json.Value, std.testing.allocator, simple_tools_json, .{});
+    defer parsed.deinit();
+    try std.testing.expectEqual(@as(usize, 4), parsed.value.array.items.len);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var long_text: std.ArrayList(u8) = .empty;
+    for (0..400) |_| try long_text.appendSlice(arena.allocator(), "a line\n");
+    const long = long_text.items;
+    const cut = try tail(arena.allocator(), long, simple_text_limit);
+    try std.testing.expect(cut.len <= simple_text_limit + 4);
+    try std.testing.expect(std.mem.startsWith(u8, cut, "…"));
+    try std.testing.expectEqualStrings("short", try tail(arena.allocator(), "short", simple_text_limit));
 }
 
 test "a partner initializes, then lists tools" {
@@ -809,23 +1107,23 @@ test "a partner initializes, then lists tools" {
     defer arena.deinit();
     const a = arena.allocator();
 
-    const opened = try service.post(a, null, "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
+    const opened = try service.post(a, null, null, "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}");
     try std.testing.expectEqual(@as(u16, 200), opened.status);
     try std.testing.expectEqual(@as(usize, 32), opened.session.?.len);
 
-    const listed = try service.post(a, opened.session, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}");
+    const listed = try service.post(a, opened.session, null, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}");
     try std.testing.expectEqual(@as(u16, 200), listed.status);
     try std.testing.expect(std.mem.indexOf(u8, listed.body, "read_game") != null);
 
-    const note = try service.post(a, opened.session, "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
+    const note = try service.post(a, opened.session, null, "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
     try std.testing.expectEqual(@as(u16, 202), note.status);
     try std.testing.expectEqual(@as(usize, 0), note.body.len);
 
-    try std.testing.expectEqual(@as(u16, 400), (try service.post(a, null, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\"}")).status);
-    try std.testing.expectEqual(@as(u16, 404), (try service.post(a, "nope", "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\"}")).status);
-    try std.testing.expectEqual(@as(u16, 400), (try service.post(a, null, "not json")).status);
+    try std.testing.expectEqual(@as(u16, 400), (try service.post(a, null, null, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\"}")).status);
+    try std.testing.expectEqual(@as(u16, 404), (try service.post(a, "nope", null, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\"}")).status);
+    try std.testing.expectEqual(@as(u16, 400), (try service.post(a, null, null, "not json")).status);
 
     try std.testing.expect(service.end(opened.session.?));
     try std.testing.expect(!service.end(opened.session.?));
-    try std.testing.expectEqual(@as(u16, 404), (try service.post(a, opened.session, "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"ping\"}")).status);
+    try std.testing.expectEqual(@as(u16, 404), (try service.post(a, opened.session, null, "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"ping\"}")).status);
 }

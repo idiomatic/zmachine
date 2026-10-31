@@ -46,6 +46,8 @@ pub const Event = struct {
     kind: Kind,
     suspicious: bool,
     client: []u8,
+    /// The address it came from: "this machine", or a remote address.
+    from: []u8,
     detail: []u8,
 };
 
@@ -56,14 +58,20 @@ pub fn deinit(l: *AuditLog, gpa: Allocator) void {
 
 fn freeEvent(gpa: Allocator, e: Event) void {
     gpa.free(e.client);
+    gpa.free(e.from);
     gpa.free(e.detail);
 }
 
 /// Records an event at `time`; one that can't be stored is dropped.
-pub fn add(l: *AuditLog, gpa: Allocator, time: i64, kind: Kind, client: []const u8, detail: []const u8, suspicious: bool) void {
+pub fn add(l: *AuditLog, gpa: Allocator, time: i64, kind: Kind, client: []const u8, from: []const u8, detail: []const u8, suspicious: bool) void {
     const client_copy = gpa.dupe(u8, client) catch return;
+    const from_copy = gpa.dupe(u8, from) catch {
+        gpa.free(client_copy);
+        return;
+    };
     const detail_copy = gpa.dupe(u8, detail) catch {
         gpa.free(client_copy);
+        gpa.free(from_copy);
         return;
     };
     if (l.events.items.len >= max_events) freeEvent(gpa, l.events.orderedRemove(0));
@@ -73,9 +81,10 @@ pub fn add(l: *AuditLog, gpa: Allocator, time: i64, kind: Kind, client: []const 
         .kind = kind,
         .suspicious = suspicious,
         .client = client_copy,
+        .from = from_copy,
         .detail = detail_copy,
     }) catch {
-        freeEvent(gpa, .{ .seq = 0, .time = 0, .kind = kind, .suspicious = false, .client = client_copy, .detail = detail_copy });
+        freeEvent(gpa, .{ .seq = 0, .time = 0, .kind = kind, .suspicious = false, .client = client_copy, .from = from_copy, .detail = detail_copy });
         return;
     };
     l.next_seq += 1;

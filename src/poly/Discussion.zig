@@ -37,6 +37,8 @@ pub const PostKind = enum {
     granted,
     /// The author stopped the AI partner the text names reading it.
     revoked,
+    /// The author cleared the discussion; every earlier post is gone.
+    cleared,
 };
 
 pub const Post = struct {
@@ -89,6 +91,12 @@ pub fn add(d: *Discussion, gpa: Allocator, time: i64, author: ?[]const u8, ai: b
         .suggestions = copies,
     });
     d.next_post += 1;
+}
+
+/// Forgets every post; numbering goes on.
+pub fn clear(d: *Discussion, gpa: Allocator) void {
+    for (d.posts.items) |p| freePost(gpa, p);
+    d.posts.clearRetainingCapacity();
 }
 
 /// The sequence number of the latest post, or 0.

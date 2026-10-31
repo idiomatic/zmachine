@@ -28,8 +28,9 @@ Prebuilt binaries for Linux, macOS and Windows are on the
 
 | Option | Meaning |
 | --- | --- |
-| `-w`, `--web [port]` | Play together on `http://127.0.0.1:<port>/`, with the inspector at `/inspector`; the port defaults to 9675 |
+| `-w`, `--web [port]` | Play together on `http://127.0.0.1:<port>/`, with the audit log and inspector as panels below the game; the port defaults to 9675 |
 | `--listen <address>` | Also let players on other machines join with a password (see [Players on other machines](#players-on-other-machines)); implies `--web` |
+| `--mode <debate\|turns>` | Start in that playing mode (default `debate`); implies `--web` |
 | `--grant-inspector` | Let every AI partner read the inspector (see [Web inspector](#web-inspector)); implies `--web` |
 | `--seed <n>` | Seed the random number generator for reproducible runs |
 | `-t`, `--transcript <file>` | Write a transcript from the start of the story |
@@ -124,7 +125,7 @@ background; numbered and `#rrggbb` colors are the same everywhere.
     alt="The object inspector after exploring all of Zork I above ground, its 19 rooms arranged as on Infocom's map: the house, the twisty forests and clearings with their directions labeled, Up a Tree, and the canyon down to the End of Rainbow, with one-way arrows and dashed up and down moves; beside it, the object tree and West of House's contents.">
 </picture>
 
-Run with `--web` and open `http://127.0.0.1:9675/inspector`. The port is
+Run with `--web`, open `http://127.0.0.1:9675/`, and press the magnifier (not shown on phones). The port is
 9675, ZORK on a phone keypad, unless you give another, such as
 `--web 8080`. The inspector shows what players can't see, so it answers
 only this machine, and opening it is logged as suspicious. The page
@@ -211,7 +212,7 @@ Along the top, after the room and score and the live indicator:
 | Button | What it does |
 | --- | --- |
 | 🔍 (a magnifier icon) | The object inspector (on this machine only; opening it is logged as suspicious) |
-| ▤ | The audit log, open to every player |
+| ▦ | Show or hide any panel, such as the audit log (open to every player), or restore the default layout |
 | ◐ ☀︎ ☾ | The theme |
 
 The page remembers its layout in your browser:
@@ -304,8 +305,18 @@ by zmachine; the game never sees it:
 | Command | What it does |
 | --- | --- |
 | `/lead` | Take back the leadership for this machine |
+| `/clear` | Clear the discussion for everyone (not the game; ⌫ on the play page does the same) |
+| `/mode` | Show the mode, or set it with `/mode debate` or `/mode turns` (only while this machine leads) |
 | `/password` | Change the password, typed without echo; an empty one makes three new random words |
 | `/showpassword` | Show the password on the bottom row until the next key press, then clear it, so it never enters the terminal's scrollback |
+| `/help` | List these commands |
+| `/who` | List the players: AI or person, local or remote, leader, and inspector access |
+| `/promote <name>` | Pass the leadership to a player (leader only; `/lead` takes it back) |
+| `/kick <name>` | End a person's session or ban an AI partner's name (leader only) |
+| `/grant <name>`, `/revoke <name>` | Let an AI partner read the inspector, or stop it |
+| `/say <text>` | Post a message to the discussion as the console |
+| `/log [n]` | Show the last n audit log lines (default 10), suspicious ones marked `!` |
+| `/invite` | Show the invite link on the bottom row until the next key press, like `/showpassword` |
 
 ### AI partners
 
@@ -316,14 +327,23 @@ With `--web`, the game is also an MCP server at `http://127.0.0.1:9675/mcp`
 claude mcp add --transport http zmachine http://127.0.0.1:9675/mcp
 ```
 
+For a smaller model, use `http://127.0.0.1:9675/mcp/simple` (an `Mcp-Profile: simple`
+header also works). It then sees four tools: `send_command(command,
+thought)`, `read_recent`, `tell_players` and `get_help`, names itself after the client, and
+gets short plain-text replies.
+
 Any other AI can join the same way with its own MCP client. AI partners
 connect from this machine. Each partner names itself: its first call is
-`introduce` with the name it goes by, such as `Claude` or `Gemini`, and
+`introduce_self` with the name it goes by (its own model name), and
 the other tools wait until it has.
+
+Tool names contain an underscore and game commands never do, so a model can tell
+them apart; the simple profile's `send_command` also takes a `thought`.
 
 | Tool | What it does |
 | --- | --- |
-| `introduce` | Say the name it goes by; its thoughts, messages and commands appear under it |
+| `introduce_self` | Say the name it goes by; its thoughts, messages and commands appear under it |
+| `get_story_info` | The story's file, Z-machine version, release, serial number, the random seed, and the mode |
 | `read_game` | The game text since it last looked, the status line, the mode, who leads and plays, and messages and thoughts from the others |
 | `send_command` | Send a command and get the game's response (in debate, only when it leads) |
 | `share_thoughts` | Show its thinking beside the game, under its name, with suggested commands as buttons |
@@ -342,6 +362,21 @@ The instructions ask partners to use the leader's powers with discretion:
 - pass the lead back when asked
 - change the mode only when the group wants it
 
+### Models without tool use
+
+For a model that cannot call tools, a small program between it and the game is enough: it sends the model's command and gives back the game text. Use turns mode (`POST /mode`) so the model may send commands.
+
+```
+curl -s -X POST 'http://127.0.0.1:9675/command?format=text' -H 'X-Player: gemma' -d 'open mailbox'
+curl -s 'http://127.0.0.1:9675/transcript?format=text'
+```
+
+The first prints only what the game printed; the second reprints the latest game text. A system prompt that works:
+
+> You are playing a text adventure game such as Zork. Each turn, reply with exactly one JSON object and nothing else: {"command": "open mailbox", "thought": "why you chose it"}. The command is one short game command, a verb and an object. I will answer with what the game printed. If a command is not understood, use simpler words. If you forget what happened, reply {"command": "look"}.
+
+The program (`tools/relay.zig`, built with `zig build tools`; `relay <model> --turns 50`) parses the reply, sends the `command`, and sends the `thought` (optional) as a `kind: "thought"` post to `POST /say` so the others can follow.
+
 ### Web routes
 
 The page and the tools are built on these routes, which anything else can
@@ -358,15 +393,17 @@ curl -d 'open mailbox' http://127.0.0.1:9675/command
 | Route | Meaning |
 | --- | --- |
 | `GET /` | The play page; for a remote player without a session, the password page. `?password=` gives the password and redirects to `/`. |
-| `GET /inspector` | The object inspector (this machine only; logged as suspicious). |
+| `GET /inspector` | The inspector's panels, an HTML fragment the play page loads when the magnifier is pressed (this machine only; logged as suspicious). |
 | `GET /state?since=<n>` | The inspector's snapshots (this machine only; logged as suspicious). |
+| `GET /story` | The story's file, Z-machine version, release and serial, and the seed (`seed_random` says whether it was drawn at random), and the mode. |
+| `POST /clear-discussion` | Remove every post from the discussion, leaving a note of who did (this machine only; logged). |
 | `POST /erase-map` | Erase the inspector's map, starting it again from the current room (this machine only; logged). |
 | `POST /grant-inspector`, `POST /revoke-inspector` | Let the AI partner the body names read the inspector, or stop it (people on this machine; posted and logged). |
 | `GET /me` | Who the server takes you for, and whether you lead. |
 | `POST /login` | A remote player gives the password; `204` sets the session cookie, `401` is wrong and `429` is too soon. |
 | `POST /join` | A person chooses a name (the body); `409` if it is taken. |
-| `POST /command` | Send the body as one line of input (or, when the story reads single keys, its keys in turn; an empty body is Return) and wait for the reply. If the game does not answer within 20 seconds, the reply is `202` with `"pending":true` and the text appears in `/transcript`. In debate mode, a command from anyone but the leader gets `409`. |
-| `GET /transcript?since=<offset>` | The game text since an offset, as a player sees it, with the status line, the mode, the next `offset` and whether the game is `waiting` for input. Add `&wait=1` to hold the request until there is new text. |
+| `POST /command` | (`?format=text` replies with only the game text.) Send the body as one line of input (or, when the story reads single keys, its keys in turn; an empty body is Return) and wait for the reply. If the game does not answer within 20 seconds, the reply is `202` with `"pending":true` and the text appears in `/transcript`. In debate mode, a command from anyone but the leader gets `409`. |
+| `GET /transcript?since=<offset>` | (`&format=text` returns only the game text, its last 4,000 bytes.) The game text since an offset, as a player sees it, with the status line, the mode, the next `offset` and whether the game is `waiting` for input. Add `&wait=1` to hold the request until there is new text. |
 | `POST /say` | Add to the discussion: `{"kind":"thought","text":"...","suggestions":["..."]}`. The kind is `thought` or `message`; at most 8 suggestions, each one line. |
 | `GET /discussion?since=<n>` | The mode, the leader (`console` for this machine), the players, and the posts after `n`. Posts include thoughts, messages, commands, mode and leader changes, joins, leaves, kicks and password changes, each with its author. Add `&wait=1` to hold the request until there is one. |
 | `POST /mode` | The leader sets `debate` (the default) or `turns`; others get `403`. |
@@ -417,7 +454,7 @@ module imports only those listed in `build.zig`.
 | File | Contents |
 | --- | --- |
 | `src/main.zig` | Command line, setup and signal handling |
-| `src/commands.zig` | Console commands: `/lead`, `/password` and `/showpassword` |
+| `src/commands.zig` | Console commands: `/lead`, `/clear`, `/mode`, `/password`, `/showpassword`, `/help`, `/who`, `/promote`, `/kick`, `/grant`, `/revoke`, `/say`, `/log` and `/invite` |
 | `src/vm/Machine.zig` | Processor: memory, stack, instruction decoding and opcodes; runs until input or a step limit |
 | `src/vm/ObjectTable.zig` | Object tree and property tables |
 | `src/vm/zstring.zig` | Z-string decoding, dictionary encoding, ZSCII/Unicode |
@@ -439,11 +476,10 @@ module imports only those listed in `build.zig`.
 | `src/protocol/root.zig` | The JSON the routes speak: each reply's type, shared by the server and the MCP server |
 | `src/inspector/Inspector.zig` | Map tracking and JSON snapshots for the web page |
 | `src/inspector/routes.zig` | Its routes: the page, snapshots and erasing the map |
-| `src/inspector/inspector.html` | The inspector page, embedded in the binary |
+| `src/inspector/inspector.html` | The inspector's panels (a fragment the play page loads), embedded in the binary |
 | `src/web/web.zig` | Embedded HTTP server: who is asking, access rules, playing together, remote access and the audit log; other modules' routes (the inspector's) handed to it |
-| `src/web/play.html` | The play page, embedded in the binary |
+| `src/web/play.html` | The play page, with the audit log panel and the inspector's dock, embedded in the binary |
 | `src/web/login.html` | The password page for remote players, embedded in the binary |
-| `src/web/log.html` | The audit log page, embedded in the binary |
 | `src/mcp/mcp.zig` | MCP service (sessions behind `POST /mcp`) that lets an AI partner play through the web server |
 | `tools/walkthrough.zig` | Plays the walkthroughs for `zig build walkthrough` |
 | `tools/fetch.zig` | Downloads a pinned file for the build, such as the open-source Zork stories |

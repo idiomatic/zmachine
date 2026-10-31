@@ -86,18 +86,27 @@ pub fn validCommand(text: []const u8) bool {
 
 // The audit log
 
+/// What an event from this machine says it came from.
+pub const local_address = "this machine";
+
 /// Records an event in the audit log.
 pub fn log(g: *Group, kind: Kind, client: []const u8, detail: []const u8, suspicious: bool) void {
+    g.logFrom(kind, client, "", detail, suspicious);
+}
+
+/// Records an event from the address `from` ("this machine" or a remote
+/// address).
+pub fn logFrom(g: *Group, kind: Kind, client: []const u8, from: []const u8, detail: []const u8, suspicious: bool) void {
     g.lock();
     defer g.unlock();
-    g.audit.add(g.gpa, g.world.now(), kind, client, detail, suspicious);
+    g.audit.add(g.gpa, g.world.now(), kind, client, from, detail, suspicious);
 }
 
 /// Logs an event about `p`, naming them.
 fn logPlayerLocked(g: *Group, kind: Kind, p: Player, comptime fmt: []const u8, args: anytype, suspicious: bool) void {
     var buf: [256]u8 = undefined;
     const detail = std.fmt.bufPrint(&buf, fmt, args) catch fmt;
-    g.audit.add(g.gpa, g.world.now(), kind, displayName(p), detail, suspicious);
+    g.audit.add(g.gpa, g.world.now(), kind, displayName(p), "", detail, suspicious);
 }
 
 fn displayName(p: Player) []const u8 {
@@ -111,8 +120,9 @@ pub fn lastEvent(g: *Group) u64 {
     return g.audit.last();
 }
 
-/// The events after `since`, copied into `arena`.
-pub fn events(g: *Group, arena: Allocator, since: u64) Allocator.Error!protocol.Events {
+/// The events after `since`, copied into `arena`. A client not on this
+/// machine sees "remote" in place of a remote address.
+pub fn events(g: *Group, arena: Allocator, since: u64, show_addresses: bool) Allocator.Error!protocol.Events {
     g.lock();
     defer g.unlock();
     var list: std.ArrayList(protocol.Event) = .empty;
@@ -124,6 +134,7 @@ pub fn events(g: *Group, arena: Allocator, since: u64) Allocator.Error!protocol.
             .kind = @tagName(e.kind),
             .suspicious = e.suspicious,
             .client = try arena.dupe(u8, e.client),
+            .from = if (show_addresses or e.from.len == 0 or std.mem.eql(u8, e.from, local_address)) try arena.dupe(u8, e.from) else "remote",
             .detail = try arena.dupe(u8, e.detail),
         });
     }
@@ -145,7 +156,7 @@ pub fn maySend(g: *Group, p: Player) bool {
 pub fn heard(g: *Group, author: Player, line: []const u8, keyboard: bool) void {
     g.lock();
     defer g.unlock();
-    if (keyboard) g.audit.add(g.gpa, g.world.now(), .keyboard, "keyboard", line, false);
+    if (keyboard) g.audit.add(g.gpa, g.world.now(), .keyboard, "keyboard", "", line, false);
     g.postLocked(author, .command, line, &.{}) catch {};
 }
 
@@ -414,6 +425,18 @@ pub fn setInspectorAccess(g: *Group, from: Player, name: []const u8, grant: bool
     }
 }
 
+/// Clears the discussion, leaving a post that says who did. Only the
+/// console and people on this machine may; it has nothing to do with a
+/// restart.
+pub fn clearDiscussion(g: *Group, from: Player) AccessError!void {
+    g.lock();
+    defer g.unlock();
+    if (!from.local or from.ai) return error.NotAllowed;
+    g.discussion.clear(g.gpa);
+    g.postLocked(from, .cleared, "", &.{}) catch {};
+    g.logPlayerLocked(.game, from, "cleared the discussion", .{}, false);
+}
+
 // Remote access: the password and sessions
 
 /// Ends the sessions of the person `name` (or of every remote person but
@@ -455,13 +478,13 @@ pub fn listening(g: *Group) bool {
 
 /// Checks a password guess from the address `key`, starting a session if
 /// it is right.
-pub fn login(g: *Group, key: AddressKey, client: []const u8, guess: []const u8) !Login {
+pub fn login(g: *Group, key: AddressKey, client: []const u8, from: []const u8, guess: []const u8) !Login {
     g.lock();
     defer g.unlock();
     const result = try g.access.login(g.gpa, g.world, key, guess);
     switch (result) {
-        .ok => g.audit.add(g.gpa, g.world.now(), .login, client, "gave the password", false),
-        .wrong => if (g.access.password != null) g.audit.add(g.gpa, g.world.now(), .login, client, "wrong password", true),
+        .ok => g.audit.add(g.gpa, g.world.now(), .login, client, from, "gave the password", false),
+        .wrong => if (g.access.password != null) g.audit.add(g.gpa, g.world.now(), .login, client, from, "wrong password", true),
         .slow => {},
     }
     return result;

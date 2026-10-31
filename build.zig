@@ -91,6 +91,21 @@ pub fn build(b: *std.Build) void {
     // One at a time, so their reports don't interleave.
     walkthroughs[1].step.dependOn(&walkthroughs[0].step);
 
+    // Evaluation tools (MODEL_EVALUATION.md): `zig build tools`
+    // builds them into zig-out/bin; their tests run with `zig build test`.
+    const tools_step = b.step("tools", "Build the evaluation tools: bot, relay, metrics, save");
+    for ([_][]const u8{ "bot", "relay", "metrics", "save" }) |name| {
+        const tool = b.addExecutable(.{
+            .name = name,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path(b.fmt("tools/{s}.zig", .{name})),
+                .target = b.graph.host,
+            }),
+        });
+        tools_step.dependOn(&b.addInstallArtifact(tool, .{}).step);
+        test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .name = name, .root_module = tool.root_module })).step);
+    }
+
     // Zork I-III are open source (MIT, Copyright (c) 2025 Microsoft). Their
     // compiled stories are downloaded from a pinned commit and checked
     // against a pinned SHA-256, only when `stories` or `walkthrough` needs

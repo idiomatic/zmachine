@@ -65,6 +65,8 @@ undo: ?Snapshot = null,
 observer: ?Observer = null,
 /// Called after the story restarts, from its `restart` or after it ends.
 on_restart: ?Callback = null,
+/// Called whenever the generator starts from a new seed.
+on_seed: ?Callback = null,
 /// Default file name for saved games.
 save_name: []const u8,
 /// The player left, or input ran out.
@@ -253,6 +255,23 @@ fn afterEnd(m: *Machine) !bool {
             m.finished = true;
             return false;
         }
+        if (std.ascii.eqlIgnoreCase(word, "randomseed") or
+            if (seedArgument(word)) |value| std.ascii.eqlIgnoreCase(value, "random") else false)
+        {
+            m.randomizeSeed();
+            try m.printAscii("[Seed is random.]\n");
+            continue;
+        }
+        if (seedArgument(word)) |value| {
+            const seed = std.fmt.parseInt(u64, value, 10) catch {
+                try m.printAscii("[SEED takes a number.]\n");
+                continue;
+            };
+            m.seedRandom(seed);
+            var note: [64]u8 = undefined;
+            try m.printAscii(std.fmt.bufPrint(&note, "[Seed set to {d}.]\n", .{seed}) catch unreachable);
+            continue;
+        }
         if (std.ascii.eqlIgnoreCase(word, "restart")) {
             try m.restart();
         } else if (!std.ascii.eqlIgnoreCase(word, "restore") or !try m.restoreGame()) {
@@ -262,6 +281,13 @@ fn afterEnd(m: *Machine) !bool {
         m.stopped_at = null;
         return true;
     }
+}
+
+/// The text after `seed` in a `SEED <value>` line, empty if none.
+fn seedArgument(line: []const u8) ?[]const u8 {
+    if (line.len < 4 or !std.ascii.eqlIgnoreCase(line[0..4], "seed")) return null;
+    if (line.len > 4 and line[4] != ' ' and line[4] != '\t') return null;
+    return std.mem.trim(u8, line[4..], " \t");
 }
 
 /// Why `runUntilInput` stopped.
@@ -1161,6 +1187,7 @@ fn random(m: *Machine, range: i16) u16 {
         m.seed_random = m.user_seed == null;
         m.rng_state = m.seed;
         m.predictable_range = 0;
+        m.seeded();
     } else {
         const seed: u16 = @intCast(-@as(i32, range));
         if (seed < 1000) {
@@ -1171,6 +1198,7 @@ fn random(m: *Machine, range: i16) u16 {
             m.seed = seed;
             m.seed_random = false;
             m.predictable_range = 0;
+            m.seeded();
         }
     }
     return 0;
@@ -1196,6 +1224,20 @@ pub fn seedRandom(m: *Machine, seed: u64) void {
     m.user_seed = seed;
     m.seed = seed;
     m.seed_random = false;
+    m.seeded();
+}
+
+/// Draws a fresh random seed, and keeps drawing one at each restart.
+pub fn randomizeSeed(m: *Machine) void {
+    m.user_seed = null;
+    m.seed = randomSeed(m.io);
+    m.seed_random = true;
+    m.rng_state = m.seed;
+    m.seeded();
+}
+
+fn seeded(m: *Machine) void {
+    if (m.on_seed) |c| c.call(c.context);
 }
 
 // Game state

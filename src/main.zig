@@ -35,6 +35,8 @@ const usage =
     \\                     shows hidden game state); implies --web. People
     \\                     on this machine can instead let one partner
     \\                     at a time, from its menu on the play page
+    \\  --mode <mode>      Start in debate (default; only the leader sends
+    \\                     commands) or turns (anyone may); implies --web
     \\  --seed <n>         Seed the random number generator (the same
     \\                     generator as Frotz, so `dfrotz -s <n>` matches)
     \\  -t, --transcript <file>
@@ -72,6 +74,7 @@ const Options = struct {
     listen: ?[]const u8 = null,
     grant_inspector: bool = false,
     seed: ?u64 = null,
+    mode: ?Group.Mode = null,
     transcript: ?[]const u8 = null,
     plain: bool = false,
     looks: Screen.Looks = .{},
@@ -105,6 +108,10 @@ fn parseArgs(args: []const []const u8, style: ?[]const u8) !Command {
             options.listen = args[i];
         } else if (std.mem.eql(u8, arg, "--grant-inspector")) {
             options.grant_inspector = true;
+        } else if (std.mem.eql(u8, arg, "--mode")) {
+            i += 1;
+            if (i >= args.len) return error.MissingArgument;
+            options.mode = std.meta.stringToEnum(Group.Mode, args[i]) orelse return error.InvalidMode;
         } else if (std.mem.eql(u8, arg, "--seed")) {
             i += 1;
             if (i >= args.len) return error.MissingArgument;
@@ -125,7 +132,7 @@ fn parseArgs(args: []const []const u8, style: ?[]const u8) !Command {
             return error.InvalidArgument;
         }
     }
-    if ((options.listen != null or options.grant_inspector) and options.web_port == null) options.web_port = default_port;
+    if ((options.listen != null or options.grant_inspector or options.mode != null) and options.web_port == null) options.web_port = default_port;
     options.story_path = story_path orelse return .usage;
     return .{ .run = options };
 }
@@ -150,9 +157,9 @@ fn saveName(arena: std.mem.Allocator, story_path: []const u8) ![]const u8 {
 }
 
 /// The inspector's routes, for the web server.
-fn mcpPost(context: *anyopaque, arena: std.mem.Allocator, session: ?[]const u8, body: []const u8) anyerror!protocol.McpReply {
+fn mcpPost(context: *anyopaque, arena: std.mem.Allocator, session: ?[]const u8, profile: ?[]const u8, body: []const u8) anyerror!protocol.McpReply {
     const service: *mcp.Service = @ptrCast(@alignCast(context));
-    return service.post(arena, session, body);
+    return service.post(arena, session, profile, body);
 }
 
 fn mcpEnd(context: *anyopaque, session: []const u8) bool {
@@ -232,6 +239,7 @@ pub fn main(init: std.process.Init) !u8 {
     defer hub.deinit();
     var group: Group = .init(gpa, io, .{ .real = io });
     defer group.deinit();
+    if (options.mode) |m| group.mode = m;
     var keyboard: TerminalInput = .{ .in = &stdin_reader.interface };
     var screen: Screen = .init(
         io,
@@ -271,9 +279,18 @@ pub fn main(init: std.process.Init) !u8 {
         const thread = try std.Thread.spawn(.{}, web.Server.serve, .{server});
         thread.detach();
         machine.observer = inspector.observer();
-        machine.on_restart = .{ .context = &group, .call = logRestart };
+        const restarted = try arena.create(Restarted);
+        restarted.* = .{ .group = &group, .hub = &hub };
+        machine.on_restart = .{ .context = restarted, .call = logRestart };
+        try hub.setStory(std.fs.path.basename(options.story_path), story);
+        const seeding = try arena.create(Seeding);
+        seeding.* = .{ .machine = machine, .hub = &hub };
+        machine.on_seed = .{ .context = seeding, .call = noteSeed };
+        noteSeed(seeding);
         try hub.startKeyboard();
-        screen.commands = commands.commands(&group);
+        const console_commands = try arena.create(commands.Context);
+        console_commands.* = .{ .group = &group, .server = server };
+        screen.commands = commands.commands(console_commands);
         try stderr.print("Play at http://127.0.0.1:{d}/ (the inspector is at /inspector)\n", .{port});
         if (options.grant_inspector) {
             group.grantInspectorToAll();
@@ -330,9 +347,26 @@ pub fn main(init: std.process.Init) !u8 {
     return status;
 }
 
+const Seeding = struct { machine: *Machine, hub: *Hub };
+
+fn noteSeed(context: *anyopaque) void {
+    const seeding: *Seeding = @ptrCast(@alignCast(context));
+    seeding.hub.setSeed(seeding.machine.seed, seeding.machine.seed_random);
+}
+
+const Restarted = struct { group: *Group, hub: *Hub };
+
 fn logRestart(context: *anyopaque) void {
-    const group: *Group = @ptrCast(@alignCast(context));
-    group.log(.game, "game", "restarted", false);
+    const restarted: *Restarted = @ptrCast(@alignCast(context));
+    restarted.hub.clearText();
+    restarted.group.log(.game, "game", "restarted", false);
+}
+
+test "--mode picks the starting mode and implies --web" {
+    const c = try parseArgs(&.{ "zmachine", "--mode", "turns", "story.z3" }, null);
+    try std.testing.expectEqual(Group.Mode.turns, c.run.mode.?);
+    try std.testing.expectEqual(default_port, c.run.web_port.?);
+    try std.testing.expectError(error.InvalidMode, parseArgs(&.{ "zmachine", "--mode", "x", "story.z3" }, null));
 }
 
 test "ports default to 9675" {

@@ -444,14 +444,15 @@ pub fn setInspectorAccess(g: *Group, from: Player, name: []const u8, grant: bool
 
 /// Clears the discussion, leaving a post that says who did. Only the
 /// console and people on this machine may; it has nothing to do with a
-/// restart.
+/// restart. The console is named for whoever sent the latest command.
 pub fn clearDiscussion(g: *Group, from: Player) AccessError!void {
     g.lock();
     defer g.unlock();
     if (!from.local or from.ai) return error.NotAllowed;
     g.discussion.clear(g.gpa);
-    g.postLocked(from, .cleared, "", &.{}) catch {};
-    g.logPlayerLocked(.game, from, "cleared the discussion", .{}, false);
+    const by: Player = if (from.name == null and g.actor_len != null) .{ .name = g.actor_name[0..g.actor_len.?], .ai = g.actor_ai } else from;
+    g.postLocked(by, .cleared, "", &.{}) catch {};
+    g.logPlayerLocked(.game, by, "cleared the discussion", .{}, false);
 }
 
 // Remote access: the password and sessions

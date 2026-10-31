@@ -42,6 +42,13 @@ text: std.ArrayList(u8) = .empty,
 /// Offset of `text.items[0]` in all the text printed so far.
 text_base: u64 = 0,
 status: [2]std.ArrayList(u8) = .{ .empty, .empty },
+/// The story drew a status line (versions 1 to 3); otherwise the rows of
+/// its upper window stand in for one, when it has few.
+has_status: bool = false,
+upper: [upper_rows][upper_cols]u8 = undefined,
+upper_lens: [upper_rows]usize = @splat(0),
+/// The deepest row printed to (zero if none); past `upper_rows` it is no status line.
+upper_depth: usize = 0,
 /// Which story is loaded and its random seed, for `GET /story`.
 story: ?Story = null,
 /// The display the game draws on, seen through `display`.
@@ -375,8 +382,21 @@ const Seen = struct {
     hub: *Hub,
     screen: Display,
     window: u8 = 0,
+    /// The upper window's cursor, kept here because a screen that is not a
+    /// terminal does not move its own.
+    row: u16 = 1,
+    col: u16 = 1,
 
     pub fn print(v: *Seen, cp: u21) Display.Error!void {
+        if (v.window == 1) {
+            if (cp == '\n') {
+                v.row += 1;
+                v.col = 1;
+            } else {
+                v.hub.putUpper(v.row, v.col - 1, cp);
+                v.col += 1;
+            }
+        }
         if (v.window == 0) {
             var utf8: [4]u8 = undefined;
             const len = std.unicode.utf8Encode(cp, &utf8) catch blk: {
@@ -389,6 +409,10 @@ const Seen = struct {
     }
     pub fn setWindow(v: *Seen, window: u8) Display.Error!void {
         v.window = window;
+        if (window == 1) {
+            v.row = 1;
+            v.col = 1;
+        }
         return v.screen.setWindow(window);
     }
     pub fn drawStatus(v: *Seen, left: []const u8, right: []const u8) Display.Error!void {
@@ -399,12 +423,21 @@ const Seen = struct {
         return v.screen.splitWindow(lines);
     }
     pub fn eraseWindow(v: *Seen, which: i16) Display.Error!void {
+        if (which == 1 or which == -1 or which == -2) {
+            v.hub.clearUpper();
+            v.row = 1;
+            v.col = 1;
+        }
         return v.screen.eraseWindow(which);
     }
     pub fn eraseLine(v: *Seen) Display.Error!void {
         return v.screen.eraseLine();
     }
     pub fn setCursor(v: *Seen, row: u16, col: u16) Display.Error!void {
+        if (v.window == 1) {
+            v.row = @max(row, 1);
+            v.col = @max(col, 1);
+        }
         return v.screen.setCursor(row, col);
     }
     pub fn getCursor(v: *Seen) [2]u16 {
@@ -437,9 +470,34 @@ pub fn capture(h: *Hub, bytes: []const u8) void {
     h.appendText(bytes);
 }
 
+const upper_cols = 160;
+const upper_rows = 4;
+
+/// Puts a character in the upper window, at a one-based row and zero-based column.
+fn putUpper(h: *Hub, row: usize, col: usize, cp: u21) void {
+    if (col >= upper_cols or row == 0) return;
+    h.lock();
+    defer h.unlock();
+    h.upper_depth = @max(h.upper_depth, row);
+    if (row > upper_rows) return;
+    const line = &h.upper[row - 1];
+    var len = h.upper_lens[row - 1];
+    while (len < col) : (len += 1) line[len] = ' ';
+    line[col] = if (cp >= 32 and cp < 127) @intCast(cp) else if (cp < 32) ' ' else '?';
+    h.upper_lens[row - 1] = @max(len, col + 1);
+}
+
+fn clearUpper(h: *Hub) void {
+    h.lock();
+    defer h.unlock();
+    h.upper_lens = @splat(0);
+    h.upper_depth = 0;
+}
+
 pub fn setStatus(h: *Hub, left: []const u8, right: []const u8) void {
     h.lock();
     defer h.unlock();
+    h.has_status = true;
     for (&h.status, [_][]const u8{ left, right }) |*s, text| {
         s.clearRetainingCapacity();
         s.appendSlice(h.gpa, text) catch {};
@@ -528,6 +586,8 @@ pub const Text = struct {
     waiting: bool,
     text: []const u8,
     status: [2][]const u8,
+    /// The status line's rows, left and right (see `copyLines`).
+    lines: []const [2][]const u8,
 };
 
 /// The game text printed since offset `since`, copied into `arena`.
@@ -539,6 +599,7 @@ pub fn textSince(h: *Hub, arena: Allocator, since: u64) Allocator.Error!Text {
         .waiting = h.idle,
         .text = try arena.dupe(u8, h.textBetween(since, h.textEnd())),
         .status = try h.copyStatus(arena),
+        .lines = try h.copyLines(arena),
     };
 }
 
@@ -549,8 +610,48 @@ fn textBetween(h: *const Hub, start: u64, end: u64) []const u8 {
     return h.text.items[@intCast(from)..@intCast(to)];
 }
 
+/// A row split at its longest run of spaces (two or more) into left and
+/// right, copied into `arena`.
+fn splitRow(arena: Allocator, text: []const u8) Allocator.Error![2][]const u8 {
+    const row = std.mem.trim(u8, text, " ");
+    var best: usize = 0;
+    var best_len: usize = 1;
+    var at: usize = 0;
+    while (at < row.len) {
+        if (row[at] != ' ') {
+            at += 1;
+            continue;
+        }
+        const start = at;
+        while (at < row.len and row[at] == ' ') at += 1;
+        if (at - start > best_len) {
+            best = start;
+            best_len = at - start;
+        }
+    }
+    if (best == 0) return .{ try arena.dupe(u8, row), "" };
+    return .{ try arena.dupe(u8, row[0..best]), try arena.dupe(u8, row[best + best_len ..]) };
+}
+
+/// The status line's rows, left and right: the story's own (one), or for a
+/// story without one the rows of its upper window, if it has no more than a
+/// few.
+pub fn copyLines(h: *const Hub, arena: Allocator) Allocator.Error![]const [2][]const u8 {
+    if (h.has_status) {
+        const one = try arena.alloc([2][]const u8, 1);
+        one[0] = .{ try arena.dupe(u8, h.status[0].items), try arena.dupe(u8, h.status[1].items) };
+        return one;
+    }
+    if (h.upper_depth == 0 or h.upper_depth > upper_rows) return &.{};
+    var rows = try arena.alloc([2][]const u8, h.upper_depth);
+    for (rows[0..], 0..) |*row, i| row.* = try splitRow(arena, h.upper[i][0..h.upper_lens[i]]);
+    return rows;
+}
+
+/// The first row, for the page's header and command replies.
 fn copyStatus(h: *const Hub, arena: Allocator) Allocator.Error![2][]const u8 {
-    return .{ try arena.dupe(u8, h.status[0].items), try arena.dupe(u8, h.status[1].items) };
+    const lines = try h.copyLines(arena);
+    return if (lines.len > 0) lines[0] else .{ "", "" };
 }
 
 test "clearing the text keeps offsets" {
@@ -654,4 +755,26 @@ test "keyboard lines come first, and hooks hear them" {
     try std.testing.expectEqualStrings("look", heard.lines[0][0..4]);
     try std.testing.expectEqualStrings("north", heard.lines[1][0..5]);
     try std.testing.expect(heard.ai[1] and !heard.ai[2]);
+}
+
+test "a story without a status line shows its upper window's rows" {
+    var h: Hub = .init(std.testing.allocator, std.testing.io);
+    defer h.deinit();
+    for (0.., " Kitchen      Score: 3 ") |col, c| h.putUpper(1, col, c);
+    for (0.., "Mode:  Mail          Time:  7:08pm") |col, c| h.putUpper(2, col, c);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const lines = try h.copyLines(arena.allocator());
+    try std.testing.expectEqual(2, lines.len);
+    try std.testing.expectEqualStrings("Kitchen", lines[0][0]);
+    try std.testing.expectEqualStrings("Score: 3", lines[0][1]);
+    try std.testing.expectEqualStrings("Mode:  Mail", lines[1][0]);
+    try std.testing.expectEqualStrings("Time:  7:08pm", lines[1][1]);
+    const first = try h.copyStatus(arena.allocator());
+    try std.testing.expectEqualStrings("Kitchen", first[0]);
+    // A window deeper than a status line is not one.
+    h.putUpper(upper_rows + 1, 0, 'x');
+    try std.testing.expectEqual(0, (try h.copyLines(arena.allocator())).len);
+    h.clearUpper();
+    try std.testing.expectEqual(0, (try h.copyLines(arena.allocator())).len);
 }

@@ -22,6 +22,8 @@ pub const Transcript = struct {
     mode: []const u8,
     text: []const u8,
     status: []const []const u8,
+    /// The status line's rows, each left and right.
+    lines: []const [2][]const u8,
 };
 
 /// `GET /story`: the story loaded and the seed it runs on.
@@ -212,8 +214,8 @@ test "me, transcript and events" {
         Me{ .name = null, .ai = false, .local = true, .leader = true, .listening = false },
     );
     try expectJson(
-        "{\"offset\":60,\"waiting\":true,\"mode\":\"turns\",\"text\":\"open mailbox\\n\",\"status\":[\"\",\"\"]}",
-        Transcript{ .offset = 60, .waiting = true, .mode = "turns", .text = "open mailbox\n", .status = &.{ "", "" } },
+        "{\"offset\":60,\"waiting\":true,\"mode\":\"turns\",\"text\":\"open mailbox\\n\",\"status\":[\"\",\"\"],\"lines\":[[\"a\",\"b\"]]}",
+        Transcript{ .offset = 60, .waiting = true, .mode = "turns", .text = "open mailbox\n", .status = &.{ "", "" }, .lines = &.{.{ "a", "b" }} },
     );
     try expectJson(
         "{\"last\":1,\"events\":[{\"seq\":1,\"time\":1700000000000,\"kind\":\"keyboard\",\"suspicious\":false,\"client\":\"keyboard\",\"from\":\"\",\"detail\":\"look\"}]}",

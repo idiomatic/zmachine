@@ -66,7 +66,7 @@ header {
 .right { display: flex; align-items: center; gap: 8px; flex: none; font-size: 12px; color: var(--muted); }
 a.toggle { display: inline-block; text-decoration: none; text-align: center; }
 /* Drawn icons, so they match in size whatever the fonts. */
-.toggle:has(.icon) { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 22px; padding: 0 6px; }
+.toggle:has(.icon) { display: inline-flex; align-items: center; justify-content: center; min-width: 29px; height: 24px; padding: 0 6px; }
 .icon { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
 .right select {
   font: 14px var(--sans); color: var(--muted); background: var(--panel); cursor: pointer;
@@ -86,7 +86,7 @@ a.toggle { display: inline-block; text-decoration: none; text-align: center; }
 .modes .size-up { font-size: 18px; }
 .modes button:disabled { opacity: .35; cursor: default; }
 .toggle:disabled { opacity: .35; cursor: default; }
-.toggle.theme { font-size: 14px; line-height: 1; padding: 3px 7px; min-width: 28px; }
+.toggle.theme { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; font-size: 14px; line-height: 1; padding: 0 6px; min-width: 29px; height: 24px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; display: inline-block; margin-right: 6px; }
 .dot.live { background: #16a34a; }
 .dot.down { background: #dc2626; }
@@ -118,6 +118,15 @@ a.toggle { display: inline-block; text-decoration: none; text-align: center; }
   flex: 1; overflow-y: auto; margin: 0; padding: 14px 16px; background: var(--game-bg);
   font: var(--game-size, 14px)/1.5 var(--mono); white-space: pre-wrap; word-break: break-word;
 }
+/* Like the console's status line: the story's own, above the game text. */
+.game-status {
+  flex: none; padding: 2px 16px;
+  background: var(--panel-2); color: var(--text); border-bottom: 1px solid var(--border);
+  font: var(--game-size, 14px)/1.5 var(--mono); white-space: pre; overflow: hidden;
+}
+.game-status[hidden] { display: none; }
+.game-status > div { display: flex; justify-content: space-between; gap: 16px; min-height: 1.5em; }
+#style-sample .game-status { font-size: 13px; margin: -6px -8px 4px; padding: 1px 8px; }
 #feed { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
 /* Who is playing, between the Discussion header and the posts. It wraps
    onto as many rows as the players need, and the posts take what's left. */
@@ -293,6 +302,33 @@ table.log tr.log-command td.log-kind { color: var(--accent); }
 #style-popover input[aria-invalid="true"] { border-color: #b91c1c; }
 #style-popover .hint { font-size: 12px; color: var(--muted); white-space: normal; max-width: 300px; }
 #style-popover .hint.error { color: #b91c1c; }
+#style-popover { max-height: calc(100vh - 80px); overflow-y: auto; }
+#style-parts { display: flex; flex-direction: column; gap: 8px; max-width: 300px; }
+#style-parts .part { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; border-top: 1px solid var(--border); }
+#style-parts .part-head { display: flex; align-items: center; gap: 8px; }
+#style-parts .part-name { font: 12px var(--mono); flex: 1; }
+#style-parts .modes button { min-width: 26px; padding: 2px 6px; }
+#style-parts .modes button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+#style-parts .swatches { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+#style-parts .side { font-size: 11px; color: var(--muted); width: 34px; margin-right: 2px; }
+#style-parts .swatch { width: 12px; height: 12px; padding: 0; border: 1px solid var(--border); border-radius: 3px; }
+#style-parts .swatch.active { outline: 2px solid var(--accent); outline-offset: 1px; }
+#style-parts .swatch.none { background: linear-gradient(135deg, var(--bg) 44%, #b91c1c 44% 56%, var(--bg) 56%); }
+#style-parts input.word { flex: 1 0 100%; box-sizing: border-box; margin: 2px 0 2px 36px; max-width: calc(100% - 36px); padding: 2px 6px; font-size: 11px; }
+#style-parts .fold { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+#style-parts .part-body { display: flex; flex-direction: column; gap: 4px; }
+#style-parts .part-body[hidden] { display: none; }
+#style-parts .modes { height: 24px; }
+#style-parts .modes button { padding-top: 0; padding-bottom: 0; }
+#style-parts .clear { height: 24px; border: 1px solid var(--border); border-radius: 6px; background: none; color: var(--muted); cursor: pointer; }
+#style-popover .style-line { display: flex; gap: 6px; align-items: stretch; }
+#style-popover .style-line input { flex: 1; min-width: 0; }
+#style-popover .style-line .modes button, #style-parts .clear { display: inline-flex; align-items: center; justify-content: center; padding: 0 8px; }
+#style-popover .modes { height: 24px; }
+#style-popover .modes button { height: 100%; padding-top: 0; padding-bottom: 0; }
+#style-popover .style-line input { height: 24px; box-sizing: border-box; padding-top: 0; padding-bottom: 0; }
+#style-popover .style-line .modes .icon, #style-parts .clear .icon { width: 13px; height: 13px; }
+#style-popover .hint:empty { display: none; }
 #style-popover .sample { font: 13px/1.5 var(--mono); background: var(--game-bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; white-space: pre; }
 </style>
 </head>
@@ -314,19 +350,22 @@ table.log tr.log-command td.log-kind { color: var(--accent); }
 <div id="panels-menu" role="menu" hidden></div>
 <div id="style-popover" role="dialog" aria-label="Game style" hidden>
   <div class="modes" id="style-presets" role="group" aria-label="Preset"></div>
-  <input id="style-input" aria-label="Style" spellcheck="false" autocapitalize="none" autocorrect="off" placeholder="default">
+  <div id="style-parts"></div>
+  <div class="style-line"><input id="style-input" aria-label="Style" title="The console's --style list: presets, then part=look settings" spellcheck="false" autocapitalize="none" autocorrect="off" placeholder="default"><div class="modes"><button id="style-copy" aria-label="Copy the style list" title="Copy the list, for --style or ZMACHINE_STYLE"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.8" width="8" height="8" rx="1.5"/><path d="M10.5 3.8v-.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h.5"/></svg></button><button id="style-reset" aria-label="Reset the style" title="Reset to the default preset"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 8a4.8 4.8 0 1 0 1.5-3.5"/><path d="M3 2.6v2.6h2.6"/></svg></button></div></div>
   <div class="hint" id="style-hint"></div>
   <div class="sample" id="style-sample"></div>
 </div>
 <div id="panes" hidden>
   <div class="pane" id="game-pane">
     <div class="pane-title"><span></span>
+      <button class="toggle theme" id="status-toggle" aria-pressed="true" aria-label="Status line" title="Show the status line above the game text"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.8"/><rect x="3.2" y="3.7" width="9.6" height="2.8" rx=".6" fill="currentColor" stroke="none"/></svg></button>
       <button class="toggle theme" id="style-button" aria-label="Game style" title="Game style: the console's --style presets and settings"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8a6.2 6.2 0 1 0 0 12.4c1 0 1.4-.7 1.1-1.5-.3-.8.1-1.6 1-1.6h1.4A2.7 2.7 0 0 0 14.2 8.4C14.2 4.7 11.5 1.8 8 1.8z"/><circle cx="5" cy="7.2" r=".6"/><circle cx="7.6" cy="4.8" r=".6"/><circle cx="10.6" cy="6" r=".6"/></svg></button>
       <div class="modes" role="group" aria-label="Game text size">
         <button class="size-down" id="font-smaller" aria-label="Smaller game text" title="Smaller game text">A</button>
         <button class="size-up" id="font-larger" aria-label="Larger game text" title="Larger game text">A</button>
       </div>
     </div>
+    <div class="game-status" id="game-status" hidden></div>
     <pre id="game"></pre>
     <form id="command-form" autocomplete="off">
       <input id="command-input" placeholder="Type a command" aria-label="Command" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" enterkeyhint="send">
@@ -883,6 +922,34 @@ function connected(ok) {
   document.getElementById("dot").title = ok ? "Live" : "Disconnected; retrying";
 }
 
+// The story's status line: its rows, each left and right.
+const gameStatus = $("game-status");
+let statusKey = "";
+let statusLines = [];
+const statusToggle = $("status-toggle");
+let statusShown = true;
+try { statusShown = localStorage.getItem("zmachine-status-line") !== "0"; } catch {}
+statusToggle.setAttribute("aria-pressed", String(statusShown));
+statusToggle.addEventListener("click", () => {
+  statusShown = !statusShown;
+  statusToggle.setAttribute("aria-pressed", String(statusShown));
+  try { localStorage.setItem("zmachine-status-line", statusShown ? "1" : "0"); } catch {}
+  gameStatus.hidden = !statusShown || !statusLines.some(([left, right]) => left || right);
+});
+function showStatusLines(lines) {
+  const key = JSON.stringify(lines);
+  if (key === statusKey) return;
+  statusKey = key;
+  statusLines = lines;
+  gameStatus.replaceChildren(...lines.map(([left, right]) => {
+    const row = document.createElement("div");
+    row.append(Object.assign(document.createElement("span"), { textContent: left }),
+      Object.assign(document.createElement("span"), { textContent: right }));
+    return row;
+  }));
+  gameStatus.hidden = !statusShown || !lines.some(([left, right]) => left || right);
+}
+
 async function pollGame() {
   let offset = 0;
   // After a failure the first request does not wait for news, so a server
@@ -906,6 +973,7 @@ async function pollGame() {
         if (offset > 0) noteUnread("game");
       }
       offset = data.offset;
+      showStatusLines(data.lines || []);
       document.getElementById("room").textContent = data.status[0] || "—";
       document.getElementById("score").textContent = data.status[1] || "";
       connected(true);
@@ -1155,7 +1223,8 @@ const styleEl = document.createElement("style");
 document.head.append(styleEl);
 function styleRules(looks) {
   return `#game .input{${lookCss(lookOver(looks.priorinput, looks.input))}}
-#game .prompt{${lookCss(looks.prompt)}}`;
+#game .prompt{${lookCss(looks.prompt)}}
+#game-pane .game-status{${lookCss(looks.header)}}`;
 }
 let styleText = "default";
 function setStyle(text, remember) {
@@ -1187,8 +1256,11 @@ function showSample(looks) {
   const typed = document.createElement("span");
   typed.className = "input";
   typed.textContent = "open mailbox";
-  sample.append("West of House\n", prompt, typed, "\nOpening the small mailbox.\n", promptSpan());
-  const rules = styleRules(looks).replaceAll("#game ", "#style-sample ");
+  const bar = document.createElement("div");
+  bar.className = "game-status";
+  bar.innerHTML = "<div><span>West of House</span><span>Score: 0   Moves: 1</span></div>";
+  sample.append(bar, "West of House\n", prompt, typed, "\nOpening the small mailbox.\n", promptSpan());
+  const rules = styleRules(looks).replaceAll("#game ", "#style-sample ").replaceAll("#game-pane ", "#style-sample ");
   let tag = $("style-sample-style");
   if (!tag) {
     tag = document.createElement("style");
@@ -1197,6 +1269,157 @@ function showSample(looks) {
   }
   tag.textContent = rules;
 }
+// Tweaks: per-part controls that rewrite the list in the text field.
+const styleParts = ["input", "currentinput", "priorinput", "prompt", "header"];
+const styleFolds = {
+  input: "The commands you send, in the game text",
+  currentinput: "The console's line being typed (the command box keeps the page's colors)",
+  priorinput: "A command once sent, over input",
+  prompt: "The prompt before a command",
+  header: "The status line above the game text, and the console's",
+};
+let styleOpen = {};
+try { styleOpen = JSON.parse(localStorage.getItem("zmachine-style-open") || "{}") || {}; } catch {}
+const colorWord = (c) => c.d ? "default" : c.t !== undefined ? (c.t < 8 ? "" : "bright-") + styleNames[c.t % 8] : c.rgb || String(c.i);
+function lookItem(look, part, presetText) {
+  const on = styleAttrs.filter((a) => look[a]);
+  const reset = styleAttrs.some((a) => look[a] === false);
+  const words = [...(reset ? ["plain"] : []), ...on];
+  const fg = look.fg ? colorWord(look.fg) : "", bg = look.bg ? colorWord(look.bg) : "";
+  if (fg || bg) words.push(bg ? `${fg}/${bg}` : fg);
+  if (words.length) return words.join("+");
+  return Object.keys(stylePresets[presetOf(presetText)]()[part]).length ? "plain" : null;
+}
+function tweakPart(part, change) {
+  let looks;
+  try { looks = parseStyle(styleInput.value.trim() || "default"); } catch { return; }
+  const look = { ...looks[part] };
+  try { change(look); } catch (err) { return syncStyleUi(err.message); }
+  const items = styleInput.value.split(",").map((t) => t.trim()).filter((t) => t && !t.startsWith(`${part}=`));
+  const item = lookItem(look, part, styleInput.value);
+  if (item !== null) items.push(`${part}=${item}`);
+  styleInput.value = items.join(",") || "default";
+  tryStyle();
+}
+const partsBox = $("style-parts");
+for (const part of styleParts) {
+  const row = document.createElement("div");
+  row.className = "part";
+  row.dataset.part = part;
+  const head = document.createElement("div");
+  head.className = "part-head";
+  const name = document.createElement("span");
+  name.className = "part-name";
+  name.textContent = part;
+  const body = document.createElement("div");
+  body.className = "part-body";
+  {
+    const fold = document.createElement("button");
+    fold.className = "fold";
+    fold.title = `${styleFolds[part]}. Click to show or hide.`;
+    const show = (open) => {
+      body.hidden = !open;
+      fold.setAttribute("aria-expanded", String(open));
+      fold.textContent = `${open ? "▾" : "▸"} ${part}`;
+    };
+    show(!!styleOpen[part]);
+    fold.addEventListener("click", () => {
+      show(body.hidden);
+      styleOpen[part] = !body.hidden;
+      try { localStorage.setItem("zmachine-style-open", JSON.stringify(styleOpen)); } catch {}
+    });
+    name.textContent = "";
+    name.append(fold);
+  }
+  const attrs = document.createElement("div");
+  attrs.className = "modes";
+  attrs.setAttribute("role", "group");
+  for (const [a, label, css, tip] of [["bold", "B", "font-weight:700", "Bold"], ["dim", "D", "opacity:.6", "Dim"], ["italic", "I", "font-style:italic", "Italic"],
+    ["underline", "U", "text-decoration:underline", "Underline"], ["reverse", "R", "font-style:normal", "Reverse: swap text and background"]]) {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.title = tip;
+    b.dataset.attr = a;
+    b.style.cssText = css;
+    b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", () => tweakPart(part, (look) => { if (look[a]) delete look[a]; else look[a] = true; }));
+    attrs.append(b);
+  }
+  const clear = document.createElement("button");
+  clear.className = "clear";
+  clear.setAttribute("aria-label", `Clear ${part}`);
+  clear.innerHTML = '<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>';
+  clear.title = `Clear the ${part} setting (back to the preset's)`;
+  clear.addEventListener("click", () => {
+    const items = styleInput.value.split(",").map((t) => t.trim()).filter((t) => t && !t.startsWith(`${part}=`));
+    styleInput.value = items.join(",") || "default";
+    tryStyle();
+  });
+  head.append(name, attrs, clear);
+  row.append(head);
+  for (const side of ["fg", "bg"]) {
+    const line = document.createElement("div");
+    line.className = "swatches";
+    line.dataset.side = side;
+    const label = document.createElement("span");
+    label.className = "side";
+    label.textContent = side === "fg" ? "text" : "back";
+    line.append(label);
+    const pick = (word) => tweakPart(part, (look) => { if (word === "") delete look[side]; else look[side] = styleColor(word); });
+    const none = document.createElement("button");
+    none.className = "swatch none";
+    none.title = side === "fg" ? "Default text color" : "Default background";
+    none.dataset.word = "default";
+    none.addEventListener("click", () => pick("default"));
+    line.append(none);
+    for (let i = 0; i < 16; i++) {
+      const word = (i < 8 ? "" : "bright-") + styleNames[i % 8];
+      const b = document.createElement("button");
+      b.className = "swatch";
+      b.title = `${side === "fg" ? "Text" : "Background"}: ${word}`;
+      b.dataset.word = word;
+      b.style.background = ansi16[i];
+      b.addEventListener("click", () => pick(word));
+      line.append(b);
+    }
+    const field = document.createElement("input");
+    field.className = "word";
+    field.placeholder = "0–255 or #rrggbb";
+    field.setAttribute("aria-label", `${part} ${side === "fg" ? "text" : "background"} color`);
+    field.title = "Another color: a name, 0–255, or #rrggbb; empty clears";
+    field.spellcheck = false;
+    field.autocapitalize = "none";
+    field.addEventListener("change", () => pick(field.value.trim()));
+    line.append(field);
+    body.append(line);
+  }
+  row.append(body);
+  partsBox.append(row);
+}
+function syncParts(looks) {
+  for (const row of partsBox.children) {
+    const look = looks[row.dataset.part];
+    for (const b of row.querySelectorAll("[data-attr]")) b.setAttribute("aria-pressed", String(!!look[b.dataset.attr]));
+    for (const line of row.querySelectorAll(".swatches")) {
+      const c = look[line.dataset.side];
+      const word = c ? colorWord(c) : "";
+      for (const b of line.querySelectorAll(".swatch")) b.classList.toggle("active", b.dataset.word === word);
+      const field = line.querySelector("input");
+      if (document.activeElement !== field) field.value = c && !line.querySelector(".active") ? word : "";
+    }
+  }
+}
+$("style-copy").addEventListener("click", (ev) => {
+  const b = ev.currentTarget;
+  try { navigator.clipboard.writeText(styleText); } catch {}
+  const icon = b.innerHTML;
+  b.textContent = "✓";
+  setTimeout(() => { b.innerHTML = icon; }, 1000);
+});
+$("style-reset").addEventListener("click", () => {
+  styleInput.value = "default";
+  tryStyle();
+});
 function presetOf(text) {
   const names = text.split(",").map((t) => t.trim()).filter((t) => t && !t.includes("="));
   return names.length ? names[names.length - 1] : "default";
@@ -1206,9 +1429,8 @@ function syncStyleUi(error) {
   for (const b of $("style-presets").children) b.classList.toggle("active", b.dataset.preset === active);
   styleInput.setAttribute("aria-invalid", String(!!error));
   styleHint.classList.toggle("error", !!error);
-  styleHint.textContent = error
-    ? error
-    : "Presets, then part=look settings, as for --style (parts: input, priorinput, prompt). currentinput, header and more apply to the console; the command box keeps the page's colors.";
+  styleHint.textContent = error || "";
+  if (!error) try { syncParts(parseStyle(styleInput.value.trim() || "default")); } catch {}
 }
 function tryStyle() {
   try {

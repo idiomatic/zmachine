@@ -427,6 +427,7 @@ pub const Server = struct {
                 .mode = @tagName(s.group.currentMode()),
                 .text = t.text,
                 .status = &t.status,
+                .lines = t.lines,
             });
         }
         if (std.mem.eql(u8, path, "/discussion")) {

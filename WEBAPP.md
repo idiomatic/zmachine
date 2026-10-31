@@ -26,7 +26,7 @@ A pattern for a program that serves its own web interface: one page, embedded in
 * A workspace fills the rest: a tree of splits, each leaf a panel with a tab bar and a body.
 * Controls for a view sit at the right end of its tab bar while its tab is in front.
 * Panels that share a row keep equal header and footer heights, whatever the content size.
-* Controls are drawn icons, centered in their button; related ones join into one segmented button (− +, A A). Pressed toggles show a tinted background. Focus uses the color of the adjacent action button. Symbols are drawn icons or glyphs sized to match, never mixed text and symbols in one control.
+* Controls are drawn icons, centered in their button, every one the same height (24 px) and an icon-only button the same width (29 px), in the header, tab bars, and popovers; related ones join into one segmented button (− +, A A). Pressed toggles show a tinted background. Focus uses the color of the adjacent action button. Symbols are drawn icons or glyphs sized to match, never mixed text and symbols in one control.
 
 ## Tabs
 

@@ -4,7 +4,7 @@ How small local models fare at Zork I through the MCP interface, and how to meas
 
 ## Status
 
-* `[█████░░░░░]  50%` Phase 0  rerun on the disambiguated interface  8 of 15 coached runs; `qwen3.5:9b` run 3, `qwen3:8b`, and `gpt-oss:20b` remain
+* `[███████░░░]  67%` Phase 0  rerun on the disambiguated interface  10 of 15 coached runs; `qwen3:8b` run 3 and `gpt-oss:20b` remain
 * `[████░░░░░░]  40%` Phase 4  evaluation script  Zig tools for bot, relay, metrics, and save; interviews are still Python in `runs-local/`
 
 ## Phase 0: ask the models
@@ -23,13 +23,15 @@ Success: the first 50 `send_command` calls of Zork I with no malformed call (an 
 
 Zork I, seed 69, turns mode, `bot` through `/mcp/simple`, a person coaching (vague, then specific, then the exact commands). Walkthroughs are in `tests/walkthroughs-local/dumberbots/`.
 
-| Model | Runs | Best score | Hints per run | First loop at |
-| --- | --- | --- | --- | --- |
-| `gemma4:12b` | 3 | 35, 35, 39 | 3, 1, 2 | 8 to 10 |
-| `qwen3:14b` | 3 | 35, 39, 15 | 3, 1, 2 | 13 to 18 |
-| `qwen3.5:9b` | 2 | 35, 35 | 2, 3 | 8 to 17 |
+| Model | Progress | Runs | Best score | Hints per run | First loop at |
+| --- | --- | --- | --- | --- | --- |
+| `gemma4:12b` | `[██████████]` | 3 | 35, 35, 39 | 3, 1, 2 | 8 to 10 |
+| `qwen3:14b` | `[██████████]` | 3 | 35, 39, 15 | 3, 1, 2 | 13 to 18 |
+| `qwen3.5:9b` | `[██████████]` | 3 | 35, 35, 35 | 2, 3, 4 | 8 to 23 |
+| `qwen3:8b` | `[██████░░░░]` | 2 of 3 | 40, 35 | 6, 3 | 12, 13 |
+| `gpt-oss:20b` | `[░░░░░░░░░░]` | 0 of 3 | | | |
 
-* No run met the success test: every one looped within 20 commands. Malformed calls were 0 to 10 per run (qwen3.5 had none), and there were no server errors.
+* No run met the success test: every one looped within 20 commands. Malformed calls were 0 to 12 per run (qwen3.5 had none), and there were no server errors.
 * Each reached the house through the window with at most one hint, then stalled at the living room's rug until told; the cellar's 35 points was the usual ceiling.
 
 ## Baseline

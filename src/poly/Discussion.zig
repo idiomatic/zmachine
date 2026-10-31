@@ -39,6 +39,8 @@ pub const PostKind = enum {
     revoked,
     /// The author cleared the discussion; every earlier post is gone.
     cleared,
+    /// The author restarted the game (the one whose command confirmed it).
+    restarted,
 };
 
 pub const Post = struct {

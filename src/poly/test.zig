@@ -71,6 +71,27 @@ test "only this machine clears the discussion" {
     try testing.expect(std.mem.indexOf(u8, json, "Again.") != null);
 }
 
+test "a restart is posted and logged under who confirmed it" {
+    var fake: World.Fake = .{};
+    var g: Group = .init(testing.allocator, testing.io, .{ .fake = &fake });
+    defer g.deinit();
+    g.heard(claude, "restart", false);
+    g.heard(claude, "y", false);
+    g.restarted();
+    const posts = g.discussion.posts.items;
+    try testing.expectEqual(Group.PostKind.restarted, posts[posts.len - 1].kind);
+    try testing.expectEqualStrings("Claude", posts[posts.len - 1].author.?);
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const log = try g.events(arena.allocator(), 0, true);
+    try testing.expectEqualStrings("game", log.events[log.events.len - 1].kind);
+    try testing.expectEqualStrings("Claude", log.events[log.events.len - 1].client);
+    // From the console, the console takes it.
+    g.heard(.console, "y", true);
+    g.restarted();
+    try testing.expect(g.discussion.posts.items[g.discussion.posts.items.len - 1].author == null);
+}
+
 test "keyboard lines are logged; web commands only posted" {
     var fake: World.Fake = .{};
     var g: Group = .init(testing.allocator, testing.io, .{ .fake = &fake });

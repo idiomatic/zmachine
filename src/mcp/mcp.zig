@@ -840,6 +840,10 @@ fn writeMessages(w: *Io.Writer, posts: []const Post, name: []const u8) !void {
             try w.print("({s} changed the password for remote players)\n", .{who});
             continue;
         }
+        if (std.mem.eql(u8, p.kind, "restarted")) {
+            try w.print("({s} restarted the game)\n", .{who});
+            continue;
+        }
         if (std.mem.eql(u8, p.kind, "cleared")) {
             try w.print("({s} cleared the discussion)\n", .{who});
             continue;

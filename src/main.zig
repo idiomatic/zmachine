@@ -359,7 +359,7 @@ const Restarted = struct { group: *Group, hub: *Hub };
 fn logRestart(context: *anyopaque) void {
     const restarted: *Restarted = @ptrCast(@alignCast(context));
     restarted.hub.clearText();
-    restarted.group.log(.game, "game", "restarted", false);
+    restarted.group.restarted();
 }
 
 test "--mode picks the starting mode and implies --web" {

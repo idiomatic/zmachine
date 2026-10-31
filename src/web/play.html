@@ -856,6 +856,7 @@ function eventText(p) {
     case "granted": return `${by} let ${p.text} read the inspector`;
     case "revoked": return `${by} stopped ${p.text} reading the inspector`;
     case "cleared": return `${by} cleared the discussion`;
+    case "restarted": return `${by} restarted the game`;
   }
   return null;
 }
@@ -1936,7 +1937,7 @@ const logLabels = {
 // The player behind an event: "name via agent" requests, and the events that
 // name their actor as the client. Others (an unnamed client) have none. The
 // Client column then drops the name, which the Player column shows.
-const actorKinds = new Set(["join", "leader", "kick", "password", "access"]);
+const actorKinds = new Set(["join", "leader", "kick", "password", "access", "game"]);
 function logPlayer(e) {
   const via = e.client.indexOf(" via ");
   if (via > 0) return e.client.slice(0, via);

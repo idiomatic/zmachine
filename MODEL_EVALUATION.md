@@ -4,7 +4,7 @@ How small local models fare at Zork I through the MCP interface, and how to meas
 
 ## Status
 
-* `[███████░░░]  73%` Phase 0  rerun on the disambiguated interface  11 of 15 coached runs; `gpt-oss:20b` remains
+* `[██████████] 100%` Phase 0  rerun on the disambiguated interface  all 15 coached runs done
 * `[████░░░░░░]  40%` Phase 4  evaluation script  Zig tools for bot, relay, metrics, and save; interviews are still Python in `runs-local/`
 
 ## Phase 0: ask the models
@@ -29,10 +29,14 @@ Zork I, seed 69, turns mode, `bot` through `/mcp/simple`, a person coaching (vag
 | `qwen3:14b` | `[██████████]` | 3 | 35, 39, 15 | 3, 1, 2 | 13 to 18 |
 | `qwen3.5:9b` | `[██████████]` | 3 | 35, 35, 35 | 2, 3, 4 | 8 to 23 |
 | `qwen3:8b` | `[██████████]` | 3 | 40, 35, 10 | 6, 3, 5 | 9 to 13 |
-| `gpt-oss:20b` | `[░░░░░░░░░░]` | 0 of 3 | | | |
+| `gpt-oss:20b` | `[██████████]` | 3 | 35, 35, 40 | 6, 6, 3 | 6 to 14 |
 
-* No run met the success test: every one looped within 20 commands. Malformed calls were 0 to 12 per run (qwen3.5 had none), and there were no server errors.
-* Most reached the house through the window with at most one hint, then stalled at the living room's rug until told; the cellar's 35 points was the usual ceiling. qwen3:8b run 3 needed four hints to get in and then did not move the rug; run 1 reached 40 by taking the loud room's platinum bar after the exact command.
+* No run met the success test: every one looped within 25 commands (the first loop came at command 6 to 23). Malformed calls were 0 to 18 per run: none for qwen3.5, the most for gpt-oss and qwen3:8b. Only gpt-oss had server errors (7 "unknown tool" replies).
+* The cellar's 35 points was the usual ceiling. Best scores were 40 (qwen3:8b run 1, by taking the loud room's platinum bar after the exact command `echo`; gpt-oss run 3, with the egg's 5 points on top).
+* Hints: gemma4 and qwen3:14b needed 1 to 3 a run, qwen3.5 2 to 4, qwen3:8b and gpt-oss 3 to 6. A vague hint worked about 4 times in 10; a specific one usually did; the exact commands worked unless the model was not where the hint assumed.
+* Stalls: not seeing the way into the house (around it, past the boarded door), not moving the rug (they examined or picked it up), and descending without light. qwen3:8b run 3 took five hints to get in and never moved the rug.
+* Asking: qwen3:14b, qwen3:8b and gpt-oss asked with `tell_players` in most runs, the others rarely; a model that asked got a hint within one batch, one that did not looped 40 to 100 moves first.
+* gpt-oss restarted the game itself twice after dying in the dark, without asking the others. Each of its runs also ended with an Ollama HTTP 500 (`BadStatus`) at a trap-door command, which the bot did not retry.
 
 ## Baseline
 

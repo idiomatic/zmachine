@@ -32,6 +32,10 @@ players: Players = .{},
 discussion: Discussion = .{},
 access: Access = .{},
 audit: AuditLog = .{},
+/// Who sent the latest command, for blaming a restart on them.
+actor_name: [64]u8 = undefined,
+actor_len: ?usize = null,
+actor_ai: bool = false,
 
 pub const Player = Players.Player;
 pub const PostKind = Discussion.PostKind;
@@ -158,6 +162,19 @@ pub fn heard(g: *Group, author: Player, line: []const u8, keyboard: bool) void {
     defer g.unlock();
     if (keyboard) g.audit.add(g.gpa, g.world.now(), .keyboard, "keyboard", "", line, false);
     g.postLocked(author, .command, line, &.{}) catch {};
+    g.actor_len = if (author.name) |n| @min(n.len, g.actor_name.len) else null;
+    if (author.name) |n| @memcpy(g.actor_name[0..g.actor_len.?], n[0..g.actor_len.?]);
+    g.actor_ai = author.ai;
+}
+
+/// The game restarted: posts and logs it under whoever sent the latest
+/// command, which confirmed it, or the console.
+pub fn restarted(g: *Group) void {
+    g.lock();
+    defer g.unlock();
+    const by: Player = if (g.actor_len) |n| .{ .name = g.actor_name[0..n], .ai = g.actor_ai } else .console;
+    g.postLocked(by, .restarted, "", &.{}) catch {};
+    g.audit.add(g.gpa, g.world.now(), .game, displayName(by), "", "restarted the game", false);
 }
 
 pub const PostError = error{ InvalidPost, OutOfMemory };

@@ -33,6 +33,11 @@ From the coached games; they repeated across models.
 * **Parser vocabulary.** `use`, `wield`, `shine`, `scatter`, `inspect`, `look at <thing>`, `go upstairs`, `go through window`, `climb stairs` failed; `get_help` names four verbs, not `move`, `open`, `take`, `drop`, `turn on`. Refusals differ by case ("I don't know the word", "That sentence isn't one I recognize", "too many nouns") but models rarely read them.
 * **Reasoning models.** deepseek-r1 never called a tool natively and, in text mode, wrote 10 to 50 second prose plans; gpt-oss had one HTTP 500 on a malformed call the harness could retry; qwen3:14b took up to 90 seconds on a turn in the dark.
 * **Dark rooms.** "It is pitch black" sent qwen3:14b into 10 to 20 identical `tell_players` calls ("someone take the lantern down"): the "several players" framing in the instructions misleads a single player.
+* **Self-restart.** gpt-oss restarted the game itself twice after dying in the dark, though the instructions say to restart only when the group wants it. A restart now names who did it in the discussion and the audit log; the instructions could also say to `tell_players` first.
+* **Unknown tool names.** gpt-oss wrote tools such as `send!commentary?` and `send?` (33 malformed calls in three runs) and got "unknown tool". The reply could list the tools (`send_command`, `read_recent`, `tell_players`, `get_help`).
+* **Server errors.** Each gpt-oss run ended with an Ollama HTTP 500 (`BadStatus`) on a malformed call; `bot` should retry once.
+* **Hints assume a position.** "Type `enter window`" fails from the Forest Path; a hint should name the room it starts from, and a model that does not know where it is calls `read_recent`.
+* **Light.** Models walked into the dark cellar (qwen3:8b, gpt-oss) and died, losing 10 points; the instructions could say to light the lantern before going down.
 
 ## Telling the layers apart
 

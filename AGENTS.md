@@ -51,7 +51,7 @@ Keep this file up to date with every specification.
 * The leader passes leadership to anyone (`POST /lead`, chip menu, MCP `pass_leadership`; `console` means the local side); a coleader passes the whole local side's. The local side can always reclaim it (Console chip menu, console `/lead`).
 * The leader changes the mode, sends commands in debate, kicks remote players and AI partners, and changes the password. The console can always type commands; it and local clients can't be kicked.
 * A kick ends a person's session (the password is needed to return; their page says why, `410`) and bans an AI partner's name. After a second kick within ten minutes the play page suggests a new password, and the MCP instructions tell an AI leader to make one.
-* Mode changes, passes, reclaims, joins, leaves, kicks and password changes are posted and logged.
+* Mode changes, passes, reclaims, joins, leaves, kicks, password changes and game restarts are posted and logged; a restart names whoever sent the confirming command (the console if typed there).
 
 ### Modes
 
@@ -62,10 +62,10 @@ Keep this file up to date with every specification.
 * `POST /command`: one printable line (empty is Return for single-key reads), queued with the keyboard and echoed in the terminal; replies with JSON of the response and status line; dismisses a waiting `[MORE]`.
 * Long-polling reads (`/transcript`, `/discussion`, `/events` with `since`) wait only while `since` equals the latest; a client ahead of it (the program restarted) is answered at once, and the page starts its game text, discussion and log over. After a failed request the page's first one does not wait, so a server that is back shows as live at once.
 * `POST /command?format=text` replies with only the game text (`text/plain`; `202` if the game has not answered), for a client that cannot use tools or JSON. `GET /transcript?since=<offset>[&wait=1][&format=text]`: the game text a player sees (as text, at most its last 4,000 bytes).
-* `POST /say`, `GET /discussion?since=<n>[&wait=1]`: thoughts (up to 8 suggested commands), messages, commands, and mode, leader, join, leave, kick, password and inspector-grant posts, each with its author; `/discussion` adds the mode, leader and players.
+* `POST /say`, `GET /discussion?since=<n>[&wait=1]`: thoughts (up to 8 suggested commands), messages, commands, and mode, leader, join, leave, kick, password, restart and inspector-grant posts, each with its author; `/discussion` adds the mode, leader and players.
 * `POST /clear-discussion` (this machine only; the trash button in the Discussion tab bar, console `/clear`; separate from a restart) removes every post and leaves a `cleared` post saying who; logged.
 * `POST /mode`, `/lead`, `/kick`: leader actions. `GET /me`: who the client is, and whether it leads.
-* `GET /events?since=<n>` (every player): the audit log of commands, keyboard lines, joins, leaves, leadership, kicks, inspector grants, game restarts, and password logins, changes, copies and reveals; clients named by player and `User-Agent`, the Audit log tab with two symbolic toggles in its tab bar (only suspicious entries; 24-hour time, remembered) and a Player column in the player's chip color (the name is then left out of Client) and a From column ("this machine", or the address; a client not on this machine sees "remote" in place of a remote address); never the password. Suspicious: opening the inspector, reading snapshots, wrong passwords, refused requests.
+* `GET /events?since=<n>` (every player): the audit log of commands, keyboard lines, joins, leaves, leadership, kicks, inspector grants, game restarts (by player), and password logins, changes, copies and reveals; clients named by player and `User-Agent`, the Audit log tab with two symbolic toggles in its tab bar (only suspicious entries; 24-hour time, remembered) and a Player column in the player's chip color (the name is then left out of Client) and a From column ("this machine", or the address; a client not on this machine sees "remote" in place of a remote address); never the password. Suspicious: opening the inspector, reading snapshots, wrong passwords, refused requests.
 
 ### The web app
 

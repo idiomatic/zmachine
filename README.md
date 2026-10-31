@@ -440,7 +440,7 @@ suspicious anything a player could not see: opening the object inspector,
 reading its snapshots (the object tree, attributes and globals), wrong
 passwords and refused requests. Each entry names the client by its
 `User-Agent`, after the player's name, such as
-`Claude via zmachine-mcp/0.3.0`.
+`Claude via zmachine-mcp/0.4.0`.
 
 Without `--listen` the server listens only on `127.0.0.1`. It refuses
 requests whose `Origin` or `Host` header names another site, so a web page

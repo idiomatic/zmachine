@@ -10,7 +10,7 @@ Keep this file up to date with every specification.
 * When the story ends (its `quit`) on a terminal, `[The game has ended. Type RESTART, RESTORE, or QUIT.]` is shown and input continues: `restart` (same seed) and `restore` play on, `seed <n>` sets the seed and `seed random` (or `randomseed`) draws a fresh one at each restart, `quit` or end of input exits, anything else repeats the prompt. Piped input exits at the story's end.
 * A restart clears the game text kept for players (`/transcript`, MCP `read_recent`); offsets stay valid. `save`/`restore` carry no text.
 * `--seed <n>`: Frotz's generator, so transcripts match `dfrotz -s <n> -I 6 -T`.
-* `-h`/`--help`; `--version` prints `build.zig.zon`'s version (0.3.0).
+* `-h`/`--help`; `--version` prints `build.zig.zon`'s version (0.4.0).
 
 ## Terminal
 

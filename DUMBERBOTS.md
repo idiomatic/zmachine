@@ -103,6 +103,7 @@ Chosen per session by the path `/mcp/simple` or an `Mcp-Profile: simple` header;
 * No `introduce_self`: named by `clientInfo.name`, numbered if taken, else `AI`.
 * One-sentence errors; flat schemas without `enum`, `minimum`, or `maxItems`; about ten lines of instructions.
 * Not covered: a per-tool length test (only `tail` is tested).
+* The 1,500-character limit comes from Zork I and is provisional until other stories are played; then count replies cut with "…" and what the model did next.
 
 ## Phase 2: focused replies
 

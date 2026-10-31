@@ -6,7 +6,6 @@ As each item ships, its behavior moves into [AGENTS.md](AGENTS.md) and the item 
 
 Disabled on space-constrained devices, like phase 1.
 
-* A merge button in a tab bar merges its panel into the one above or below (same width), else to the left or right (same height); the merged tabs stay behind the active one.
 * Minimum panel sizes.
 
 ## Debugger

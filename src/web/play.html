@@ -264,7 +264,7 @@ form.say input:focus { border-color: var(--you); box-shadow: 0 0 0 2px var(--you
 .tabs > .pane-title > span { display: none; }
 .tabs.drop-target { background: var(--accent-soft); }
 .tab.drop-before { box-shadow: inset 2px 0 0 var(--accent); }
-.tabs.drop-end::after { content: ""; width: 2px; align-self: stretch; margin: 4px 0; background: var(--accent); }
+.tab.drop-after { box-shadow: inset -2px 0 0 var(--accent); }
 .wbody { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 #ws .pane { flex: 1; min-height: 0; min-width: 0; display: none; }
 #ws .pane.active { display: flex; }
@@ -488,12 +488,15 @@ function listNames(names) {
 // everywhere on the page) on whoever leads, and the leader's actions on
 // the others.
 // A small robot drawn in the chip's color marks AI partners.
+const inspected = new Set();
 const robotIcon = '<svg class="robot" viewBox="0 0 16 16" aria-hidden="true">' +
   '<path d="M8 2.2v2.3"/><circle class="dot" cx="8" cy="1.9" r="1"/>' +
   '<rect x="2.8" y="4.5" width="10.4" height="8.6" rx="2.2"/>' +
   '<circle class="dot" cx="6" cy="8.6" r="1.15"/><circle class="dot" cx="10" cy="8.6" r="1.15"/></svg>';
 
-function playerChip(name, ai, leads, mine, color, title, actions) {
+// A magnifier marks a player who has looked at the inspector this game.
+const lensIcon = '<svg class="robot lens" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.8" cy="6.8" r="4.3"/><path d="M10 10l3.8 3.8"/></svg>';
+function playerChip(name, ai, leads, mine, color, title, actions, inspected) {
   // actions: [label, handler] pairs, shown in one ▼ menu.
   const chip = document.createElement("span");
   chip.className = "player" + (leads ? " leader" : "");
@@ -502,6 +505,7 @@ function playerChip(name, ai, leads, mine, color, title, actions) {
   // Marks go before the name: ♛ for the leader, then the robot.
   if (leads) chip.append("♛ ");
   if (ai) chip.insertAdjacentHTML("beforeend", robotIcon);
+  if (inspected) chip.insertAdjacentHTML("beforeend", lensIcon);
   chip.append(name);
   if (actions.length) {
     const more = document.createElement("button");
@@ -605,7 +609,7 @@ function updatePlayers() {
     // Where people play from is in the tooltip, not on the chip.
     const kind = p.ai ? "AI partner" : p.local ? "person on the console's machine" : "person on another machine";
     const reads = p.ai && p.inspector ? "; may read the inspector" : "";
-    chips.push(playerChip(mine ? "You" : p.name, p.ai, p.leader, mine, mine ? null : colorFor(p.name), `${p.name}: ${kind}${reads}`, actions));
+    chips.push(playerChip(mine ? "You" : p.name, p.ai, p.leader, mine, mine ? null : colorFor(p.name), `${p.name}: ${kind}${reads}${inspected.has(p.name) ? "; has looked at the inspector this game" : ""}`, actions, inspected.has(p.name)));
   }
   document.getElementById("players").replaceChildren(...chips);
   // Names, as many as fit the box; otherwise everyone.
@@ -1511,14 +1515,15 @@ window.onPaneShown = null;
 
 const leaf = (tabs) => ({ tabs, active: tabs[0] });
 const isLeaf = (n) => Array.isArray(n.tabs);
-function defaultLayout() {
+// `withInspector`: the inspector's tabs (and the audit log) start open.
+function defaultLayout(withInspector = inspecting) {
   return {
     tree: {
       dir: "v", ratio: 0.58,
       a: { dir: "h", ratio: 1.2 / 2.2, a: leaf(["game"]), b: leaf(["discussion"]) },
       b: { dir: "h", ratio: 1.35 / 2.35, a: leaf(["log", "map", "globals", "history"]), b: leaf(["objects"]) },
     },
-    closed: inspecting ? [] : ["log", ...inspectorTabs],
+    closed: withInspector ? [] : ["log", ...inspectorTabs],
   };
 }
 let W = loadLayout();
@@ -1649,10 +1654,11 @@ function buildTabs() {
     $("panes").append(paneEl(id));
   }
   if (!allVisible().length) W = defaultLayout();
+  // Whatever is brought forward or revealed has no news left, before the tabs are drawn.
+  for (const id of shownIds()) unread.delete(id);
   ws.replaceChildren(renderNode(W.tree));
   const shown = shownIds();
   for (const id of Object.keys(paneIds)) if (exists(id)) paneEl(id).classList.toggle("active", shown.includes(id));
-  for (const id of shown) unread.delete(id);
   const inspectorOpen = inspectorTabs.some((id) => allVisible().includes(id));
   $("inspector-link").setAttribute("aria-pressed", String(inspectorOpen));
   for (const el of document.querySelectorAll("header .meta")) el.hidden = !inspectorOpen;
@@ -1740,8 +1746,10 @@ $("panels-toggle").addEventListener("click", (ev) => {
   if (!panelsMenu.hidden) return (panelsMenu.hidden = true);
   panelsMenu.replaceChildren();
   const open = allVisible();
+  // The inspector's tabs are listed only while its toggle is on.
+  const inspectorShown = inspectorTabs.some((id) => open.includes(id));
   for (const id of Object.keys(tabTitles)) {
-    if (!exists(id)) continue;
+    if (!exists(id) || (inspectorTabs.includes(id) && !inspectorShown)) continue;
     const b = document.createElement("button");
     b.textContent = `${open.includes(id) ? "✓" : " "} ${tabTitles[id]}`;
     b.addEventListener("click", () => toggleTab(id));
@@ -1751,7 +1759,8 @@ $("panels-toggle").addEventListener("click", (ev) => {
   const reset = document.createElement("button");
   reset.textContent = "  Default layout";
   reset.addEventListener("click", () => {
-    W = defaultLayout();
+    // The inspector's tabs stay hidden if its toggle is off.
+    W = defaultLayout(inspectorTabs.some((id) => allVisible().includes(id)));
     try { localStorage.removeItem(LAYOUT_KEY); } catch {}
     buildTabs();
   });
@@ -1767,8 +1776,8 @@ document.addEventListener("click", () => { panelsMenu.hidden = true; });
 // dropped on; onto a panel's body, it splits the panel along its longer
 // side, the dropped tab taking the half nearer the pointer.
 const clearMarks = () => {
-  for (const el of ws.querySelectorAll(".drop-target, .drop-before, .drop-end")) {
-    el.classList.remove("drop-target", "drop-before", "drop-end");
+  for (const el of ws.querySelectorAll(".drop-target, .drop-before, .drop-after")) {
+    el.classList.remove("drop-target", "drop-before", "drop-after");
   }
   for (const el of ws.querySelectorAll(".drop-preview")) el.remove();
 };
@@ -1827,7 +1836,7 @@ function wireLeaf(wp, bar, l) {
     bar.classList.add("drop-target");
     const before = dropPoint(bar, ev.clientX);
     if (before) bar.querySelector(`.tab[data-id="${before}"]`).classList.add("drop-before");
-    else bar.classList.add("drop-end");
+    else bar.querySelectorAll(".tab")[bar.querySelectorAll(".tab").length - 1]?.classList.add("drop-after");
   });
   bar.addEventListener("dragleave", (ev) => {
     if (!bar.contains(ev.relatedTarget)) clearMarks();
@@ -1973,8 +1982,14 @@ function addLogRow(e) {
   }
   logRows.prepend(tr);
   colorLog(tr);
+  // Only a player's first suspicious entry this game raises the dot; a
+  // reloading inspector would otherwise raise it after every command.
   if (e.suspicious) {
-    if (logLoaded) noteUnread("log");
+    const who = logPlayer(e) || e.client;
+    if (!alerted.has(who)) {
+      alerted.add(who);
+      if (logLoaded) noteUnread("log");
+    }
   }
 }
 // A player's name takes the color of their chip in the discussion; a name
@@ -1983,6 +1998,43 @@ function colorLog(root = document.getElementById("log-rows")) {
   for (const td of root.querySelectorAll("td.log-player")) {
     const name = td.dataset.name;
     td.style.color = !name ? "" : isMe(name) ? "var(--you)" : seen.includes(name) ? colorFor(name) : "";
+  }
+}
+// Who has looked at the inspector this game, from the audit log: a restart
+// clears the marks and locks this page's inspector, which then needs
+// unlocking (and is logged) again.
+let restartSeq = 0;
+const alerted = new Set();
+function noteInspected(e, live) {
+  if (e.kind === "game") {
+    restartSeq = e.seq;
+    const had = inspected.size > 0;
+    inspected.clear();
+    alerted.clear();
+    if (live && inspecting && inspectorTabs.some((id) => allVisible().includes(id))) {
+      toggleInspectorTabs();
+      rememberInspector(false);
+      toast("The game restarted; the inspector is locked.");
+    }
+    return had;
+  }
+  if (e.kind !== "inspector" && e.kind !== "snapshot") return false;
+  const who = logPlayer(e);
+  if (!who || inspected.has(who)) return false;
+  inspected.add(who);
+  return true;
+}
+// An unlock remembered from an earlier game does not carry over.
+function savedInspector() {
+  let saved = "";
+  try { saved = localStorage.getItem("zmachine-inspector") || ""; } catch {}
+  return saved === "1" ? "0" : saved;
+}
+function checkInspectorGame() {
+  const saved = savedInspector();
+  if (inspecting && saved && saved !== String(restartSeq) && inspectorTabs.some((id) => allVisible().includes(id))) {
+    toggleInspectorTabs();
+    rememberInspector(false);
   }
 }
 let logStarted = false;
@@ -2001,7 +2053,13 @@ async function startLog() {
         last = 0;
         continue;
       }
-      data.events.forEach(addLogRow);
+      let marked = false;
+      for (const e of data.events) {
+        addLogRow(e);
+        if (noteInspected(e, logLoaded)) marked = true;
+      }
+      if (!logLoaded) checkInspectorGame();
+      if (marked) updatePlayers();
       logLoaded = true;
       last = data.last;
       $("log-empty").hidden = logRows.children.length > 0;
@@ -2016,10 +2074,11 @@ startLog();
 // Unlocking the inspector fetches its panels (this machine only; the server
 // logs it as suspicious) and adds them as tabs.
 function inspectorWanted() {
-  try { return localStorage.getItem("zmachine-inspector") === "1"; } catch { return false; }
+  const saved = savedInspector();
+  return !!saved && (!logLoaded || saved === String(restartSeq));
 }
 function rememberInspector(on) {
-  try { localStorage.setItem("zmachine-inspector", on ? "1" : ""); } catch {}
+  try { localStorage.setItem("zmachine-inspector", on ? String(restartSeq) : ""); } catch {}
 }
 async function unlockInspector() {
   if (inspecting) {

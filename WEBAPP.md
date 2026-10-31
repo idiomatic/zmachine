@@ -35,14 +35,14 @@ A pattern for a program that serves its own web interface: one page, embedded in
 * ✕ closes a tab. The ▦ menu lists every view with a check for open ones, reopens a closed one in its last panel, and ends with a rule and Default layout.
 * The last open tab cannot be closed.
 * Boundaries drag to resize, limited to 15 to 85 percent.
-* A tab out of sight (behind another, or closed) that gets news shows an accent dot at its top-right, left of ✕, until it is shown. News is a new post (Discussion), new text after the first load (Game), or a new suspicious entry (Audit log); not every audit entry, which would never clear.
+* A tab out of sight (behind another, or closed) that gets news shows an accent dot at its top-right, left of ✕, until it is shown. News is a new post (Discussion), new text after the first load (Game), or a player's first suspicious entry in a game (Audit log); not every audit entry, or every repeat, which would never clear.
 * The layout (tree, closed tabs, sizes) is saved in the browser, accepted only if it names every tab once, and overridden by query parameters (`?log`, `?game=hide`).
 * At 860 px wide or less the panels stack, fixed, without dragging or resizing.
 
 ## Privileged views
 
 * A button (not shown on phones, or to remote clients) asks for confirmation, then fetches the views as an HTML fragment (`<style>` scoped under `#ws`, panes, header items, and a script in a function scope). The server logs the fetch as suspicious.
-* The page adds the panes, runs the script, and shows the tabs. A second press hides them and the header items; the unlock is remembered and restored after a reload, logging again.
+* The page adds the panes, runs the script, and shows the tabs. A second press hides them and the header items; the unlock is remembered and restored after a reload, logging again, until the next game. The panels menu lists the views only while shown. Hiding them does not clear the record: whoever unlocked carries a mark in the player list until the game restarts, which also locks the views again.
 * The fragment names its panes with `data-*` attributes and does not touch the page's layout code. The page calls `window.onPaneShown(id)` so a view can redraw after it is shown or resized.
 
 ## Appearance settings

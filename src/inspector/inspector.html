@@ -2,8 +2,7 @@
 #ws #map-pane { position: relative; overflow: hidden; }
 #ws #map { width: 100%; height: 100%; cursor: grab; touch-action: none; }
 #ws #map.dragging { cursor: grabbing; }
-#ws .map-tools { position: absolute; right: 12px; top: 12px; display: flex; gap: 6px; }
-#ws .map-tools button, #ws .toolbar button {
+#ws .toolbar button {
   border: 1px solid var(--border); background: var(--panel); color: var(--text);
   font: inherit; font-size: 12px; padding: 4px 9px; border-radius: 6px; cursor: pointer;
 }
@@ -79,19 +78,21 @@
 </div>
 <div data-bar class="insp-status"><span class="dot" id="insp-dot"></span><span id="insp-conn">connecting</span></div>
 <div class="pane" id="map-pane">
-      <svg id="map"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="arrowhead" d="M0,0 L10,5 L0,10 z"/></marker><filter id="shadow-blur" x="-50%" y="-100%" width="200%" height="300%"><feGaussianBlur stdDeviation="10"/></filter></defs><g id="viewport"><g id="edges"></g><g id="rooms"></g></g></svg>
-      <div class="map-tools">
-        <button id="zoom-in" title="Zoom in">+</button>
-        <button id="zoom-out" title="Zoom out">&minus;</button>
-        <button id="recenter" title="Fit the map, or center on the current room, and follow the player again">Fit</button>
-        <button id="erase-map" title="Erase the map and start it again from the current room">Reset</button>
+    <div class="pane-title"><span></span>
+      <div class="modes" role="group" aria-label="Zoom">
+        <button id="zoom-out" aria-label="Zoom out" title="Zoom out"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9"/></svg></button>
+        <button id="zoom-in" aria-label="Zoom in" title="Zoom in"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9M8 3.5v9"/></svg></button>
       </div>
+      <button class="toggle theme" id="recenter" aria-label="Fit the map" title="Fit the map, or center on the current room, and follow the player again"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg></button>
+      <button class="toggle theme" id="erase-map" aria-label="Reset the map" title="Erase the map and start it again from the current room"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.8-3.8M13 2.5v2.8h-2.8"/></svg></button>
+    </div>
+      <svg id="map"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="arrowhead" d="M0,0 L10,5 L0,10 z"/></marker><filter id="shadow-blur" x="-50%" y="-100%" width="200%" height="300%"><feGaussianBlur stdDeviation="10"/></filter></defs><g id="viewport"><g id="edges"></g><g id="rooms"></g></g></svg>
       <div class="map-empty" id="map-empty">The map fills in as you explore.</div>
     </div>
     <div class="pane" id="globals-pane"><div id="globals"></div></div>
     <div class="pane" id="history-pane">
     <div class="pane-title"><span></span>
-      <button class="toggle theme" id="copy-history" aria-label="Copy the commands" title="Copy the commands, one per line"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 3.5v-.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h.5"/></svg></button>
+      <button class="toggle theme" id="copy-history" aria-label="Copy the commands" title="Copy the commands, one per line"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.8" width="8" height="8" rx="1.5"/><path d="M10.5 3.8v-.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h.5"/></svg></button>
     </div>
     <ol id="history"></ol>
   </div>

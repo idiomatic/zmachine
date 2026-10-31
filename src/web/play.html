@@ -55,7 +55,14 @@ header {
 /* Only the leader changes the mode. */
 .modes.locked button { cursor: default; }
 .modes.locked button:not(.active) { opacity: .6; }
-.live { flex: none; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.live { flex: none; font-size: 12px; color: var(--muted); white-space: nowrap; position: relative; }
+/* While disconnected, a thin line under the indicator shrinks over each retry. */
+.live.retrying::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -4px; height: 2px; border-radius: 1px;
+  background: #dc2626; opacity: .7; transform-origin: left; animation: retry 1.5s linear infinite;
+}
+@keyframes retry { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { .live.retrying::after { animation: none; } }
 .right { display: flex; align-items: center; gap: 8px; flex: none; font-size: 12px; color: var(--muted); }
 a.toggle { display: inline-block; text-decoration: none; text-align: center; }
 /* Drawn icons, so they match in size whatever the fonts. */
@@ -72,6 +79,8 @@ a.toggle { display: inline-block; text-decoration: none; text-align: center; }
 .toggle:hover { color: var(--text); }
 /* A pressed toggle, such as the inspector while its tabs are showing. */
 .toggle[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.modes .icon { width: 13px; height: 13px; }
+.modes button:has(.icon) { display: inline-flex; align-items: center; justify-content: center; }
 .modes .size-down, .modes .size-up { display: inline-flex; align-items: center; justify-content: center; line-height: 1; padding-top: 0; padding-bottom: 0; }
 .modes .size-down { font-size: 10px; }
 .modes .size-up { font-size: 18px; }
@@ -88,7 +97,7 @@ a.toggle { display: inline-block; text-decoration: none; text-align: center; }
 }
 .pane-title > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pane-button { font-size: 15px; line-height: 1; padding: 2px 6px; flex: none; }
-#copy-invite[hidden], #new-password[hidden], #inspector-link[hidden] { display: none; }
+#copy-invite[hidden], #new-password[hidden], #inspector-link[hidden], #clear-discussion[hidden] { display: none; }
 /* ⚭ and ⚄ draw small in most fonts; enlarge them to match ◐ and ⊟,
    in a button of the usual height. */
 #copy-invite { font-size: 16px; }
@@ -98,6 +107,7 @@ a.toggle { display: inline-block; text-decoration: none; text-align: center; }
    padding lifts them. */
 .pane-title .toggle { display: inline-flex; align-items: center; justify-content: center; height: 24px; line-height: 1; padding: 0 6px 2px; }
 .pane-title .pane-button { padding-bottom: 3px; }
+.pane-title .toggle:has(.icon) { padding-bottom: 0; }
 .pane-title .modes { height: 24px; }
 .pane-title .modes button { height: 100%; padding-top: 0; padding-bottom: 0; }
 .pane-title select {
@@ -108,7 +118,6 @@ a.toggle { display: inline-block; text-decoration: none; text-align: center; }
   flex: 1; overflow-y: auto; margin: 0; padding: 14px 16px; background: var(--game-bg);
   font: var(--game-size, 14px)/1.5 var(--mono); white-space: pre-wrap; word-break: break-word;
 }
-#game .input { font-weight: 700; }
 #feed { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
 /* Who is playing, between the Discussion header and the posts. It wraps
    onto as many rows as the players need, and the posts take what's left. */
@@ -137,12 +146,12 @@ a.toggle { display: inline-block; text-decoration: none; text-align: center; }
 }
 .player .more:hover, .player .more:focus-visible, .player .more[aria-expanded="true"] { color: var(--text); background: var(--panel-2); }
 /* The menu a chip's ▼ opens, just below it. */
-#chip-menu, #panels-menu {
+#chip-menu, #panels-menu, #style-popover {
   position: fixed; z-index: 20; display: flex; flex-direction: column; min-width: 190px; padding: 4px;
   background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
   box-shadow: 0 6px 20px rgb(0 0 0 / 18%);
 }
-#chip-menu[hidden], #panels-menu[hidden] { display: none; }
+#chip-menu[hidden], #panels-menu[hidden], #style-popover[hidden] { display: none; }
 #panels-menu hr { width: 100%; margin: 4px 0; border: 0; border-top: 1px solid var(--border); }
 #chip-menu button, #panels-menu button {
   font: 13px var(--sans); color: var(--text); text-align: left; white-space: nowrap;
@@ -195,8 +204,7 @@ form input {
   flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--bg);
   border: 1px solid var(--border); border-radius: 8px; padding: 0 10px; height: 37px;
 }
-/* The footer keeps its height, so it lines up with the discussion's. */
-#command-input { font-family: var(--mono); font-size: min(var(--game-size, 14px), 20px); }
+#command-input { font-family: var(--mono); }
 form button {
   font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 0 14px; height: 37px;
   background: var(--accent); color: var(--on-button); cursor: pointer;
@@ -207,7 +215,7 @@ form input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0
 form.say input:focus { border-color: var(--you); box-shadow: 0 0 0 2px var(--you-soft); }
 @media (max-width: 760px) {
   /* iOS zooms the page into any text field under 16px when it gets focus. */
-  form input, #command-input { font-size: max(16px, min(var(--game-size, 14px), 20px)); }
+  form input, #command-input { font-size: 16px; }
   header { gap: 10px; }
   .right { gap: 10px; }
   /* The score goes under the room, which keeps the width for its name. */
@@ -255,10 +263,6 @@ form.say input:focus { border-color: var(--you); box-shadow: 0 0 0 2px var(--you
 header .meta { color: var(--muted); font-size: 13px; display: flex; gap: 14px; flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; }
 header .meta b { color: var(--text); font-weight: 600; }
 header .insp-status, header .meta[hidden] { display: none; }
-.log-head { display: flex; align-items: center; gap: 14px; padding: 5px 12px; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
-.log-head b { color: var(--text); }
-.log-head .bad b { color: #b91c1c; }
-.log-head label { margin-left: auto; }
 .log-scroll { flex: 1; overflow: auto; padding: 0 12px 8px; min-height: 0; }
 table.log { width: 100%; border-collapse: collapse; }
 table.log th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); }
@@ -280,6 +284,16 @@ table.log tr.log-command td.log-kind { color: var(--accent); }
   .wsplit > * + * { border-top: 1px solid var(--border); }
   .tab { cursor: pointer; }
 }
+#style-popover { min-width: 280px; gap: 8px; padding: 10px; }
+#style-popover .modes { align-self: flex-start; }
+#style-popover input {
+  font: 12px var(--mono); color: var(--text); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px;
+}
+#style-popover input[aria-invalid="true"] { border-color: #b91c1c; }
+#style-popover .hint { font-size: 12px; color: var(--muted); white-space: normal; max-width: 300px; }
+#style-popover .hint.error { color: #b91c1c; }
+#style-popover .sample { font: 13px/1.5 var(--mono); background: var(--game-bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; white-space: pre; }
 </style>
 </head>
 <body>
@@ -298,9 +312,16 @@ table.log tr.log-command td.log-kind { color: var(--accent); }
 </header>
 <div id="ws"></div>
 <div id="panels-menu" role="menu" hidden></div>
+<div id="style-popover" role="dialog" aria-label="Game style" hidden>
+  <div class="modes" id="style-presets" role="group" aria-label="Preset"></div>
+  <input id="style-input" aria-label="Style" spellcheck="false" autocapitalize="none" autocorrect="off" placeholder="default">
+  <div class="hint" id="style-hint"></div>
+  <div class="sample" id="style-sample"></div>
+</div>
 <div id="panes" hidden>
   <div class="pane" id="game-pane">
     <div class="pane-title"><span></span>
+      <button class="toggle theme" id="style-button" aria-label="Game style" title="Game style: the console's --style presets and settings"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8a6.2 6.2 0 1 0 0 12.4c1 0 1.4-.7 1.1-1.5-.3-.8.1-1.6 1-1.6h1.4A2.7 2.7 0 0 0 14.2 8.4C14.2 4.7 11.5 1.8 8 1.8z"/><circle cx="5" cy="7.2" r=".6"/><circle cx="7.6" cy="4.8" r=".6"/><circle cx="10.6" cy="6" r=".6"/></svg></button>
       <div class="modes" role="group" aria-label="Game text size">
         <button class="size-down" id="font-smaller" aria-label="Smaller game text" title="Smaller game text">A</button>
         <button class="size-up" id="font-larger" aria-label="Larger game text" title="Larger game text">A</button>
@@ -319,7 +340,7 @@ table.log tr.log-command td.log-kind { color: var(--accent); }
         <button data-mode="turns">Take turns</button>
       </div>
       <button class="toggle theme" id="clear-discussion" hidden aria-label="Clear the discussion"
-        title="Clear the discussion for everyone. The game is not affected">⌫</button>
+        title="Clear the discussion for everyone. The game is not affected"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.2h11M6.2 4.2V2.8h3.6v1.4M4 4.2l.6 8.6a1 1 0 0 0 1 .9h4.8a1 1 0 0 0 1-.9l.6-8.6M6.6 6.6v4.2M9.4 6.6v4.2"/></svg></button>
       <button class="toggle theme" id="new-password" hidden aria-label="New password"
         title="New password: roll three new random words (or enter your own). Every remote session but the leader's ends, so the others need a new invite link">⚄</button>
       <button class="toggle theme" id="copy-invite" hidden aria-label="Copy an invite link"
@@ -333,12 +354,11 @@ table.log tr.log-command td.log-kind { color: var(--accent); }
     </form>
   </div>
   <div class="pane" id="log-pane">
-    <div class="log-head">
-      <span>Commands <b id="n-command">0</b></span>
-      <span>Typed <b id="n-keyboard">0</b></span>
-      <span class="bad">Suspicious <b id="n-suspicious">0</b></span>
-      <label><input type="checkbox" id="only-suspicious"> Only suspicious</label>
-      <span id="log-status">connecting…</span>
+    <div class="pane-title"><span></span>
+      <button class="toggle theme" id="only-suspicious" aria-pressed="false" aria-label="Only suspicious entries"
+        title="Only suspicious entries"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.6 14.2 12.4H1.8z"/><path d="M8 5.6v3.2"/><circle cx="8" cy="10.6" r=".5"/></svg></button>
+      <button class="toggle theme" id="log-24h" aria-pressed="false" aria-label="24-hour time"
+        title="24-hour time"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.4 1.6"/></svg></button>
     </div>
     <div class="log-scroll">
       <table class="log">
@@ -361,6 +381,7 @@ table.log tr.log-command td.log-kind { color: var(--accent); }
   </form>
 </div>
 <script>
+const $ = (id) => document.getElementById(id);
 const game = document.getElementById("game");
 const feed = document.getElementById("feed");
 
@@ -694,7 +715,7 @@ let mode = "debate";
 
 function setMode(m) {
   mode = m;
-  for (const b of document.querySelectorAll(".modes button")) b.classList.toggle("active", b.dataset.mode === m);
+  for (const b of document.querySelectorAll("#modes button")) b.classList.toggle("active", b.dataset.mode === m);
   // The mode's explanation, such as "Anyone can send commands."
   const modes = document.getElementById("modes");
   const hint = (hints[m] ? hints[m]() : "") + (iLead() ? "" : " Only the leader changes the mode.");
@@ -704,7 +725,7 @@ function setMode(m) {
   const input = document.getElementById("command-input");
   input.placeholder = m === "debate" && !iLead() ? "Only the leader sends commands in debate" : "Type a command";
 }
-for (const b of document.querySelectorAll(".modes button")) {
+for (const b of document.querySelectorAll("#modes button")) {
   b.addEventListener("click", async () => {
     if (!iLead()) return toast("Only the leader changes the mode.");
     const res = await api("/mode", { method: "POST", body: b.dataset.mode });
@@ -718,6 +739,13 @@ function nearBottom(el) { return el.scrollHeight - el.scrollTop - el.clientHeigh
 // the command typed at it.
 let atPrompt = false;
 
+function promptSpan() {
+  const span = document.createElement("span");
+  span.className = "prompt";
+  span.textContent = ">";
+  return span;
+}
+
 function appendGame(text) {
   const stick = nearBottom(game) || !game.childNodes.length;
   // Embolden input lines: what follows a ">" prompt at the start of a line.
@@ -727,11 +755,13 @@ function appendGame(text) {
     const prompted = i === 0 ? atPrompt : line.startsWith(">");
     const start = i === 0 && atPrompt ? 0 : 1;
     if (prompted && line.length > start) {
-      if (start) game.append(">");
+      if (start) game.append(promptSpan());
       const span = document.createElement("span");
       span.className = "input";
       span.textContent = line.slice(start);
       game.append(span);
+    } else if (line === ">") {
+      game.append(promptSpan());
     } else {
       game.append(line);
     }
@@ -847,6 +877,7 @@ function addPost(p) {
 
 function connected(ok) {
   document.getElementById("dot").className = "dot " + (ok ? "live" : "down");
+  document.getElementById("dot").parentElement.classList.toggle("retrying", !ok);
   document.getElementById("conn").textContent = ok ? "live" : "disconnected; retrying";
   // On a phone only the dot shows.
   document.getElementById("dot").title = ok ? "Live" : "Disconnected; retrying";
@@ -854,11 +885,21 @@ function connected(ok) {
 
 async function pollGame() {
   let offset = 0;
+  // After a failure the first request does not wait for news, so a server
+  // that is back answers at once and the indicator shows it.
+  let up = false;
   while (!stopped) {
     try {
-      const res = await api(`/transcript?since=${offset}&wait=1`);
+      const res = await api(`/transcript?since=${offset}${up ? "&wait=1" : ""}`);
       if (!res.ok) throw new Error(res.status);
       const data = await res.json();
+      // The program restarted: start the page's game text over.
+      if (data.offset < offset) {
+        game.replaceChildren();
+        atPrompt = false;
+        offset = 0;
+        continue;
+      }
       if (data.text) {
         appendGame(data.text);
         // New game text while the game is out of sight (not the first load).
@@ -868,8 +909,10 @@ async function pollGame() {
       document.getElementById("room").textContent = data.status[0] || "—";
       document.getElementById("score").textContent = data.status[1] || "";
       connected(true);
+      up = true;
     } catch {
       connected(false);
+      up = false;
       await new Promise((r) => setTimeout(r, 1500));
     }
   }
@@ -877,11 +920,18 @@ async function pollGame() {
 
 async function pollFeed() {
   let last = 0;
+  let up = false;
   while (!stopped) {
     try {
-      const res = await api(`/discussion?since=${last}&wait=1`);
+      const res = await api(`/discussion?since=${last}${up ? "&wait=1" : ""}`);
       if (!res.ok) throw new Error(res.status);
       const data = await res.json();
+      // The program restarted: start the discussion over.
+      if (data.last < last) {
+        feed.replaceChildren();
+        last = 0;
+        continue;
+      }
       leader = data.leader;
       players = data.players;
       inspectorForAll = data.inspector_for_all;
@@ -897,7 +947,9 @@ async function pollFeed() {
       last = data.last;
       mode = data.mode;
       updatePlayers();
+      up = true;
     } catch {
+      up = false;
       await new Promise((r) => setTimeout(r, 1500));
     }
   }
@@ -1005,6 +1057,195 @@ const themeParam = new URLSearchParams(location.search).get("theme");
 if (themeParam) theme = themeParam;
 setTheme(themes.includes(theme) ? theme : "auto", false);
 
+// The game's style: the console's --style language (presets, and
+// <part>=<look> settings), applied to the game text. `header` and `more`
+// are accepted but belong to the console.
+const styleDefault = () => ({
+  input: { fg: { i: 30 } }, currentinput: { bold: true }, priorinput: {}, prompt: {},
+  header: { bold: true, fg: { i: 231 }, bg: { i: 24 } }, more: { reverse: true },
+});
+const stylePresets = {
+  default: () => styleDefault(),
+  dark: () => ({ ...styleDefault(), input: { fg: { i: 222 } } }),
+  light: () => ({ ...styleDefault(), input: { fg: { t: 4 } } }),
+  mono: () => ({ ...styleDefault(), input: { bold: true }, prompt: { bold: true }, header: { reverse: true } }),
+  plain: () => ({ ...styleDefault(), input: {}, header: {}, more: {} }),
+};
+const styleNames = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"];
+const styleAttrs = ["bold", "dim", "italic", "underline", "reverse"];
+const ansi16 = ["#2e2e2e", "#c0392b", "#2e8b57", "#b8860b", "#2f6fdb", "#a23fb5", "#1b9aaa", "#d0d0d0",
+  "#555555", "#ff5f56", "#3ddc84", "#f5c542", "#6ea8ff", "#d273e8", "#4fd1e0", "#ffffff"];
+
+function styleColor(word) {
+  if (word === "" || word === "default") return { d: true };
+  const bright = word.startsWith("bright-");
+  const name = bright ? word.slice(7) : word;
+  const at = styleNames.indexOf(name);
+  if (at >= 0) return { t: at + (bright ? 8 : 0) };
+  if (bright) throw new Error(`unknown color ${word}`);
+  if (word[0] === "#") {
+    if (!/^#[0-9a-fA-F]{6}$/.test(word)) throw new Error(`bad color ${word}`);
+    return { rgb: word };
+  }
+  const n = Number(word);
+  if (!Number.isInteger(n) || n < 0 || n > 255 || !/^\d+$/.test(word)) throw new Error(`unknown color ${word}`);
+  return { i: n };
+}
+function styleLook(spec) {
+  let look = {};
+  for (const word of spec.split("+")) {
+    if (word === "plain") {
+      look = { bold: false, dim: false, italic: false, underline: false, reverse: false, fg: { d: true }, bg: { d: true } };
+    } else if (styleAttrs.includes(word)) {
+      look[word] = true;
+    } else if (word === "") {
+      throw new Error("empty look");
+    } else {
+      const slash = word.indexOf("/");
+      const fg = slash < 0 ? word : word.slice(0, slash);
+      if (fg) look.fg = styleColor(fg);
+      if (slash >= 0 && slash + 1 < word.length) look.bg = styleColor(word.slice(slash + 1));
+    }
+  }
+  return look;
+}
+// Applies "mono,prompt=bold+cyan" over the defaults; throws on a bad name.
+function parseStyle(list) {
+  let looks = styleDefault();
+  for (const raw of list.split(",")) {
+    const item = raw.trim();
+    if (!item) continue;
+    const eq = item.indexOf("=");
+    if (eq < 0) {
+      if (!(item in stylePresets)) throw new Error(`unknown preset ${item}`);
+      looks = stylePresets[item]();
+      continue;
+    }
+    let part = item.slice(0, eq);
+    if (part === "status") part = "header";
+    if (!(part in looks)) throw new Error(`unknown part ${part}`);
+    looks[part] = styleLook(item.slice(eq + 1));
+  }
+  return looks;
+}
+const lookOver = (top, base) => ({ ...base, ...top });
+function colorCss(c) {
+  if (c.d) return null;
+  if (c.t !== undefined) return ansi16[c.t];
+  if (c.rgb) return c.rgb;
+  const i = c.i;
+  if (i < 16) return ansi16[i];
+  if (i >= 232) { const v = 8 + 10 * (i - 232); return `rgb(${v},${v},${v})`; }
+  const n = i - 16, lv = [0, 95, 135, 175, 215, 255];
+  return `rgb(${lv[Math.floor(n / 36)]},${lv[Math.floor(n / 6) % 6]},${lv[n % 6]})`;
+}
+function lookCss(look) {
+  const d = [];
+  if (look.bold !== undefined) d.push(`font-weight:${look.bold ? 700 : 400}`);
+  if (look.italic !== undefined) d.push(`font-style:${look.italic ? "italic" : "normal"}`);
+  if (look.underline !== undefined) d.push(`text-decoration:${look.underline ? "underline" : "none"}`);
+  if (look.dim !== undefined) d.push(`opacity:${look.dim ? 0.6 : 1}`);
+  let fg = look.fg ? colorCss(look.fg) : null, bg = look.bg ? colorCss(look.bg) : null;
+  if (look.reverse) [fg, bg] = [bg || "var(--game-bg)", fg || "var(--text)"];
+  if (look.fg || look.reverse) d.push(`color:${fg || "inherit"}`);
+  if (look.bg || look.reverse) d.push(`background:${bg || "transparent"}`);
+  return d.join(";");
+}
+const styleEl = document.createElement("style");
+document.head.append(styleEl);
+function styleRules(looks) {
+  return `#game .input{${lookCss(lookOver(looks.priorinput, looks.input))}}
+#game .prompt{${lookCss(looks.prompt)}}`;
+}
+let styleText = "default";
+function setStyle(text, remember) {
+  const looks = parseStyle(text);
+  styleEl.textContent = styleRules(looks);
+  styleText = text;
+  if (remember) try { localStorage.setItem("zmachine-style", text); } catch {}
+  return looks;
+}
+{
+  let saved = null;
+  try { saved = localStorage.getItem("zmachine-style"); } catch {}
+  const asked = new URLSearchParams(location.search).get("style");
+  for (const text of [asked, saved, "default"]) {
+    if (text === null || text === "") continue;
+    try { setStyle(text, false); break; } catch {}
+  }
+}
+
+const stylePopover = $("style-popover");
+const styleInput = $("style-input");
+const styleHint = $("style-hint");
+function showSample(looks) {
+  const sample = $("style-sample");
+  sample.replaceChildren();
+  const prompt = document.createElement("span");
+  prompt.className = "prompt";
+  prompt.textContent = ">";
+  const typed = document.createElement("span");
+  typed.className = "input";
+  typed.textContent = "open mailbox";
+  sample.append("West of House\n", prompt, typed, "\nOpening the small mailbox.\n", promptSpan());
+  const rules = styleRules(looks).replaceAll("#game ", "#style-sample ");
+  let tag = $("style-sample-style");
+  if (!tag) {
+    tag = document.createElement("style");
+    tag.id = "style-sample-style";
+    document.head.append(tag);
+  }
+  tag.textContent = rules;
+}
+function presetOf(text) {
+  const names = text.split(",").map((t) => t.trim()).filter((t) => t && !t.includes("="));
+  return names.length ? names[names.length - 1] : "default";
+}
+function syncStyleUi(error) {
+  const active = presetOf(styleInput.value);
+  for (const b of $("style-presets").children) b.classList.toggle("active", b.dataset.preset === active);
+  styleInput.setAttribute("aria-invalid", String(!!error));
+  styleHint.classList.toggle("error", !!error);
+  styleHint.textContent = error
+    ? error
+    : "Presets, then part=look settings, as for --style (parts: input, priorinput, prompt). currentinput, header and more apply to the console; the command box keeps the page's colors.";
+}
+function tryStyle() {
+  try {
+    const looks = setStyle(styleInput.value.trim() || "default", true);
+    showSample(looks);
+    syncStyleUi(null);
+  } catch (err) {
+    syncStyleUi(err.message);
+  }
+}
+for (const name of Object.keys(stylePresets)) {
+  const b = document.createElement("button");
+  b.textContent = name;
+  b.dataset.preset = name;
+  b.addEventListener("click", () => {
+    // The preset replaces any earlier one and keeps the part settings.
+    const parts = styleInput.value.split(",").map((t) => t.trim()).filter((t) => t.includes("="));
+    styleInput.value = [name, ...parts].join(",");
+    tryStyle();
+  });
+  $("style-presets").append(b);
+}
+styleInput.addEventListener("input", tryStyle);
+$("style-button").addEventListener("click", (ev) => {
+  ev.stopPropagation();
+  if (!stylePopover.hidden) return (stylePopover.hidden = true);
+  styleInput.value = styleText;
+  const r = ev.currentTarget.getBoundingClientRect();
+  stylePopover.style.top = `${r.bottom + 4}px`;
+  stylePopover.style.right = `${Math.max(8, window.innerWidth - r.right)}px`;
+  stylePopover.hidden = false;
+  try { showSample(parseStyle(styleText)); } catch {}
+  syncStyleUi(null);
+});
+stylePopover.addEventListener("click", (ev) => ev.stopPropagation());
+document.addEventListener("click", () => { stylePopover.hidden = true; });
+
 // The game text size is remembered in this browser; steps widen as it grows.
 const fontSizes = [8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32, 40, 48, 64];
 const fontSmaller = document.getElementById("font-smaller");
@@ -1033,7 +1274,6 @@ setFontStep(savedStep >= 0 ? savedStep : fontStep);
 // objects) is a tab that drags between panels, closes, reopens from the ▦
 // menu, and resizes. A tab dropped on a panel's body splits it along its
 // longer side.
-const $ = (id) => document.getElementById(id);
 const ws = $("ws");
 const LAYOUT_KEY = "zmachine-layout-tree";
 const tabTitles = { game: "Game", discussion: "Discussion", log: "Audit log", map: "Map", globals: "Globals", history: "History", objects: "Objects" };
@@ -1454,8 +1694,9 @@ tiling.addEventListener("change", buildTabs);
 // The audit log
 
 const logRows = $("log-rows");
-const logCounts = { command: 0, keyboard: 0, suspicious: 0 };
 const onlySuspicious = $("only-suspicious");
+const isOn = (b) => b.getAttribute("aria-pressed") === "true";
+const setOn = (b, on) => b.setAttribute("aria-pressed", String(on));
 const logLabels = {
   command: "command", keyboard: "typed", inspector: "inspector",
   snapshot: "snapshot", refused: "refused", join: "players", login: "password",
@@ -1475,15 +1716,26 @@ function logClient(e) {
   if (via > 0) return e.client.slice(via + 5);
   return actorKinds.has(e.kind) ? "" : e.client;
 }
-onlySuspicious.addEventListener("change", () => {
-  for (const tr of logRows.children) tr.hidden = onlySuspicious.checked && !tr.classList.contains("suspicious");
+onlySuspicious.addEventListener("click", () => {
+  setOn(onlySuspicious, !isOn(onlySuspicious));
+  for (const tr of logRows.children) tr.hidden = isOn(onlySuspicious) && !tr.classList.contains("suspicious");
+});
+const log24 = $("log-24h");
+try { setOn(log24, localStorage.getItem("zmachine-log-24h") === "1"); } catch {}
+function logTime(ms) {
+  return new Date(ms).toLocaleTimeString([], isOn(log24) ? { hourCycle: "h23" } : {});
+}
+log24.addEventListener("click", () => {
+  setOn(log24, !isOn(log24));
+  try { localStorage.setItem("zmachine-log-24h", isOn(log24) ? "1" : ""); } catch {}
+  for (const td of logRows.querySelectorAll("td.log-time")) td.textContent = logTime(Number(td.dataset.ms));
 });
 function addLogRow(e) {
   const tr = document.createElement("tr");
   tr.className = "log-" + e.kind + (e.suspicious ? " suspicious" : "");
-  tr.hidden = onlySuspicious.checked && !e.suspicious;
+  tr.hidden = isOn(onlySuspicious) && !e.suspicious;
   for (const [cls, text] of [
-    ["time", new Date(e.time).toLocaleTimeString()],
+    ["time", logTime(e.time)],
     ["kind", logLabels[e.kind] || e.kind],
     ["player", logPlayer(e)],
     ["detail", e.detail],
@@ -1494,13 +1746,12 @@ function addLogRow(e) {
     td.className = "log-" + cls;
     td.textContent = text;
     if (cls === "player") td.dataset.name = text;
+    if (cls === "time") td.dataset.ms = e.time;
     tr.appendChild(td);
   }
   logRows.prepend(tr);
   colorLog(tr);
-  if (e.kind in logCounts) logCounts[e.kind]++;
   if (e.suspicious) {
-    logCounts.suspicious++;
     if (logLoaded) noteUnread("log");
   }
 }
@@ -1522,14 +1773,17 @@ async function startLog() {
     try {
       const res = await fetch(`/events?since=${last}`, { cache: "no-store" });
       const data = await res.json();
+      // The program restarted: start the log over.
+      if (data.last < last) {
+        logRows.replaceChildren();
+        last = 0;
+        continue;
+      }
       data.events.forEach(addLogRow);
       logLoaded = true;
       last = data.last;
-      for (const k in logCounts) $("n-" + k).textContent = logCounts[k];
       $("log-empty").hidden = logRows.children.length > 0;
-      $("log-status").textContent = "live";
     } catch {
-      $("log-status").textContent = "disconnected; retrying";
       await new Promise((r) => setTimeout(r, 1500));
     }
   }

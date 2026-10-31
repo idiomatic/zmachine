@@ -27,17 +27,15 @@ Keep this file up to date with every specification.
 
 * `--web [port]` (default 9675) listens on 127.0.0.1; `--listen <address>` (implies `--web`) adds that address. Refuse and log requests whose `Host` isn't this server or whose `Origin` doesn't match it.
 * `--web` leaves input unchanged (a piped walkthrough gives the same output), and quitting exits cleanly with requests open.
-* One web app: `/` is the play page. `/inspector` serves the inspector's panels (an HTML fragment the page loads; this machine only); `/log` redirects to `/?log`.
+* One web app: `/` is the play page. `/inspector` serves the inspector's panels (an HTML fragment the page loads; this machine only).
 
 ## Inspector
 
-* Header: room and score (with the inspector's story, seed, turn and location once unlocked), live indicator, inspector magnifier (SVG; this machine only, not on phones; asks first), ▦ (panels menu: show or hide any tab, Default layout), theme button (◐ system, ☀︎ light, ☾ dark).
 * Live object tree and details (one Objects tab; a draggable boundary resizes them, remembered), attributes, properties and globals with recent changes highlighted, command history (with a Copy button for its commands), and a map of visited rooms laid out by direction.
-* Map: pan, zoom, Fit (all, or follow the player), Reset (erase and restart from the current room; `POST /erase-map`, logged).
+* Map: pan, zoom, Fit (all, or follow the player), Reset (erase and restart from the current room; `POST /erase-map`, logged); its controls are symbolic buttons in the tab bar (− and + joined).
     * One line per pair of rooms; an arrowhead if traveled one way only; faded gradually where it passes under a room it doesn't connect.
     * A move is labeled with its direction at its starting end: up, down, in and out always; compass directions only where the layout disagrees.
     * Rooms drag (after a few pixels, so clicks still select), snap to the grid and swap with an occupant; clicking a compass label moves the destination room so the direction holds (tooltip says where). Both first pin every room in place; pins are remembered per story (release and serial), new rooms are laid out around them, and Reset clears them.
-* Workspace: a tree of split panels. Game, Discussion, Audit log and, after the magnifier unlocks the inspector, Map, Globals, History and Objects are equal tabs: drag one to a tab bar to move it there, or onto a panel's body to split that panel along its longer side (a dashed preview shows the half the tab takes); close a tab with ✕ and reopen it from the ▦ menu (which also has Default layout); drag the boundaries to resize. The layout is remembered. At 860 px wide or less the panels are stacked and fixed, and the inspector is unavailable. The inspector's story, seed, turn and location join the header's room and score. An unlocked inspector returns after a reload (logged again) until its tabs are hidden with the magnifier.
 * Answers only this machine; unlocking it (fetching its panels) and reading snapshots are logged as suspicious. AI partners may read only `/state`, and only with `--grant-inspector` (all partners; implies `--web`) or a grant from a person on this machine (chip menu; `POST /grant-inspector`, `POST /revoke-inspector`). Grants are posted and logged; a kick drops one.
 
 ## Playing together
@@ -62,22 +60,25 @@ Keep this file up to date with every specification.
 ### Endpoints
 
 * `POST /command`: one printable line (empty is Return for single-key reads), queued with the keyboard and echoed in the terminal; replies with JSON of the response and status line; dismisses a waiting `[MORE]`.
+* Long-polling reads (`/transcript`, `/discussion`, `/events` with `since`) wait only while `since` equals the latest; a client ahead of it (the program restarted) is answered at once, and the page starts its game text, discussion and log over. After a failed request the page's first one does not wait, so a server that is back shows as live at once.
 * `POST /command?format=text` replies with only the game text (`text/plain`; `202` if the game has not answered), for a client that cannot use tools or JSON. `GET /transcript?since=<offset>[&wait=1][&format=text]`: the game text a player sees (as text, at most its last 4,000 bytes).
 * `POST /say`, `GET /discussion?since=<n>[&wait=1]`: thoughts (up to 8 suggested commands), messages, commands, and mode, leader, join, leave, kick, password and inspector-grant posts, each with its author; `/discussion` adds the mode, leader and players.
-* `POST /clear-discussion` (this machine only; ⌫ in the discussion header, console `/clear`; separate from a restart) removes every post and leaves a `cleared` post saying who; logged.
+* `POST /clear-discussion` (this machine only; the trash button in the Discussion tab bar, console `/clear`; separate from a restart) removes every post and leaves a `cleared` post saying who; logged.
 * `POST /mode`, `/lead`, `/kick`: leader actions. `GET /me`: who the client is, and whether it leads.
-* `GET /log`, `GET /events?since=<n>` (every player): the audit log of commands, keyboard lines, joins, leaves, leadership, kicks, inspector grants, game restarts, and password logins, changes, copies and reveals; clients named by player and `User-Agent`, the log page with a Player column in the player's chip color (the name is then left out of Client) and a From column ("this machine", or the address; a client not on this machine sees "remote" in place of a remote address); never the password. Suspicious: opening the inspector, reading snapshots, wrong passwords, refused requests.
+* `GET /events?since=<n>` (every player): the audit log of commands, keyboard lines, joins, leaves, leadership, kicks, inspector grants, game restarts, and password logins, changes, copies and reveals; clients named by player and `User-Agent`, the Audit log tab with two symbolic toggles in its tab bar (only suspicious entries; 24-hour time, remembered) and a Player column in the player's chip color (the name is then left out of Client) and a From column ("this machine", or the address; a client not on this machine sees "remote" in place of a remote address); never the password. Suspicious: opening the inspector, reading snapshots, wrong passwords, refused requests.
 
-### The play page
+### The web app
 
-* Split screen; works at phone width.
+* One page of tabs in a tiling workspace; works at phone width (see [WEBAPP.md](WEBAPP.md) for the pattern).
+* Each tab's controls are symbolic buttons at the right end of its tab bar while it is in front (toggles show a tinted background when on).
+* Workspace: a tree of split panels. Game, Discussion, Audit log and, after the magnifier unlocks the inspector, Map, Globals, History and Objects are equal tabs: drag one to a tab bar to move it there, or onto a panel's body to split that panel along its longer side (a dashed preview shows the half the tab takes); close a tab with ✕ and reopen it from the ▦ menu (which also has Default layout); drag the boundaries to resize. The layout is remembered. At 860 px wide or less the panels are stacked and fixed, and the inspector is unavailable. The inspector's story, seed, turn and location join the header's room and score. An unlocked inspector returns after a reload (logged again) until its tabs are hidden with the magnifier.
 * Header: room and score (with the inspector's story, seed, turn and location once unlocked), live indicator, inspector magnifier (SVG; this machine only, not on phones; asks first), ▦ (panels menu: show or hide any tab, Default layout), theme button (◐ system, ☀︎ light, ☾ dark).
-* Game pane: text, command box (no autocapitalization or autocorrection), text size segmented button (A shrinks, A enlarges; 8–64 px in steps that widen as it grows, default 14).
-* Discussion pane: header with the mode switch (locked unless leading, explained by tooltip) and, for local clients and a human leader with `--listen`, ⚄ (new password) and ⚭ (copy invite link); a chip strip; posts in each player's color ("You" for one's own), suggestions as send buttons; a message box.
+* Game tab: text, command box (no autocapitalization or autocorrection; its text keeps its size), text size segmented button (A shrinks, A enlarges; 8–64 px in steps that widen as it grows, default 14). A palette button opens a style popover: preset buttons and a text field taking the console's `--style` language (parts `input`, `priorinput` and `prompt` style the game text; `currentinput`, `header` and `more` are accepted and left to the console, and the command box is never colored), with a live sample and the error shown beside a bad name.
+* Discussion tab: controls in its tab bar, the mode switch (locked unless leading, explained by tooltip) and, for local clients and a human leader with `--listen`, ⚄ (new password) and ⚭ (copy invite link); a chip strip; posts in each player's color ("You" for one's own), suggestions as send buttons; a message box.
     * Chips: the console first, then players in their colors; ♛ (the leader, throughout the page) and a monochrome SVG robot (AI partners) before the name; where a person plays from only in the tooltip. Wraps without a scrollbar.
     * Each chip's ▼ menu (drawn by the page): for the leader, ♛ pass the lead and ✕ kick on remote players and AI partners; on the Console chip, pass the lead to this machine, or take it back (local clients); for a person on this machine, ⌕ grant or revoke an AI partner's inspector access (not with `--grant-inspector`; the tooltip says when granted).
 * A tab out of sight (behind another, or closed) shows a dot until shown: Discussion on others' posts, Game on new text after the first load, Audit log on new suspicious entries.
-* Remembers name, layout (panels, tabs, closed tabs, sizes), text size and theme; `?game=` and `?discussion=` (`hide`/`show`), `?log` and `?theme=` (`auto`/`light`/`dark`) override.
+* Remembers name, layout (panels, tabs, closed tabs, sizes), text size, game style and theme; `?style=<list>`, `?game=` and `?discussion=` (`hide`/`show`), `?log` and `?theme=` (`auto`/`light`/`dark`) override.
 
 ### Remote access and password
 
@@ -105,6 +106,7 @@ Keep this file up to date with every specification.
 
 * Builds and runs on Linux, macOS and Windows, x86_64 and aarch64 (six targets).
 * `zig build stories` (`tools/fetch.zig`): downloads Zork I–III (MIT, Microsoft) from historicalsource at pinned commits, checked by pinned SHA-256 and cached, into `games/` as `zork1.r119-880429.z3` etc. Only `stories` and `walkthrough` download; `-Dstories=false` skips.
+* `zig build tools` builds `bot` (plays a tool-calling model through `/mcp/simple`), `relay` (plays a model without tool use), `metrics` and `save` (a run's commands as a local walkthrough) into `zig-out/bin/`; see [MODEL_EVALUATION.md](MODEL_EVALUATION.md).
 * `zig build walkthrough` (`tools/walkthrough.zig`) plays `tests/walkthroughs-local/walkthroughs.zon` and `tests/walkthroughs/walkthroughs.zon` entries (script, story path or `zork1`–`zork3`, seeds, an expected line).
     * Scripts are named `<story>.r<release>-<serial>[.<topic>].txt`; another release fails.
     * Each seed (or one unseeded run) plays with and without `--web`; outputs must match each other and the saved `<script name>.seed<n>.expected`.

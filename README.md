@@ -305,7 +305,7 @@ by zmachine; the game never sees it:
 | Command | What it does |
 | --- | --- |
 | `/lead` | Take back the leadership for this machine |
-| `/clear` | Clear the discussion for everyone (not the game; ⌫ on the play page does the same) |
+| `/clear` | Clear the discussion for everyone (not the game; the trash button on the play page does the same) |
 | `/mode` | Show the mode, or set it with `/mode debate` or `/mode turns` (only while this machine leads) |
 | `/password` | Change the password, typed without echo; an empty one makes three new random words |
 | `/showpassword` | Show the password on the bottom row until the next key press, then clear it, so it never enters the terminal's scrollback |
@@ -412,7 +412,6 @@ curl -d 'open mailbox' http://127.0.0.1:9675/command
 | `GET /invite` | An invite link carrying the password, for this machine and a leader who is a person. |
 | `POST /password` | Change the password to the body, or make a new one if it is empty. |
 | `GET /random-password` | Three random words to suggest as a new password, changing nothing (this machine, or a leader who is a person). |
-| `GET /log` | A live audit log page, open to every player. |
 | `GET /events?since=<n>` | The audit log events after `n`, as JSON (long polling). |
 
 Who is asking:

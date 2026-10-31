@@ -36,7 +36,6 @@
 //!                         if it is empty
 //!   GET /random-password  three random words to suggest as a new password,
 //!                         changing nothing
-//!   GET /log              redirects to the play page's audit log panel, open to every player
 //!   GET /events?since=N   audit log events after N (long polling)
 //!   POST /mcp             a message for an AI partner's MCP session
 //!                         (streamable HTTP, this machine only); DELETE
@@ -413,7 +412,8 @@ pub const Server = struct {
             const since = parseSince(query);
             if (queryValue(query, "wait") != null) {
                 var waited: u32 = 0;
-                while (s.hub.textOffset() <= since and waited < poll_timeout_ms) {
+                // A client ahead of the game (the program restarted) is answered at once.
+                while (s.hub.textOffset() == since and waited < poll_timeout_ms) {
                     try s.io.sleep(.fromMilliseconds(poll_interval_ms), .awake);
                     waited += poll_interval_ms;
                 }
@@ -432,19 +432,16 @@ pub const Server = struct {
         if (std.mem.eql(u8, path, "/discussion")) {
             const since = parseSince(query);
             var waited: u32 = 0;
-            while (queryValue(query, "wait") != null and s.group.lastPost() <= since and waited < poll_timeout_ms) {
+            while (queryValue(query, "wait") != null and s.group.lastPost() == since and waited < poll_timeout_ms) {
                 try s.io.sleep(.fromMilliseconds(poll_interval_ms), .awake);
                 waited += poll_interval_ms;
             }
             return sendJson(w, arena, try s.group.discussionSince(arena, since));
         }
-        if (std.mem.eql(u8, path, "/log")) {
-            return sendResponseHeaders(w, "303 See Other", "text/plain", "Location: /?log\r\n", "");
-        }
         if (std.mem.eql(u8, path, "/events")) {
             const since = parseSince(query);
             var waited: u32 = 0;
-            while (s.group.lastEvent() <= since and waited < poll_timeout_ms) {
+            while (s.group.lastEvent() == since and waited < poll_timeout_ms) {
                 try s.io.sleep(.fromMilliseconds(poll_interval_ms), .awake);
                 waited += poll_interval_ms;
             }

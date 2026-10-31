@@ -26,7 +26,7 @@ A pattern for a program that serves its own web interface: one page, embedded in
 * A workspace fills the rest: a tree of splits, each leaf a panel with a tab bar and a body.
 * Controls for a view sit at the right end of its tab bar while its tab is in front.
 * Panels that share a row keep equal header and footer heights, whatever the content size.
-* Pressed toggles show a tinted background. Focus uses the color of the adjacent action button. Symbols are drawn icons or glyphs sized to match, never mixed text and symbols in one control.
+* Controls are drawn icons, centered in their button; related ones join into one segmented button (− +, A A). Pressed toggles show a tinted background. Focus uses the color of the adjacent action button. Symbols are drawn icons or glyphs sized to match, never mixed text and symbols in one control.
 
 ## Tabs
 
@@ -44,6 +44,10 @@ A pattern for a program that serves its own web interface: one page, embedded in
 * A button (not shown on phones, or to remote clients) asks for confirmation, then fetches the views as an HTML fragment (`<style>` scoped under `#ws`, panes, header items, and a script in a function scope). The server logs the fetch as suspicious.
 * The page adds the panes, runs the script, and shows the tabs. A second press hides them and the header items; the unlock is remembered and restored after a reload, logging again.
 * The fragment names its panes with `data-*` attributes and does not touch the page's layout code. The page calls `window.onPaneShown(id)` so a view can redraw after it is shown or resized.
+
+## Appearance settings
+
+* A view's look (colors, attributes) is set in a popover from the program's own style language, so a setting works in the page and on the command line. A bad name shows an error and keeps the previous look; a live sample shows the result; the setting is remembered and a query parameter overrides it.
 
 ## Forms
 

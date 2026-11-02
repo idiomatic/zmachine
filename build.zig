@@ -91,8 +91,8 @@ pub fn build(b: *std.Build) void {
     // One at a time, so their reports don't interleave.
     walkthroughs[1].step.dependOn(&walkthroughs[0].step);
 
-    // Evaluation tools (MODEL_EVALUATION.draft.md): `zig build tools`
-    // builds them into zig-out/bin; their tests run with `zig build test`.
+    // Tools for evaluating models as players: `zig build tools` builds
+    // them into zig-out/bin; their tests run with `zig build test`.
     const tools_step = b.step("tools", "Build the evaluation tools: bot, relay, metrics, save");
     for ([_][]const u8{ "bot", "relay", "metrics", "save" }) |name| {
         const tool = b.addExecutable(.{

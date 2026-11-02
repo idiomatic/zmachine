@@ -4,7 +4,7 @@
 
 ### Changed
 
-* Clearing the discussion from the console names whoever sent the latest command, unless that was an AI partner or they have left; a play-page client is named as itself. A restart is not blamed on a player who has left.
+* Clearing the discussion from the console names whoever sent the latest command, unless that was an AI partner or they have left; a play-page client is named as itself. A restart or a clear is not blamed on a player who has left, even one nobody has noticed leaving.
 * The plan documents (decoupling, small-model interface, inspector, thumbs, model evaluation) move to ignored drafts; the web app pattern is renamed [WEBAPP.common.md](WEBAPP.common.md).
 
 ## 0.4.0 (2026-10-31)
@@ -22,14 +22,13 @@
 * A restart is posted and logged under the player who confirmed it.
 * Audit log: Player and From columns, a 24-hour toggle, and a dot on a player's first suspicious entry per game.
 * Reconnects at once after a server restart; a thin line shows the retry.
+* Full-score Zork I and Zork II walkthroughs, with notes on making clean ones; the inspector shows the seed; CI tests on x86_64 macOS.
 
 ### Changed
 
 * The play page, inspector, and audit log merge into one page at `/`; `/inspector` serves the inspector's panels as a fragment, and `/log` is gone.
 * Long-polling reads answer a client ahead of the latest offset at once.
 * All symbolic buttons are 24 px high, icon-only ones 29 px wide.
-
-* Full-score Zork I and Zork II walkthroughs, with notes on making clean ones; the inspector shows the seed; CI tests on x86_64 macOS.
 
 ### Evaluated
 
@@ -55,7 +54,7 @@
 
 ### Added
 
-* The inspector fills its Globals and History panes; its map gains Fit and Reset, draggable rooms, clickable direction labels, direction labels, one-way arrows, and lines that fade under rooms; its tabs move between panels and the layout is remembered.
+* The inspector fills its Globals and History panes; its map gains Fit and Reset, draggable rooms, clickable direction labels, one-way arrows, and lines that fade under rooms; its tabs move between panels and the layout is remembered.
 * AI partners read the inspector only when let (`--grant-inspector`, or a chip menu grant by a person on this machine); the MCP server gains `read_inspector`.
 * `zig build stories` downloads the open-source Zork I to III (MIT) at pinned commits, and `zig build walkthrough` plays walkthrough scripts against them.
 * Animated phone screenshots and screenshot tools; American English spelling throughout.

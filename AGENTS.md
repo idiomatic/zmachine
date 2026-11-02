@@ -51,7 +51,7 @@ Keep this file up to date with every specification.
 * The leader passes leadership to anyone (`POST /lead`, chip menu, MCP `pass_leadership`; `console` means the local side); a coleader passes the whole local side's. The local side can always reclaim it (Console chip menu, console `/lead`).
 * The leader changes the mode, sends commands in debate, kicks remote players and AI partners, and changes the password. The console can always type commands; it and local clients can't be kicked.
 * A kick ends a person's session (the password is needed to return; their page says why, `410`) and bans an AI partner's name. After a second kick within ten minutes the play page suggests a new password, and the MCP instructions tell an AI leader to make one.
-* Mode changes, passes, reclaims, joins, leaves, kicks, password changes and game restarts are posted and logged; a restart names whoever sent the confirming command (the console if typed there).
+* Mode changes, passes, reclaims, joins, leaves, kicks, password changes and game restarts are posted and logged; a restart names whoever sent the confirming command (the console if typed there, or if they have left).
 
 ### Modes
 

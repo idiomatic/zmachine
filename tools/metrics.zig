@@ -1,4 +1,4 @@
-//! Tallies the Phase 0 metrics of MODEL_EVALUATION.draft.md from run logs.
+//! Tallies how well models played from `bot` and `relay` run logs.
 //!
 //! usage: metrics <log.jsonl>...
 //!

@@ -80,6 +80,7 @@ test "the console's clear is named for the latest commander, unless an AI" {
     const posts = &g.discussion.posts;
 
     // A person's command: the console's clear is attributed to them.
+    try g.touch(bo);
     g.heard(bo, "look", false);
     try g.clearDiscussion(.console);
     try testing.expectEqual(Group.PostKind.cleared, posts.items[posts.items.len - 1].kind);
@@ -89,6 +90,7 @@ test "the console's clear is named for the latest commander, unless an AI" {
     try testing.expectEqualStrings("Bo", log.events[log.events.len - 1].client);
 
     // An AI partner's command: the console keeps the name.
+    try g.touch(claude);
     g.heard(claude, "north", false);
     try g.clearDiscussion(.console);
     try testing.expect(posts.items[posts.items.len - 1].author == null);
@@ -100,19 +102,21 @@ test "the console's clear is named for the latest commander, unless an AI" {
     try g.clearDiscussion(.{});
     try testing.expect(posts.items[posts.items.len - 1].author == null);
 
-    // A player who has left is not named either.
+    // A player who has left is not named either, even before anything
+    // else notices they went quiet.
     try g.touch(bo);
     g.heard(bo, "west", false);
     fake.advance(61_000);
-    try g.touch(claude); // Prunes Bo.
     try g.clearDiscussion(.console);
     try testing.expect(posts.items[posts.items.len - 1].author == null);
+    try testing.expect(g.players.find("Bo") == null);
 }
 
 test "a restart is posted and logged under who confirmed it" {
     var fake: World.Fake = .{};
     var g: Group = .init(testing.allocator, testing.io, .{ .fake = &fake });
     defer g.deinit();
+    try g.touch(claude);
     g.heard(claude, "restart", false);
     g.heard(claude, "y", false);
     g.restarted();
@@ -126,6 +130,13 @@ test "a restart is posted and logged under who confirmed it" {
     try testing.expectEqualStrings("Claude", log.events[log.events.len - 1].client);
     // From the console, the console takes it.
     g.heard(.console, "y", true);
+    g.restarted();
+    try testing.expect(g.discussion.posts.items[g.discussion.posts.items.len - 1].author == null);
+    // A player kicked after confirming is not blamed either.
+    try g.touch(ana);
+    try g.touch(bo);
+    g.heard(bo, "y", false);
+    try g.kick(.console, "Bo");
     g.restarted();
     try testing.expect(g.discussion.posts.items[g.discussion.posts.items.len - 1].author == null);
 }

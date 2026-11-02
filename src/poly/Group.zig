@@ -32,10 +32,9 @@ players: Players = .{},
 discussion: Discussion = .{},
 access: Access = .{},
 audit: AuditLog = .{},
-/// Who sent the latest command, for blaming a restart on them.
+/// Who sent the latest command, for blaming a restart or a clear on them.
 actor_name: [64]u8 = undefined,
 actor_len: ?usize = null,
-actor_ai: bool = false,
 
 pub const Player = Players.Player;
 pub const PostKind = Discussion.PostKind;
@@ -164,13 +163,14 @@ pub fn heard(g: *Group, author: Player, line: []const u8, keyboard: bool) void {
     g.postLocked(author, .command, line, &.{}) catch {};
     g.actor_len = if (author.name) |n| @min(n.len, g.actor_name.len) else null;
     if (author.name) |n| @memcpy(g.actor_name[0..g.actor_len.?], n[0..g.actor_len.?]);
-    g.actor_ai = author.ai;
 }
 
-/// Whoever sent the latest command, or null for the console.
+/// Whoever sent the latest command, as the game knows them, or null for
+/// the console or a player who has left.
 fn actorLocked(g: *Group) ?Player {
     const n = g.actor_len orelse return null;
-    return .{ .name = g.actor_name[0..n], .ai = g.actor_ai };
+    const i = g.players.find(g.actor_name[0..n]) orelse return null;
+    return g.players.members.items[i].player();
 }
 
 /// The game restarted: posts and logs it under whoever sent the latest
@@ -178,6 +178,7 @@ fn actorLocked(g: *Group) ?Player {
 pub fn restarted(g: *Group) void {
     g.lock();
     defer g.unlock();
+    g.pruneLocked();
     const by: Player = g.actorLocked() orelse .console;
     g.postLocked(by, .restarted, "", &.{}) catch {};
     g.logPlayerLocked(.game, by, "restarted the game", .{}, false);
@@ -325,10 +326,6 @@ fn removeMemberLocked(g: *Group, i: usize, left: bool) void {
     const m = players.members.orderedRemove(i);
     defer g.gpa.free(m.name);
     const p = m.player();
-    // A player who is gone is not blamed for the next restart or clear.
-    if (g.actor_len) |n| {
-        if (std.ascii.eqlIgnoreCase(m.name, g.actor_name[0..n])) g.actor_len = null;
-    }
     if (left) {
         g.postLocked(p, .left, "", &.{}) catch {};
         g.logPlayerLocked(.join, p, "left", .{}, false);
@@ -460,13 +457,12 @@ pub fn clearDiscussion(g: *Group, from: Player) AccessError!void {
     g.lock();
     defer g.unlock();
     if (!from.local or from.ai) return error.NotAllowed;
+    g.pruneLocked();
     g.discussion.clear(g.gpa);
     var by = from;
-    if (from.is_console) {
-        if (g.actorLocked()) |actor| {
-            if (!actor.ai) by = actor;
-        }
-    }
+    if (from.is_console) if (g.actorLocked()) |actor| if (!actor.ai) {
+        by = actor;
+    };
     g.postLocked(by, .cleared, "", &.{}) catch {};
     g.logPlayerLocked(.game, by, "cleared the discussion", .{}, false);
 }

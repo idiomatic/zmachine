@@ -69,7 +69,7 @@ Keep this file up to date with every specification.
 
 ### The web app
 
-* One page of tabs in a tiling workspace; works at phone width (see [WEBAPP.md](WEBAPP.md) for the pattern).
+* One page of tabs in a tiling workspace; works at phone width (see [WEBAPP.common.md](WEBAPP.common.md) for the pattern).
 * Each tab's controls are symbolic buttons (all 24 px high, icon-only ones 29 wide, in the header and popovers too) at the right end of its tab bar while it is in front (toggles show a tinted background when on).
 * Workspace: a tree of split panels. Game, Discussion, Audit log and, after the magnifier unlocks the inspector, Map, Globals, History and Objects are equal tabs: drag one to a tab bar to move it there, or onto a panel's body to split that panel along its longer side (a dashed preview shows the half the tab takes); close a tab with ✕ and reopen it from the ▦ menu (which also has Default layout); drag the boundaries to resize. The layout is remembered. At 860 px wide or less the panels are stacked and fixed, and the inspector is unavailable. The inspector's story, seed, turn and location join the header's room and score. An unlocked inspector returns after a reload (logged again) until its tabs are hidden with the magnifier; the ▦ menu and Default layout list its tabs only while they are shown. A game restart hides them again, and an unlock from an earlier game is not restored. A player who unlocked it (or whose AI partner read it) gets a magnifier on their chip until the next restart, even after hiding the tabs.
 * Header: room and score (with the inspector's story, seed, turn and location once unlocked), live indicator, inspector magnifier (SVG; this machine only, not on phones; asks first), ▦ (panels menu: show or hide any tab, Default layout), theme button (◐ system, ☀︎ light, ☾ dark).
@@ -106,7 +106,7 @@ Keep this file up to date with every specification.
 
 * Builds and runs on Linux, macOS and Windows, x86_64 and aarch64 (six targets).
 * `zig build stories` (`tools/fetch.zig`): downloads Zork I–III (MIT, Microsoft) from historicalsource at pinned commits, checked by pinned SHA-256 and cached, into `games/` as `zork1.r119-880429.z3` etc. Only `stories` and `walkthrough` download; `-Dstories=false` skips.
-* `zig build tools` builds `bot` (plays a tool-calling model through `/mcp/simple`), `relay` (plays a model without tool use), `metrics` and `save` (a run's commands as a local walkthrough) into `zig-out/bin/`; see [MODEL_EVALUATION.md](MODEL_EVALUATION.md).
+* `zig build tools` builds `bot` (plays a tool-calling model through `/mcp/simple`), `relay` (plays a model without tool use), `metrics` and `save` (a run's commands as a local walkthrough) into `zig-out/bin/`.
 * `zig build walkthrough` (`tools/walkthrough.zig`) plays `tests/walkthroughs-local/walkthroughs.zon` and `tests/walkthroughs/walkthroughs.zon` entries (script, story path or `zork1`–`zork3`, seeds, an expected line).
     * Scripts are named `<story>.r<release>-<serial>[.<topic>].txt`; another release fails.
     * Each seed (or one unseeded run) plays with and without `--web`; outputs must match each other and the saved `<script name>.seed<n>.expected`.

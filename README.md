@@ -542,7 +542,7 @@ story is skipped, and the step still passes.
 
 ## How it was made
 
-zmachine was written with [Claude Code](https://claude.com/claude-code).
+zmachine was written with [Claude](https://claude.com/).
 
 ## License
 

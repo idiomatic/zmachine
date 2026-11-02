@@ -1,6 +1,6 @@
 # Embedded web app specification
 
-A pattern for a program that serves its own web interface: one page, embedded in the binary, with a tiling workspace of equal views. The reference implementation is [src/web/play.html](src/web/play.html), with behavior listed in [AGENTS.md](AGENTS.md).
+A pattern for a program that serves its own web interface: one page, embedded in the binary, with a tiling workspace of equal views.
 
 ## Principles
 
@@ -18,7 +18,6 @@ A pattern for a program that serves its own web interface: one page, embedded in
 * Refuses and logs requests whose `Host` is not this server or whose `Origin` does not match (DNS rebinding, cross-site requests).
 * Routes belong to modules; the web module imports none of them, and the app hands each module's routes to the server. Each route reply may carry an audit entry.
 * Identity comes from the peer address, a header for programs, and a session cookie for remote people. Access rules sit in one place, not in handlers.
-* An audit log records commands, joins, leadership, kicks, unlocks, and refusals, with the actor and client, and marks suspicious events. It is open to every player. Each entry also records the address it came from: "this machine" for a local one, shown as is, and a remote address shown in full only to clients on this machine (others see "remote"), since the log is open to everyone.
 
 ## Page layout
 
@@ -31,28 +30,18 @@ A pattern for a program that serves its own web interface: one page, embedded in
 ## Tabs
 
 * A view is a tab with a title, a pane, and optional controls. Tabs are not `<button>` elements, because Safari and Firefox do not drag those.
-* Drag a tab onto a tab bar to move it there, before the tab it lands on. Drag it onto a panel's body to split that panel along its longer side, the tab taking the half nearer the pointer, previewed by a dashed outline. A panel left empty disappears.
+* Drag a tab onto a tab bar to move it there, before the tab it lands on; dropped in the empty space, after the last tab, with the marker drawn at that tab's edge, not at the buttons. Drag it onto a panel's body to split that panel along its longer side, the tab taking the half nearer the pointer, previewed by a dashed outline. A panel left empty disappears.
 * ✕ closes a tab. The ▦ menu lists every view with a check for open ones, reopens a closed one in its last panel, and ends with a rule and Default layout.
 * The last open tab cannot be closed.
 * Boundaries drag to resize, limited to 15 to 85 percent.
-* A tab out of sight (behind another, or closed) that gets news shows an accent dot at its top-right, left of ✕, until it is shown. News is a new post (Discussion), new text after the first load (Game), or a player's first suspicious entry in a game (Audit log); not every audit entry, or every repeat, which would never clear.
-* The layout (tree, closed tabs, sizes) is saved in the browser, accepted only if it names every tab once, and overridden by query parameters (`?log`, `?game=hide`).
+* A tab out of sight (behind another, or closed) that gets news shows an accent dot at its top-right, left of ✕, until it is shown, whether brought forward or uncovered.
+* The layout (tree, closed tabs, sizes) is saved in the browser, accepted only if it names every tab once, and overridden by query parameters.
 * At 860 px wide or less the panels stack, fixed, without dragging or resizing.
-
-## Privileged views
-
-* A button (not shown on phones, or to remote clients) asks for confirmation, then fetches the views as an HTML fragment (`<style>` scoped under `#ws`, panes, header items, and a script in a function scope). The server logs the fetch as suspicious.
-* The page adds the panes, runs the script, and shows the tabs. A second press hides them and the header items; the unlock is remembered and restored after a reload, logging again, until the next game. The panels menu lists the views only while shown. Hiding them does not clear the record: whoever unlocked carries a mark in the player list until the game restarts, which also locks the views again.
-* The fragment names its panes with `data-*` attributes and does not touch the page's layout code. The page calls `window.onPaneShown(id)` so a view can redraw after it is shown or resized.
-
-## Appearance settings
-
-* A view's look (colors, attributes) is set in a popover from the program's own style language, so a setting works in the page and on the command line. A bad name shows an error and keeps the previous look; a live sample shows the result; the setting is remembered and a query parameter overrides it.
 
 ## Forms
 
 * One line, fixed height; text size follows the user's choice up to a limit.
-* `autocapitalize`, `autocorrect`, and `spellcheck` off for commands. At least 16 px on phones, so iOS does not zoom.
+* `autocapitalize`, `autocorrect`, and `spellcheck` off for command-like input. At least 16 px on phones, so iOS does not zoom.
 
 ## Checks
 

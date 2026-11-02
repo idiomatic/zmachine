@@ -13,3 +13,5 @@ maps-local/
 tools/screenshots/run/
 tests/walkthroughs-local/
 runs-local/
+
+*.draft.md

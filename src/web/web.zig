@@ -234,7 +234,7 @@ pub const Server = struct {
         // Work out who is asking.
         var name_buf: [64]u8 = undefined;
         var token: ?Group.Token = null;
-        var player: Group.Player = .console;
+        var player: Group.Player = .{};
         if (headers.ai()) |name| {
             if (!Group.validName(name)) {
                 return sendResponse(w, "400 Bad Request", "text/plain", "X-Player names an AI partner in 1 to 32 printable characters\n");
@@ -326,7 +326,7 @@ pub const Server = struct {
             if (std.mem.eql(u8, path, "/command")) return s.command(w, arena, text, player, who, std.mem.eql(u8, queryValue(query, "format") orelse "", "text"));
             if (std.mem.eql(u8, path, "/say")) return s.say(w, body, player);
             if (std.mem.eql(u8, path, "/clear-discussion")) {
-                s.group.clearDiscussion(player, false) catch |err| switch (err) {
+                s.group.clearDiscussion(player) catch |err| switch (err) {
                     error.NotAllowed => return s.refuse(w, who, method, path, "only this machine clears the discussion\n"),
                     else => return err,
                 };

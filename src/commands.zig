@@ -66,7 +66,7 @@ fn mode(g: *Group, args: []const u8) []const u8 {
 
 /// `/clear`: clears the discussion, which has nothing to do with a restart.
 fn clear(g: *Group) []const u8 {
-    g.clearDiscussion(.console, true) catch return "Could not clear the discussion.";
+    g.clearDiscussion(.console) catch return "Could not clear the discussion.";
     return "Discussion cleared.";
 }
 

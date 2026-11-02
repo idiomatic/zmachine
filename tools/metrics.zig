@@ -1,4 +1,4 @@
-//! Tallies the Phase 0 metrics of MODEL_EVALUATION.md from run logs.
+//! Tallies the Phase 0 metrics of MODEL_EVALUATION.draft.md from run logs.
 //!
 //! usage: metrics <log.jsonl>...
 //!

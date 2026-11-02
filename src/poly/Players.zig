@@ -29,8 +29,10 @@ pub const Player = struct {
     /// On this machine. The console and local play-page clients are local;
     /// AI partners never count as local.
     local: bool = true,
+    /// The console itself, as against a local client that gives no name.
+    is_console: bool = false,
 
-    pub const console: Player = .{};
+    pub const console: Player = .{ .is_console = true };
 };
 
 pub const Member = struct {

@@ -180,7 +180,7 @@ pub fn restarted(g: *Group) void {
     defer g.unlock();
     const by: Player = g.actorLocked() orelse .console;
     g.postLocked(by, .restarted, "", &.{}) catch {};
-    g.audit.add(g.gpa, g.world.now(), .game, displayName(by), "", "restarted the game", false);
+    g.logPlayerLocked(.game, by, "restarted the game", .{}, false);
 }
 
 pub const PostError = error{ InvalidPost, OutOfMemory };
@@ -325,6 +325,10 @@ fn removeMemberLocked(g: *Group, i: usize, left: bool) void {
     const m = players.members.orderedRemove(i);
     defer g.gpa.free(m.name);
     const p = m.player();
+    // A player who is gone is not blamed for the next restart or clear.
+    if (g.actor_len) |n| {
+        if (std.ascii.eqlIgnoreCase(m.name, g.actor_name[0..n])) g.actor_len = null;
+    }
     if (left) {
         g.postLocked(p, .left, "", &.{}) catch {};
         g.logPlayerLocked(.join, p, "left", .{}, false);
@@ -450,15 +454,15 @@ pub fn setInspectorAccess(g: *Group, from: Player, name: []const u8, grant: bool
 
 /// Clears the discussion, leaving a post that says who did. Only the
 /// console and people on this machine may; it has nothing to do with a
-/// restart. The console (`at_console`) is named for whoever sent the
-/// latest command, unless that was an AI partner.
-pub fn clearDiscussion(g: *Group, from: Player, at_console: bool) AccessError!void {
+/// restart. The console is named for whoever sent the latest command,
+/// unless that was an AI partner or they have left.
+pub fn clearDiscussion(g: *Group, from: Player) AccessError!void {
     g.lock();
     defer g.unlock();
     if (!from.local or from.ai) return error.NotAllowed;
     g.discussion.clear(g.gpa);
     var by = from;
-    if (at_console) {
+    if (from.is_console) {
         if (g.actorLocked()) |actor| {
             if (!actor.ai) by = actor;
         }

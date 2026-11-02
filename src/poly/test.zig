@@ -60,9 +60,9 @@ test "only this machine clears the discussion" {
     defer g.deinit();
 
     try g.post(claude, .thought, "Hello.", &.{});
-    try testing.expectError(error.NotAllowed, g.clearDiscussion(claude, false));
-    try testing.expectError(error.NotAllowed, g.clearDiscussion(bo, false));
-    try g.clearDiscussion(.console, true);
+    try testing.expectError(error.NotAllowed, g.clearDiscussion(claude));
+    try testing.expectError(error.NotAllowed, g.clearDiscussion(bo));
+    try g.clearDiscussion(.console);
     try g.post(claude, .message, "Again.", &.{});
     const json = try discussion(&g, 0);
     defer testing.allocator.free(json);
@@ -81,7 +81,7 @@ test "the console's clear is named for the latest commander, unless an AI" {
 
     // A person's command: the console's clear is attributed to them.
     g.heard(bo, "look", false);
-    try g.clearDiscussion(.console, true);
+    try g.clearDiscussion(.console);
     try testing.expectEqual(Group.PostKind.cleared, posts.items[posts.items.len - 1].kind);
     try testing.expectEqualStrings("Bo", posts.items[posts.items.len - 1].author.?);
     try testing.expect(!posts.items[posts.items.len - 1].ai);
@@ -90,14 +90,22 @@ test "the console's clear is named for the latest commander, unless an AI" {
 
     // An AI partner's command: the console keeps the name.
     g.heard(claude, "north", false);
-    try g.clearDiscussion(.console, true);
+    try g.clearDiscussion(.console);
     try testing.expect(posts.items[posts.items.len - 1].author == null);
     log = try g.events(arena.allocator(), 0, true);
     try testing.expectEqualStrings("console", log.events[log.events.len - 1].client);
 
     // An unnamed client on this machine is itself, not the latest commander.
     g.heard(bo, "south", false);
-    try g.clearDiscussion(.{}, false);
+    try g.clearDiscussion(.{});
+    try testing.expect(posts.items[posts.items.len - 1].author == null);
+
+    // A player who has left is not named either.
+    try g.touch(bo);
+    g.heard(bo, "west", false);
+    fake.advance(61_000);
+    try g.touch(claude); // Prunes Bo.
+    try g.clearDiscussion(.console);
     try testing.expect(posts.items[posts.items.len - 1].author == null);
 }
 

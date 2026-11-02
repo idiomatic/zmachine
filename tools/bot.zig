@@ -1,5 +1,5 @@
 //! Plays Zork (or any story) as a tool-calling model through zmachine's
-//! MCP server, for MODEL_EVALUATION.md: it opens a session on the simple
+//! MCP server, for MODEL_EVALUATION.draft.md: it opens a session on the simple
 //! profile, offers the server's tools to an Ollama model, runs the calls
 //! the model makes, and logs them.
 //!

@@ -4,8 +4,8 @@
 
 ### Changed
 
-* Clearing the discussion from the console names whoever sent the latest command, unless that was an AI partner; a play-page client is named as itself.
-* The plan documents (decoupling, small-model interface, inspector, thumbs, web app pattern) move to ignored drafts.
+* Clearing the discussion from the console names whoever sent the latest command, unless that was an AI partner or they have left; a play-page client is named as itself. A restart is not blamed on a player who has left.
+* The plan documents (decoupling, small-model interface, inspector, thumbs, model evaluation) move to ignored drafts; the web app pattern is renamed [WEBAPP.common.md](WEBAPP.common.md).
 
 ## 0.4.0 (2026-10-31)
 

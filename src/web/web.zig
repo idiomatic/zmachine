@@ -326,7 +326,7 @@ pub const Server = struct {
             if (std.mem.eql(u8, path, "/command")) return s.command(w, arena, text, player, who, std.mem.eql(u8, queryValue(query, "format") orelse "", "text"));
             if (std.mem.eql(u8, path, "/say")) return s.say(w, body, player);
             if (std.mem.eql(u8, path, "/clear-discussion")) {
-                s.group.clearDiscussion(player) catch |err| switch (err) {
+                s.group.clearDiscussion(player, false) catch |err| switch (err) {
                     error.NotAllowed => return s.refuse(w, who, method, path, "only this machine clears the discussion\n"),
                     else => return err,
                 };

@@ -60,15 +60,45 @@ test "only this machine clears the discussion" {
     defer g.deinit();
 
     try g.post(claude, .thought, "Hello.", &.{});
-    try testing.expectError(error.NotAllowed, g.clearDiscussion(claude));
-    try testing.expectError(error.NotAllowed, g.clearDiscussion(bo));
-    try g.clearDiscussion(.console);
+    try testing.expectError(error.NotAllowed, g.clearDiscussion(claude, false));
+    try testing.expectError(error.NotAllowed, g.clearDiscussion(bo, false));
+    try g.clearDiscussion(.console, true);
     try g.post(claude, .message, "Again.", &.{});
     const json = try discussion(&g, 0);
     defer testing.allocator.free(json);
     try testing.expect(std.mem.indexOf(u8, json, "Hello.") == null);
     try testing.expect(std.mem.indexOf(u8, json, "\"kind\":\"cleared\"") != null);
     try testing.expect(std.mem.indexOf(u8, json, "Again.") != null);
+}
+
+test "the console's clear is named for the latest commander, unless an AI" {
+    var fake: World.Fake = .{};
+    var g: Group = .init(testing.allocator, testing.io, .{ .fake = &fake });
+    defer g.deinit();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const posts = &g.discussion.posts;
+
+    // A person's command: the console's clear is attributed to them.
+    g.heard(bo, "look", false);
+    try g.clearDiscussion(.console, true);
+    try testing.expectEqual(Group.PostKind.cleared, posts.items[posts.items.len - 1].kind);
+    try testing.expectEqualStrings("Bo", posts.items[posts.items.len - 1].author.?);
+    try testing.expect(!posts.items[posts.items.len - 1].ai);
+    var log = try g.events(arena.allocator(), 0, true);
+    try testing.expectEqualStrings("Bo", log.events[log.events.len - 1].client);
+
+    // An AI partner's command: the console keeps the name.
+    g.heard(claude, "north", false);
+    try g.clearDiscussion(.console, true);
+    try testing.expect(posts.items[posts.items.len - 1].author == null);
+    log = try g.events(arena.allocator(), 0, true);
+    try testing.expectEqualStrings("console", log.events[log.events.len - 1].client);
+
+    // An unnamed client on this machine is itself, not the latest commander.
+    g.heard(bo, "south", false);
+    try g.clearDiscussion(.{}, false);
+    try testing.expect(posts.items[posts.items.len - 1].author == null);
 }
 
 test "a restart is posted and logged under who confirmed it" {

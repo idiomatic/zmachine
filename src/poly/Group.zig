@@ -167,12 +167,18 @@ pub fn heard(g: *Group, author: Player, line: []const u8, keyboard: bool) void {
     g.actor_ai = author.ai;
 }
 
+/// Whoever sent the latest command, or null for the console.
+fn actorLocked(g: *Group) ?Player {
+    const n = g.actor_len orelse return null;
+    return .{ .name = g.actor_name[0..n], .ai = g.actor_ai };
+}
+
 /// The game restarted: posts and logs it under whoever sent the latest
 /// command, which confirmed it, or the console.
 pub fn restarted(g: *Group) void {
     g.lock();
     defer g.unlock();
-    const by: Player = if (g.actor_len) |n| .{ .name = g.actor_name[0..n], .ai = g.actor_ai } else .console;
+    const by: Player = g.actorLocked() orelse .console;
     g.postLocked(by, .restarted, "", &.{}) catch {};
     g.audit.add(g.gpa, g.world.now(), .game, displayName(by), "", "restarted the game", false);
 }
@@ -444,13 +450,19 @@ pub fn setInspectorAccess(g: *Group, from: Player, name: []const u8, grant: bool
 
 /// Clears the discussion, leaving a post that says who did. Only the
 /// console and people on this machine may; it has nothing to do with a
-/// restart. The console is named for whoever sent the latest command.
-pub fn clearDiscussion(g: *Group, from: Player) AccessError!void {
+/// restart. The console (`at_console`) is named for whoever sent the
+/// latest command, unless that was an AI partner.
+pub fn clearDiscussion(g: *Group, from: Player, at_console: bool) AccessError!void {
     g.lock();
     defer g.unlock();
     if (!from.local or from.ai) return error.NotAllowed;
     g.discussion.clear(g.gpa);
-    const by: Player = if (from.name == null and g.actor_len != null) .{ .name = g.actor_name[0..g.actor_len.?], .ai = g.actor_ai } else from;
+    var by = from;
+    if (at_console) {
+        if (g.actorLocked()) |actor| {
+            if (!actor.ai) by = actor;
+        }
+    }
     g.postLocked(by, .cleared, "", &.{}) catch {};
     g.logPlayerLocked(.game, by, "cleared the discussion", .{}, false);
 }

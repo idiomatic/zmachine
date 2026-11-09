@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.2 (2026-11-09)
+
+### Added
+
+* Reference specifications (Z-machine, Quetzal, MCP, cookies) collected in [docs/specifications](docs/specifications/README.md).
+* Thinking together: `deliberate` toggle (`POST /deliberate`, MCP `set_deliberate`, console `/deliberate`), and thumbs on thoughts and messages.
+* Games that restart and keep running: `--quit <ask|exit|console|ignore>` for a `quit` from the web (the console's always exits), a history entry for a restart, `undo` at the prompt.
+* Map: a conditional exit (one direction, several destinations) is drawn dashed; the map model and layout move into `Map.zig` ahead of a markdown export of the game with progressive maps.
+* Console: resizing the terminal refits the display at once (SIGWINCH), instead of keeping the size at startup.
+* Session journal (`GET /journal`): game text, commands, thoughts, messages, changes among players, and rooms entered, in order and never cleared, ahead of a markdown export.
+* Session markdown: commands as `### n · author · `command` · +m:ss` headings over the game's text as a quote, thoughts and messages as a chat log, events as quoted italics, times since the game began.
+* Download the session as markdown from the inspector's History tab (`GET /export.md`): the journal as a document, with progressive maps in code blocks, room names wrapped onto two lines, the seed and story name in the document, and the story name in the file name.
+* Map: a Rearrange button lays the rooms out afresh (a repeatable search for few direction violations, crossings, and lines under rooms), with one Undo.
+* Succincter MCP tool descriptions, each starting with the layer it speaks to.
+* Tiled windowing: minimum panel sizes.
+
 ## 0.4.1 (2026-11-02)
 
 ### Changed

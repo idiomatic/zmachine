@@ -10,6 +10,14 @@ const terminal = @import("terminal.zig");
 const TerminalInput = @This();
 
 in: *Io.Reader,
+/// Standard input is a terminal: reads wait a little at a time, so the
+/// screen can notice a resize in between.
+watch_tty: bool = false,
+
+/// Whether a read would have to wait for the keyboard.
+fn idle(t: *const TerminalInput) bool {
+    return t.watch_tty and t.in.bufferedLen() == 0 and !terminal.waitInput(50);
+}
 
 pub fn input(t: *TerminalInput) InputSource {
     return .{ .context = t, .vtable = &.{
@@ -41,12 +49,14 @@ fn readLine(t: *TerminalInput, buf: []u8) InputSource.Error!?[]u8 {
 }
 
 fn takeLine(context: *anyopaque, buf: []u8) InputSource.Error!InputSource.Line {
+    if (cast(context).idle()) return .none;
     const line = try readLine(cast(context), buf) orelse return .closed;
     return .{ .keyboard = line };
 }
 
 fn takeKey(context: *anyopaque, buf: []u8, by_line: bool, _: bool) InputSource.Error!InputSource.Key {
     const t = cast(context);
+    if (t.idle()) return .none;
     if (by_line) return .{ .line = try readLine(t, buf) orelse return .closed };
     const c = t.in.takeByte() catch |err| return switch (err) {
         error.EndOfStream => .closed,

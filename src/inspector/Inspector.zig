@@ -8,6 +8,8 @@ const Allocator = std.mem.Allocator;
 
 const Machine = @import("vm").Machine;
 const protocol = @import("protocol");
+const Map = @import("Map.zig");
+const Export = @import("Export.zig");
 
 const Inspector = @This();
 
@@ -22,6 +24,11 @@ snapshot_arena: ?std.heap.ArenaAllocator = null,
 generation: u64 = 0,
 /// The map is erased before the next snapshot.
 erase_map: bool = false,
+/// Where the session journal is read from, for the export.
+journal: ?JournalSource = null,
+/// The story file's name without its extension, for the snapshot and the
+/// export.
+story: []const u8 = "",
 
 // The rest is only touched on the interpreter thread.
 rooms: std.AutoArrayHashMapUnmanaged(u16, void) = .empty,
@@ -35,72 +42,14 @@ turn: u32 = 0,
 
 const max_commands = 200;
 
-pub const Direction = enum {
-    n,
-    ne,
-    e,
-    se,
-    s,
-    sw,
-    w,
-    nw,
-    up,
-    down,
-    in,
-    out,
-    unknown,
-
-    const words = std.StaticStringMap(Direction).initComptime(.{
-        .{ "n", .n },         .{ "north", .n },
-        .{ "ne", .ne },       .{ "northeast", .ne },
-        .{ "e", .e },         .{ "east", .e },
-        .{ "se", .se },       .{ "southeast", .se },
-        .{ "s", .s },         .{ "south", .s },
-        .{ "sw", .sw },       .{ "southwest", .sw },
-        .{ "w", .w },         .{ "west", .w },
-        .{ "nw", .nw },       .{ "northwest", .nw },
-        .{ "u", .up },        .{ "up", .up },
-        .{ "d", .down },      .{ "down", .down },
-        .{ "in", .in },       .{ "inside", .in },
-        .{ "enter", .in },    .{ "out", .out },
-        .{ "outside", .out }, .{ "exit", .out },
-        .{ "leave", .out },
-    });
-
-    /// Works out which way a command moved the player, if it names
-    /// exactly one direction.
-    pub fn fromCommand(command: []const u8) Direction {
-        var buf: [128]u8 = undefined;
-        const lower = std.ascii.lowerString(buf[0..@min(command.len, buf.len)], command[0..@min(command.len, buf.len)]);
-        var found: Direction = .unknown;
-        var sentences = std.mem.tokenizeAny(u8, lower, ".,");
-        var sentence_count: usize = 0;
-        while (sentences.next()) |sentence| {
-            sentence_count += 1;
-            var it = std.mem.tokenizeScalar(u8, sentence, ' ');
-            var word = it.next() orelse continue;
-            const climb = std.mem.eql(u8, word, "climb");
-            if (climb or std.mem.eql(u8, word, "go") or std.mem.eql(u8, word, "walk") or
-                std.mem.eql(u8, word, "run"))
-            {
-                word = it.next() orelse "";
-            }
-            if (words.get(word)) |dir| {
-                found = dir;
-            } else if (climb) {
-                // "climb tree", "climb stairs": usually upwards.
-                found = .up;
-            }
-        }
-        return if (sentence_count == 1) found else .unknown;
-    }
+/// A way to read the session journal, supplied by the program.
+pub const JournalSource = struct {
+    context: *anyopaque,
+    read: *const fn (context: *anyopaque, arena: Allocator) anyerror!protocol.Journal,
 };
 
-pub const Edge = struct {
-    from: u16,
-    to: u16,
-    dir: Direction,
-};
+pub const Direction = Map.Direction;
+pub const Edge = Map.Edge;
 
 pub fn init(gpa: Allocator, io: Io) Inspector {
     return .{ .gpa = gpa, .io = io };
@@ -154,6 +103,49 @@ pub fn eraseMap(in: *Inspector) void {
     in.generation += 1;
 }
 
+/// The session as a markdown document, allocated, or null before the game
+/// has first waited for input or without a journal.
+pub fn exportMarkdown(in: *Inspector, gpa: Allocator) !?[]u8 {
+    const source = in.journal orelse return null;
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var meta: Export.Meta = undefined;
+    {
+        in.mutex.lockUncancelable(in.io);
+        defer in.mutex.unlock(in.io);
+        const snap = in.snapshot orelse return null;
+        meta = .{ .story = in.story, .release = snap.release, .serial = try a.dupe(u8, snap.serial), .version = snap.version };
+    }
+    const journal = try source.read(source.context, a);
+    return try Export.render(gpa, meta, journal.entries);
+}
+
+/// Lays out the map as it was at the latest snapshot, as JSON: an array of
+/// `{id, x, y}` grid cells.
+pub fn rearranged(in: *Inspector, gpa: Allocator) !?[]u8 {
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var ids: []u16 = &.{};
+    var edges: []Edge = &.{};
+    {
+        in.mutex.lockUncancelable(in.io);
+        defer in.mutex.unlock(in.io);
+        const snap = in.snapshot orelse return null;
+        ids = try a.alloc(u16, snap.rooms.len);
+        for (ids, snap.rooms) |*id, r| id.* = r.id;
+        edges = try a.alloc(Edge, snap.edges.len);
+        for (edges, snap.edges) |*e, s| e.* = .{
+            .from = s.from,
+            .to = s.to,
+            .dir = std.meta.stringToEnum(Direction, s.dir) orelse .unknown,
+        };
+    }
+    const cells = try Map.rearrange(a, ids, edges);
+    return try std.json.Stringify.valueAlloc(gpa, cells, .{});
+}
+
 /// Returns the latest snapshot as JSON, allocated, if it is newer than
 /// `since`.
 pub fn latest(in: *Inspector, gpa: Allocator, since: u64) !?[]u8 {
@@ -186,7 +178,7 @@ fn update(in: *Inspector, m: *Machine) !void {
     const here = m.readGlobal(0) catch 0;
     if (here != 0 and here <= object_count) {
         if (in.location != 0 and here != in.location) {
-            try in.addEdge(in.location, here, Direction.fromCommand(in.last_command));
+            try Map.addEdge(in.gpa, &in.edges, in.location, here, Direction.fromCommand(in.last_command));
         }
         in.location = here;
         try in.rooms.put(in.gpa, here, {});
@@ -203,16 +195,6 @@ fn update(in: *Inspector, m: *Machine) !void {
     in.snapshot_arena = arena;
     in.snapshot = snap;
     in.generation += 1;
-}
-
-fn addEdge(in: *Inspector, from: u16, to: u16, dir: Direction) !void {
-    for (in.edges.items) |*e| {
-        if (e.from == from and e.to == to) {
-            if (e.dir == .unknown) e.dir = dir;
-            return;
-        }
-    }
-    try in.edges.append(in.gpa, .{ .from = from, .to = to, .dir = dir });
 }
 
 fn hashObject(m: *Machine, obj: u16) u64 {
@@ -284,7 +266,7 @@ fn takeSnapshot(in: *Inspector, m: *Machine, arena: Allocator, object_count: u16
         r.* = .{ .id = room, .name = try arena.dupe(u8, name.slice()) };
     }
     const edges = try arena.alloc(protocol.Snapshot.Edge, in.edges.items.len);
-    for (edges, in.edges.items) |*out, e| out.* = .{ .from = e.from, .to = e.to, .dir = @tagName(e.dir) };
+    for (edges, in.edges.items) |*out, e| out.* = .{ .from = e.from, .to = e.to, .dir = @tagName(e.dir), .conditional = if (e.conditional) true else null };
     const commands = try arena.alloc([]const u8, in.commands.items.len);
     for (commands, in.commands.items) |*out, c| out.* = try arena.dupe(u8, c);
 
@@ -297,6 +279,7 @@ fn takeSnapshot(in: *Inspector, m: *Machine, arena: Allocator, object_count: u16
         .seed = m.seed,
         .seed_random = m.seed_random,
         .location = in.location,
+        .story = if (in.story.len > 0) in.story else null,
         .objects = objects,
         .changed = try arena.dupe(u16, in.changed.items),
         .globals = globals,
@@ -304,12 +287,4 @@ fn takeSnapshot(in: *Inspector, m: *Machine, arena: Allocator, object_count: u16
         .edges = edges,
         .commands = commands,
     };
-}
-
-test "direction from command" {
-    try std.testing.expectEqual(Direction.n, Direction.fromCommand("north"));
-    try std.testing.expectEqual(Direction.up, Direction.fromCommand("climb up"));
-    try std.testing.expectEqual(Direction.sw, Direction.fromCommand("Go SW"));
-    try std.testing.expectEqual(Direction.unknown, Direction.fromCommand("n. e"));
-    try std.testing.expectEqual(Direction.unknown, Direction.fromCommand("open mailbox"));
 }

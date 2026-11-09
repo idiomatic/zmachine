@@ -28,7 +28,7 @@ Prebuilt binaries for Linux, macOS and Windows are on the
 
 | Option | Meaning |
 | --- | --- |
-| `-w`, `--web [port]` | Play together on `http://127.0.0.1:<port>/`, with the audit log and inspector as panels below the game; the port defaults to 9675 |
+| `-w`, `--web [port]` | Play together on `http://127.0.0.1:<port>/`, with the discussion, audit log and inspector as tabs beside the game; the port defaults to 9675 |
 | `--listen <address>` | Also let players on other machines join with a password (see [Players on other machines](#players-on-other-machines)); implies `--web` |
 | `--mode <debate\|turns>` | Start in that playing mode (default `debate`); implies `--web` |
 | `--grant-inspector` | Let every AI partner read the inspector (see [Web inspector](#web-inspector)); implies `--web` |
@@ -149,12 +149,17 @@ updates each time the game waits for input:
   highlighted. Selecting an object shows its links, attributes and
   properties.
 - **Globals** and **History**: global variables, with changes highlighted,
-  and the commands entered so far.
+  and the commands entered so far. The download button in the History
+  tab bar saves the whole session as a markdown document: the game's
+  text, every command, and the players' thoughts and messages, with a map
+  in a code block each time a room or move is added, and the map so far
+  at the end of each game.
 
-Drag a tab onto the other panel's tab bar to move it there, and drag the
-boundary between the panels to resize them. The browser remembers the
-layout; **Default layout** puts it back. On a phone-sized screen the
-panels simply stack.
+The inspector's tabs sit in the same workspace as the game and the
+discussion (see [Playing together](#playing-together)): drag a tab to
+move it or split a panel, and drag the boundaries to resize. The browser
+remembers the layout; **Default layout** puts it back. The inspector is
+unavailable on a phone-sized screen.
 
 The current location is read from global variable 0, which Infocom and
 Inform stories use for the status line.
@@ -195,8 +200,8 @@ name, which the others see beside your messages and commands. A name is 1
 to 32 printable characters, unique among those playing. `you` and
 `console` are taken.
 
-The page is a split screen: the game on one side and the discussion on the
-other. The discussion has everyone's thoughts, messages and commands, each
+The page is a tiling workspace of tabs: the game, the discussion and the
+audit log, which you can drag to rearrange, split or close. The discussion has everyone's thoughts, messages and commands, each
 player in their own color, with suggested commands as buttons that send
 them. You can also keep playing in the terminal; everyone sees the same
 game, and late joiners get all of it. Under the Discussion header, a strip
@@ -217,15 +222,14 @@ Along the top, after the room and score and the live indicator:
 
 The page remembers its layout in your browser:
 
-- **⊟ in the Game header** hides the game, to play only in the terminal and
-  use the page for the conversation; **⊞** in the Discussion header brings
-  it back. `?game=hide` or `?game=show` overrides the remembered choice.
-- **⊟ in the Discussion header** collapses the discussion and gives the
-  game the whole page; **⊞** in the Game header brings it back, and shows a
-  dot when someone posts meanwhile. `?discussion=hide` or
-  `?discussion=show` overrides it.
-- **The size menu** in the Game header sets the game text from 12 to 20
-  pixels.
+- **✕ on a tab** closes it and **▦** reopens it. Close the game to play
+  only in the terminal and use the page for the conversation; close the
+  discussion to give the game the whole page. A tab out of sight shows a
+  dot when something new arrives. `?game=hide` or `?game=show` and
+  `?discussion=hide` or `?discussion=show` override the remembered
+  choice.
+- **A shrinks and A enlarges** the game text, from 8 to 64 pixels
+  (14 at first).
 - **The theme button** (◐ system, ☀︎ light, ☾ dark) cycles between them;
   `?theme=auto`, `?theme=light` or `?theme=dark` overrides it.
 
@@ -397,6 +401,9 @@ curl -d 'open mailbox' http://127.0.0.1:9675/command
 | `GET /state?since=<n>` | The inspector's snapshots (this machine only; logged as suspicious). |
 | `GET /story` | The story's file, Z-machine version, release and serial, and the seed (`seed_random` says whether it was drawn at random), and the mode. |
 | `POST /clear-discussion` | Remove every post from the discussion, leaving a note of who did (this machine only; logged). |
+| `GET /export.md` | The session as a markdown document: game text, commands, thoughts, and messages, with a map drawn in a code block each time it grows (this machine only; logged). |
+| `GET /journal?since=<seq>` | The session's record: game text, commands, thoughts, messages, and rooms entered, in order, never cleared (this machine only). |
+| `POST /rearrange` | The map laid out afresh, as a JSON array of `{id, x, y}` grid cells (this machine only). |
 | `POST /erase-map` | Erase the inspector's map, starting it again from the current room (this machine only; logged). |
 | `POST /grant-inspector`, `POST /revoke-inspector` | Let the AI partner the body names read the inspector, or stop it (people on this machine; posted and logged). |
 | `GET /me` | Who the server takes you for, and whether you lead. |
@@ -439,7 +446,7 @@ suspicious anything a player could not see: opening the object inspector,
 reading its snapshots (the object tree, attributes and globals), wrong
 passwords and refused requests. Each entry names the client by its
 `User-Agent`, after the player's name, such as
-`Claude via zmachine-mcp/0.4.1`.
+`Claude via zmachine-mcp/0.4.2`.
 
 Without `--listen` the server listens only on `127.0.0.1`. It refuses
 requests whose `Origin` or `Host` header names another site, so a web page
@@ -484,6 +491,7 @@ module imports only those listed in `build.zig`.
 | `tools/fetch.zig` | Downloads a pinned file for the build, such as the open-source Zork stories |
 | `tools/screenshots/` | Scripts and notes for retaking this README's screenshots and phone animations |
 | `tests/walkthroughs/` | Walkthroughs and expected transcripts for Zork I-III |
+| [`docs/specifications/`](docs/specifications/README.md) | The Z-machine, Quetzal, MCP, and cookie specifications it follows |
 
 ## Testing
 

@@ -2,6 +2,7 @@
 //! discussion, remote access and the audit log.
 
 pub const Group = @import("Group.zig");
+pub const Journal = @import("Journal.zig");
 pub const Password = @import("Password.zig");
 pub const World = @import("world.zig").World;
 

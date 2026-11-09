@@ -59,6 +59,11 @@ looks: Looks = .{},
 /// prompt can be shown again after a console command.
 line_text: [256]u8 = undefined,
 line_len: usize = 0,
+/// The version 3 status line as last drawn, to draw it again.
+status_left: [128]u8 = undefined,
+status_right: [128]u8 = undefined,
+status_left_len: usize = 0,
+status_right_len: usize = 0,
 
 pub const Error = Io.Writer.Error || InputSource.Error || terminal.Error;
 
@@ -467,6 +472,14 @@ fn printUpper(s: *Screen, cp: u21, bytes: []const u8) Error!void {
 
 /// Draws the version 3 status line.
 pub fn drawStatus(s: *Screen, left: []const u8, right: []const u8) Error!void {
+    s.status_left_len = @min(left.len, s.status_left.len);
+    @memcpy(s.status_left[0..s.status_left_len], left[0..s.status_left_len]);
+    s.status_right_len = @min(right.len, s.status_right.len);
+    @memcpy(s.status_right[0..s.status_right_len], right[0..s.status_right_len]);
+    try s.paintStatus(s.status_left[0..s.status_left_len], s.status_right[0..s.status_right_len]);
+}
+
+fn paintStatus(s: *Screen, left: []const u8, right: []const u8) Error!void {
     if (!s.ansi or s.status_rows == 0) return;
     // The pending word stays pending, so the prompt can still be styled.
     var buf: [64]u8 = undefined;
@@ -879,8 +892,36 @@ fn decodeKey(c: u8, rest: anytype) u8 {
     };
 }
 
+/// Fits the screen to a terminal of a new size: the scroll region, the
+/// status line and the cursor. The terminal reflows or clips what is
+/// already there; the story redraws its own upper window when it next
+/// can.
+pub fn resize(s: *Screen, width: u16, height: u16) Error!void {
+    if (!s.ansi or (width == s.width and height == s.height)) return;
+    const at_bottom = s.lower_row >= s.height;
+    s.width = width;
+    s.height = height;
+    s.upper_rows = @min(s.upper_rows, height -| s.status_rows -| 1);
+    s.upper_row = @min(s.upper_row, s.upper_rows + 1);
+    s.upper_col = @min(s.upper_col, width);
+    s.lower_row = std.math.clamp(if (at_bottom) height else s.lower_row, s.topRows() + 1, height);
+    s.col = @min(s.col, width -| 1);
+    try s.applyRegion();
+    try s.paintStatus(s.status_left[0..s.status_left_len], s.status_right[0..s.status_right_len]);
+    try s.moveLower();
+    try s.out.flush();
+}
+
+/// Follows the terminal's size, if it changed since last asked.
+fn checkResize(s: *Screen) void {
+    if (!s.ansi or !terminal.takeResized()) return;
+    const size = terminal.size() orelse return;
+    s.resize(size[0], size[1]) catch {};
+}
+
 /// Waits briefly before looking for input again.
 fn pause(s: *Screen) void {
+    s.checkResize();
     s.io.sleep(.fromMilliseconds(10), .awake) catch {};
 }
 

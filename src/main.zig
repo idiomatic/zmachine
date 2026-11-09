@@ -240,7 +240,7 @@ pub fn main(init: std.process.Init) !u8 {
     var group: Group = .init(gpa, io, .{ .real = io });
     defer group.deinit();
     if (options.mode) |m| group.mode = m;
-    var keyboard: TerminalInput = .{ .in = &stdin_reader.interface };
+    var keyboard: TerminalInput = .{ .in = &stdin_reader.interface, .watch_tty = tty_in and tty_out };
     var screen: Screen = .init(
         io,
         &stdout_writer.interface,
@@ -278,13 +278,17 @@ pub fn main(init: std.process.Init) !u8 {
         server.mcp = .{ .context = service, .post = mcpPost, .end = mcpEnd };
         const thread = try std.Thread.spawn(.{}, web.Server.serve, .{server});
         thread.detach();
-        machine.observer = inspector.observer();
+        inspector.journal = .{ .context = &group, .read = readJournal };
+        inspector.story = storyName(options.story_path);
+        const journaling = try arena.create(Journaling);
+        journaling.* = .{ .inspector = &inspector, .hub = &hub, .group = &group, .gpa = gpa };
+        machine.observer = journaling.observer();
         const restarted = try arena.create(Restarted);
         restarted.* = .{ .group = &group, .hub = &hub };
         machine.on_restart = .{ .context = restarted, .call = logRestart };
         try hub.setStory(std.fs.path.basename(options.story_path), story);
         const seeding = try arena.create(Seeding);
-        seeding.* = .{ .machine = machine, .hub = &hub };
+        seeding.* = .{ .machine = machine, .hub = &hub, .group = &group };
         machine.on_seed = .{ .context = seeding, .call = noteSeed };
         noteSeed(seeding);
         try hub.startKeyboard();
@@ -327,6 +331,7 @@ pub fn main(init: std.process.Init) !u8 {
         // Resetting the scroll region homes the cursor, so move it to the
         // bottom row (terminals clamp 999) as a normal exit does.
         terminal.restoreOnInterrupt("\x1b[0m\x1b[r\x1b[999;1H\r\n");
+        terminal.watchResize();
     }
     const result = if (screen.start()) machine.run() else |err| err;
     screen.finish() catch {};
@@ -347,11 +352,62 @@ pub fn main(init: std.process.Init) !u8 {
     return status;
 }
 
-const Seeding = struct { machine: *Machine, hub: *Hub };
+/// The story file's name without its directory and last extension.
+fn storyName(path: []const u8) []const u8 {
+    const base = std.fs.path.basename(path);
+    return if (std.mem.lastIndexOfScalar(u8, base, '.')) |dot| (if (dot > 0) base[0..dot] else base) else base;
+}
+
+fn readJournal(context: *anyopaque, arena: std.mem.Allocator) anyerror!protocol.Journal {
+    const g: *Group = @ptrCast(@alignCast(context));
+    return g.journalSince(arena, 0);
+}
+
+/// Watches the game for the inspector and keeps the group's journal of what
+/// the game printed and the rooms entered.
+const Journaling = struct {
+    inspector: *Inspector,
+    hub: *Hub,
+    group: *Group,
+    gpa: std.mem.Allocator,
+    /// The game text before this has been journaled.
+    offset: u64 = 0,
+
+    fn observer(j: *Journaling) Machine.Observer {
+        return .{ .context = j, .beforeInput = beforeInput, .afterInput = afterInput };
+    }
+
+    fn beforeInput(context: *anyopaque, m: *Machine) void {
+        const j: *Journaling = @ptrCast(@alignCast(context));
+        const watch = j.inspector.observer();
+        watch.beforeInput(watch.context, m);
+        var scratch: std.heap.ArenaAllocator = .init(j.gpa);
+        defer scratch.deinit();
+        const text = j.hub.textSince(scratch.allocator(), j.offset) catch return;
+        j.offset = text.offset;
+        const room = j.inspector.location;
+        var name: Machine.TextBuffer = undefined;
+        var label: []const u8 = "";
+        if (room != 0) {
+            m.objectName(room, &name);
+            label = name.slice();
+        }
+        j.group.noteGame(text.text, room, label);
+    }
+
+    fn afterInput(context: *anyopaque, m: *Machine, line: []const u8) void {
+        const j: *Journaling = @ptrCast(@alignCast(context));
+        const watch = j.inspector.observer();
+        watch.afterInput(watch.context, m, line);
+    }
+};
+
+const Seeding = struct { machine: *Machine, hub: *Hub, group: *Group };
 
 fn noteSeed(context: *anyopaque) void {
     const seeding: *Seeding = @ptrCast(@alignCast(context));
     seeding.hub.setSeed(seeding.machine.seed, seeding.machine.seed_random);
+    seeding.group.noteSeed(seeding.machine.seed, seeding.machine.seed_random);
 }
 
 const Restarted = struct { group: *Group, hub: *Hub };
@@ -376,4 +432,10 @@ test "ports default to 9675" {
     const given = (try parseArgs(&.{ "zmachine", "-w", "8080", "zork1.z3" }, null)).run;
     try std.testing.expectEqual(8080, given.web_port.?);
     try std.testing.expectError(error.InvalidArgument, parseArgs(&.{ "zmachine", "--mcp" }, null));
+}
+
+test "the story name drops the directory and extension" {
+    try std.testing.expectEqualStrings("zork1.r119-880429", storyName("games/zork1.r119-880429.z3"));
+    try std.testing.expectEqualStrings("zork1", storyName("zork1"));
+    try std.testing.expectEqualStrings(".z3", storyName("/x/.z3"));
 }

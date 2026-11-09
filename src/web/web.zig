@@ -430,6 +430,10 @@ pub const Server = struct {
                 .lines = t.lines,
             });
         }
+        if (std.mem.eql(u8, path, "/journal")) {
+            if (!local) return s.refuse(w, who, method, path, "the journal is only for this machine\n");
+            return sendJson(w, arena, try s.group.journalSince(arena, parseSince(query)));
+        }
         if (std.mem.eql(u8, path, "/discussion")) {
             const since = parseSince(query);
             var waited: u32 = 0;

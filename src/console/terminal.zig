@@ -41,6 +41,41 @@ pub fn inputPending() bool {
     return (posix.poll(&fds, 0) catch return false) > 0;
 }
 
+/// Waits up to `ms` milliseconds for a byte on stdin, or for its end.
+/// Always true on Windows, where reads just block.
+pub fn waitInput(ms: i32) bool {
+    if (is_windows) return true;
+    var fds = [_]posix.pollfd{.{ .fd = Io.File.stdin().handle, .events = posix.POLL.IN, .revents = 0 }};
+    return (posix.poll(&fds, ms) catch return true) > 0;
+}
+
+/// Set by SIGWINCH.
+var resized: std.atomic.Value(bool) = .init(false);
+
+/// Starts noting when the terminal is resized, for `takeResized`.
+pub fn watchResize() void {
+    if (is_windows) return;
+    const Handler = struct {
+        fn onSignal(sig: posix.SIG) callconv(.c) void {
+            _ = sig;
+            resized.store(true, .release);
+        }
+    };
+    const action: posix.Sigaction = .{
+        .handler = .{ .handler = Handler.onSignal },
+        .mask = posix.sigemptyset(),
+        .flags = 0,
+    };
+    posix.sigaction(.WINCH, &action, null);
+}
+
+/// Whether the terminal may have been resized since the last call. On
+/// Windows, which has no such signal, always true: compare `size`.
+pub fn takeResized() bool {
+    if (is_windows) return true;
+    return resized.swap(false, .acquire);
+}
+
 const Mode = if (is_windows) u32 else posix.termios;
 
 /// The input mode raw mode replaced, while it is on, so an interrupt can

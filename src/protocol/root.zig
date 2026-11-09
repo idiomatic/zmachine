@@ -87,6 +87,29 @@ pub const Post = struct {
     suggestions: []const []const u8,
 };
 
+/// `GET /journal`: the record of the session after a sequence number.
+pub const Journal = struct {
+    last: u64,
+    entries: []const JournalEntry,
+};
+
+pub const JournalEntry = struct {
+    seq: u64,
+    time: i64,
+    /// Commands sent so far this game, this one included.
+    turn: u32,
+    ai: bool,
+    /// A name, "console", or "game" for what the game printed.
+    author: []const u8,
+    /// game, command, thought, message, mode, leader, joined, left,
+    /// kicked, granted, revoked, restarted, room or seed.
+    kind: []const u8,
+    /// For a room entry, the room's object number; otherwise 0.
+    room: u16,
+    text: []const u8,
+    suggestions: []const []const u8,
+};
+
 /// `GET /events`: the audit log after a sequence number.
 pub const Events = struct {
     last: u64,
@@ -133,6 +156,8 @@ pub const Snapshot = struct {
     seed_random: bool,
     /// The player's room.
     location: u16,
+    /// The story file's name without its extension, if it has one.
+    story: ?[]const u8 = null,
     /// Every object, numbered from 1.
     objects: []const Object,
     /// Objects that changed this turn.
@@ -159,7 +184,15 @@ pub const Snapshot = struct {
     /// A property's number and its data in hex.
     pub const Property = struct { n: u16, d: []const u8 };
     pub const Room = struct { id: u16, name: []const u8 };
-    pub const Edge = struct { from: u16, to: u16, dir: []const u8 };
+    pub const Edge = struct {
+        from: u16,
+        to: u16,
+        dir: []const u8,
+        /// The same direction has also led elsewhere from `from`.
+        conditional: ?bool = null,
+
+        pub const omit_null = true;
+    };
 
     pub fn get(snap: Snapshot, id: u16) ?Object {
         if (id == 0 or id > snap.objects.len) return null;

@@ -5,6 +5,8 @@
 //!   GET /state?since=N    the latest snapshot, held open until it is newer
 //!                         than generation N (long polling)
 //!   POST /erase-map       erase the map at the next snapshot
+//!   GET /export.md        the session as a markdown document, maps included
+//!   POST /rearrange       the map laid out afresh: [{id, x, y}] grid cells
 //!
 //! Each reply says what to note in the audit log.
 
@@ -19,7 +21,7 @@ const page = @embedFile("inspector.html");
 const poll_timeout_ms = 20_000;
 const poll_interval_ms = 100;
 
-pub const paths = [_][]const u8{ "/inspector", "/state", "/erase-map" };
+pub const paths = [_][]const u8{ "/inspector", "/state", "/erase-map", "/rearrange", "/export.md" };
 /// The one AI partners may read, when let.
 pub const ai_path = "/state";
 
@@ -73,6 +75,32 @@ pub fn handle(in: *Inspector, arena: Allocator, method: []const u8, path: []cons
             .content_type = "text/plain",
             .body = "",
             .log = .{ .kind = .inspector, .detail = "erased the inspector's map", .suspicious = false },
+        };
+    }
+    if (get and std.mem.eql(u8, path, "/export.md")) {
+        const markdown = try in.exportMarkdown(arena) orelse return .{
+            .status = "409 Conflict",
+            .content_type = "text/plain",
+            .body = "no game yet\n",
+        };
+        return .{
+            .status = "200 OK",
+            .content_type = "text/markdown; charset=utf-8",
+            .body = markdown,
+            .log = .{ .kind = .inspector, .detail = "downloaded the session as markdown", .suspicious = false },
+        };
+    }
+    if (std.mem.eql(u8, method, "POST") and std.mem.eql(u8, path, "/rearrange")) {
+        const json = try in.rearranged(arena) orelse return .{
+            .status = "409 Conflict",
+            .content_type = "text/plain",
+            .body = "no map yet\n",
+        };
+        return .{
+            .status = "200 OK",
+            .content_type = "application/json",
+            .body = json,
+            .log = .{ .kind = .inspector, .detail = "rearranged the inspector's map", .suspicious = false },
         };
     }
     return null;

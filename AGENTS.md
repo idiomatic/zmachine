@@ -6,16 +6,17 @@ Keep this file up to date with every specification.
 
 * Story versions 1–5, 7 and 8 (not 6).
 * Zork I prints "You are standing in an open field"; a scripted walkthrough scores 350 of 350.
-* `save`/`restore` (portable Quetzal, default `<story>.qzl`), `script`, `-t <file>` (transcript from the start), `undo` in version 5.
+* `save`/`restore` (portable Quetzal, default `<story>.qzl`), `script` (writes `transcript.txt`), `-t <file>` (transcript from the start), `undo` in version 5.
 * When the story ends (its `quit`) on a terminal, `[The game has ended. Type RESTART, RESTORE, or QUIT.]` is shown and input continues: `restart` (same seed) and `restore` play on, `seed <n>` sets the seed and `seed random` (or `randomseed`) draws a fresh one at each restart, `quit` or end of input exits, anything else repeats the prompt. Piped input exits at the story's end.
 * A restart clears the game text kept for players (`/transcript`, MCP `read_recent`); offsets stay valid. `save`/`restore` carry no text.
 * `--seed <n>`: Frotz's generator, so transcripts match `dfrotz -s <n> -I 6 -T`.
-* `-h`/`--help`; `--version` prints `build.zig.zon`'s version (0.4.1).
+* `-h`/`--help`; `--version` prints `build.zig.zon`'s version (0.4.2).
 
 ## Terminal
 
 * On a terminal: full-screen xterm-256color with status line, upper and lower windows, styles, colors and `[MORE]`. Otherwise, or with `--plain`: plain word-wrapped text.
 * Ctrl-C and SIGTERM restore the terminal: styles and scroll region reset, cursor on the bottom row, echoed line-edited input, even mid-keypress.
+* Resizing the terminal (SIGWINCH; polled on Windows) refits the scroll region, status line, and cursor at once, even while waiting for a key; the story's header keeps the size it was started with.
 * Piped input is echoed like a transcript; each line is one input line, or for single-key reads its keys in turn (empty is Return).
 * The story header advertises only what the display can do.
 * `--style <list>` (repeatable, after `ZMACHINE_STYLE`): presets and `<part>=<look>` in order; unknown names are errors; plain output ignores styles.
@@ -25,24 +26,27 @@ Keep this file up to date with every specification.
 
 ## Web server
 
-* `--web [port]` (default 9675) listens on 127.0.0.1; `--listen <address>` (implies `--web`) adds that address. Refuse and log requests whose `Host` isn't this server or whose `Origin` doesn't match it.
+* `-w`, `--web [port]` (default 9675) listens on 127.0.0.1; `--listen <address>` (implies `--web`) adds that address. Refuse and log requests whose `Host` isn't this server or whose `Origin` doesn't match it.
 * `--web` leaves input unchanged (a piped walkthrough gives the same output), and quitting exits cleanly with requests open.
 * One web app: `/` is the play page. `/inspector` serves the inspector's panels (an HTML fragment the page loads; this machine only).
 
 ## Inspector
 
+* The current room is global variable 0.
 * Live object tree and details (one Objects tab; a draggable boundary resizes them, remembered), attributes, properties and globals with recent changes highlighted, command history (with a Copy button for its commands), and a map of visited rooms laid out by direction.
-* Map: pan, zoom, Fit (all, or follow the player), Reset (erase and restart from the current room; `POST /erase-map`, logged); its controls are symbolic buttons in the tab bar (− and + joined).
+* The map model and grid layout live in `src/inspector/Map.zig`, for the page and later the markdown export. A direction from a room that has led to more than one place marks those moves conditional (dashed).
+* Map: pan, zoom, Fit (all, or follow the player), Rearrange (`POST /rearrange`: a repeatable search, from the automatic layout, for few direction violations, crossings, lines under rooms, and short lines; the result pins every room; one Undo), Reset (erase and restart from the current room; `POST /erase-map`, logged); its controls are symbolic buttons in the tab bar (− and + joined).
     * One line per pair of rooms; an arrowhead if traveled one way only; faded gradually where it passes under a room it doesn't connect.
     * A move is labeled with its direction at its starting end: up, down, in and out always; compass directions only where the layout disagrees.
     * Rooms drag (after a few pixels, so clicks still select), snap to the grid and swap with an occupant; clicking a compass label moves the destination room so the direction holds (tooltip says where). Both first pin every room in place; pins are remembered per story (release and serial), new rooms are laid out around them, and Reset clears them.
+* Download (symbolic button in the History tab bar, saving `<story>-<date>.md`, the story being its file name without extension, also in the snapshot; `GET /export.md`, this machine only, logged): the session as markdown from the journal, with a header (story name, release, serial, start time, first seed, players), later seeds as italic lines; one `## Game n` per game; the game's text as a block quote (markdown escaped, line breaks and indentation kept) under an `### Opening` heading or the command's `### n · author · \`command\` · +m:ss` heading, the time being since the game began (`+h:mm:ss` from an hour); thoughts and messages that follow one another as a chat log in one `text` fence (`+m:ss  author [thought]: text`, continuation lines and `→ suggestions` beneath); other posts and later seeds as italic lines in block quotes; and after each move that adds a room or move, a map in a `text` code block of the rooms within two hops (fewer if wider than five by four cells), each room's name wrapped onto up to two lines (ending in an ellipsis if longer; boxes three rows high unless some name needs two lines), the player's room double-lined, one-way moves arrowed, conditional ones dotted, moves it can't draw listed beneath; a final "map so far" ends each game. Maps are rebuilt from the journal's rooms and commands, laid out by `Map.layout`.
 * Answers only this machine; unlocking it (fetching its panels) and reading snapshots are logged as suspicious. AI partners may read only `/state`, and only with `--grant-inspector` (all partners; implies `--web`) or a grant from a person on this machine (chip menu; `POST /grant-inspector`, `POST /revoke-inspector`). Grants are posted and logged; a kick drops one.
 
 ## Playing together
 
 * People on the play page and AI partners play alongside the console; late joiners get the whole game and discussion, scrolled to the end.
 * Identity: `X-Player: <name>` an AI partner (local only); `X-Person: <name>` a local person; a remote person by session; no header or `X-Player: you` an unnamed local client.
-* Names: 1–32 printable characters, unique, never `you` or `console`; chosen once on the play page (`POST /join`) and remembered. The name box says how many players are already in the game (and how many are AI), and names up to four.
+* Names: 1–32 printable characters, unique, never `you` or `console`; chosen once on the play page (`POST /join`; `409` if taken) and remembered. The name box says how many players are already in the game (and how many are AI), and names up to four.
 * A person silent for a minute has left; an AI partner after ten minutes.
 
 ### Leadership
@@ -59,10 +63,11 @@ Keep this file up to date with every specification.
 
 ### Endpoints
 
-* `POST /command`: one printable line (empty is Return for single-key reads), queued with the keyboard and echoed in the terminal; replies with JSON of the response and status line; dismisses a waiting `[MORE]`.
+* `POST /command`: one printable line (empty is Return for single-key reads), queued with the keyboard and echoed in the terminal; replies with JSON of the response and status line; dismisses a waiting `[MORE]`; unanswered in 20 seconds, `202` with `"pending":true` (the text then appears in `/transcript`).
 * Long-polling reads (`/transcript`, `/discussion`, `/events` with `since`) wait only while `since` equals the latest; a client ahead of it (the program restarted) is answered at once, and the page starts its game text, discussion and log over. After a failed request the page's first one does not wait, so a server that is back shows as live at once.
 * `POST /command?format=text` replies with only the game text (`text/plain`; `202` if the game has not answered), for a client that cannot use tools or JSON. `GET /transcript?since=<offset>[&wait=1][&format=text]`: the game text a player sees (as text, at most its last 4,000 bytes).
 * `POST /say`, `GET /discussion?since=<n>[&wait=1]`: thoughts (up to 8 suggested commands), messages, commands, and mode, leader, join, leave, kick, password, restart and inspector-grant posts, each with its author; `/discussion` adds the mode, leader and players.
+* `GET /journal?since=<seq>` (this machine only): the session's record in order, never cleared (the oldest entries go past 16 MiB): the game's text per command (without the echoed command and the prompt), commands, thoughts, messages, mode, leader, join, leave, kick, grant, revoke and restart posts, rooms entered (with their object number, again after a restart), and each seeding of the random number generator (the seed, "(random)" if drawn at random), each with its turn (commands this game), time and author (`game` for the game, `console`). Never the password.
 * `POST /clear-discussion` (this machine only; the trash button in the Discussion tab bar, console `/clear`; separate from a restart) removes every post and leaves a `cleared` post saying who (the console is named for whoever sent the latest command, unless an AI partner did or they have left); logged.
 * `POST /mode`, `/lead`, `/kick`: leader actions. `GET /me`: who the client is, and whether it leads.
 * `GET /events?since=<n>` (every player): the audit log of commands, keyboard lines, joins, leaves, leadership, kicks, inspector grants, game restarts (by player), and password logins, changes, copies and reveals; clients named by player and `User-Agent`, the Audit log tab with two symbolic toggles in its tab bar (only suspicious entries; 24-hour time, remembered) and a Player column in the player's chip color (the name is then left out of Client) and a From column ("this machine", or the address; a client not on this machine sees "remote" in place of a remote address); never the password. Suspicious: opening the inspector, reading snapshots, wrong passwords, refused requests.
@@ -82,15 +87,15 @@ Keep this file up to date with every specification.
 
 ### Remote access and password
 
-* A remote player gives the password once (`POST /login`; a pasted invite link yields its password), getting an HttpOnly, SameSite=Lax session cookie; local clients need none.
+* A remote player gives the password once (`POST /login`: `204` sets the cookie, `401` is wrong, `429` too soon; a pasted invite link yields its password), getting an HttpOnly, SameSite=Lax session cookie; local clients need none.
 * `GET /?password=`: right sets the cookie and redirects (303) to `/`; wrong shows the password page with it dropped from the address bar; this machine just redirects.
 * Wrong guesses double a per-address delay (up to a minute); at most 10 guesses a second overall; failures are logged.
 * Generated: three words from the EFF short word list (credited in the README) via `Io.randomSecure`; `ZMACHINE_PASSWORD` (≤ 64 characters) overrides. Case, hyphens and spaces are ignored; checked by SHA-256 with `std.crypto.timing_safe.eql`.
 * Only in memory: never on disk, in the log, on the command line or in scrollback; the startup message says how to get it.
 * `GET /invite` (local clients and a human leader; each fetch logged): `http://<host>/?password=<percent-encoded>`, host being the specific `--listen` address, else the remote `Host`, else the local address toward 192.0.2.1. ⚭ fetches it ahead (when shown and after a change) so a click copies at once, shows a brief ✓, and falls back to a copyable field. An AI leader never receives it.
-* Local clients, the console and the leader change it: ⚄ (browser prompt prefilled from `GET /random-password`; cancel changes nothing), `POST /password`, or console `/password` (no echo; Return generates). An AI leader can only generate one (MCP `new_password`), announces it, and passes leadership to the console if nobody local is on the play page. A change ends every remote session but the leader's, and is posted and logged.
+* Local clients, the console and the leader change it: ⚄ (browser prompt prefilled from `GET /random-password`; cancel changes nothing), `POST /password`, or console `/password` (no echo; Return generates). An AI leader can only generate one (MCP `new_password`), announces it, and passes leadership to the console if nobody local is on the play page. A change ends every remote session but the leader's (`410` with the reason), and is posted and logged.
 * Console `/showpassword`: on the bottom row in the status line's look until a key, then cleared; never in scrollback; logged.
-* With `--web`, console `/lead`, `/clear`, `/mode [debate|turns]` (shows or sets the mode; only while the local side leads), `/password`, `/showpassword`, `/invite` (like `/showpassword`), `/help`, `/who`, `/promote <name>`, `/kick <name>`, `/grant <name>`, `/revoke <name>` (each as the leader or the play page's menu would; leader-only ones say so and point to `/lead`), `/say <text>` and `/log [n]` replace a line of input; the game never sees them.
+* With `--web`, console `/lead`, `/clear`, `/mode [debate|turns]` (shows or sets the mode; only while the local side leads), `/password`, `/showpassword`, `/invite` (like `/showpassword`), `/help`, `/who`, `/promote <name>`, `/kick <name>`, `/grant <name>`, `/revoke <name>` (each as the leader or the play page's menu would; leader-only ones say so and point to `/lead`), `/say <text>` and `/log [n]` (default 10; suspicious lines marked `!`) replace a line of input; the game never sees them.
 * The README warns that plain HTTP exposes the password. Later: HTTPS for `--listen` (self-signed at startup, or Let's Encrypt via a Zig standard-library ACME client).
 
 ## MCP
@@ -118,5 +123,6 @@ Keep this file up to date with every specification.
 
 * Modules, one folder each under `src/` and declared in `build.zig`: `vm` (`std` only), `protocol`, `poly`, `console`, `hub`, `inspector`, `web` and `mcp` (imports only `protocol`), with `src/main.zig` as the app; imports go one way, and `zig build test` tests each module on its own.
 * Tool code is Zig 0.17.0 or later, standard library only, never libc directly, `zig fmt`-clean; except `tools/screenshots/` (README screenshot scripts) and costly-to-recreate Python tools.
-* Never commit story files, manuals, maps, walkthrough scripts, manifests or transcripts, or copy-protection notes; they live in `games-local/`, `manuals-local/`, `maps-local/` and `tests/walkthroughs-local/`. Exceptions: `tests/walkthroughs/` (written for this project) and Zork I–III (downloaded into `games/`, not committed).
+* Never commit story files, manuals, maps, walkthrough scripts, manifests or transcripts, or copy-protection notes; they live in `games-local/`, `manuals-local/`, `maps-local/`, `journals-local/` (downloaded sessions) and `tests/walkthroughs-local/`. Exceptions: `tests/walkthroughs/` (written for this project) and Zork I–III (downloaded into `games/`, not committed).
+* External specifications are collected in [docs/specifications](docs/specifications/README.md).
 * References allowed: MojoZork, zvm, zyppy, Frotz, Z-Machine Standards Document 1.1.

@@ -12,6 +12,7 @@ const Allocator = std.mem.Allocator;
 const Access = @import("Access.zig");
 const AuditLog = @import("AuditLog.zig");
 const Discussion = @import("Discussion.zig");
+const Journal = @import("Journal.zig");
 const Password = @import("Password.zig");
 const Players = @import("Players.zig");
 const World = @import("world.zig").World;
@@ -30,6 +31,7 @@ mutex: Io.Mutex = .init,
 mode: Mode = .debate,
 players: Players = .{},
 discussion: Discussion = .{},
+journal: Journal = .{},
 access: Access = .{},
 audit: AuditLog = .{},
 /// Who sent the latest command, for blaming a restart or a clear on them.
@@ -68,6 +70,7 @@ pub fn init(gpa: Allocator, io: Io, world: World) Group {
 pub fn deinit(g: *Group) void {
     g.players.deinit(g.gpa);
     g.discussion.deinit(g.gpa);
+    g.journal.deinit(g.gpa);
     g.access.deinit(g.gpa);
     g.audit.deinit(g.gpa);
 }
@@ -200,6 +203,59 @@ pub fn post(g: *Group, author: Player, kind: PostKind, text: []const u8, suggest
 
 fn postLocked(g: *Group, author: Player, kind: PostKind, text: []const u8, suggestions: []const []const u8) !void {
     try g.discussion.add(g.gpa, g.world.now(), author.name, author.ai, kind, text, suggestions);
+    if (Journal.Kind.fromPost(kind)) |k| {
+        g.journal.add(g.gpa, g.world.now(), author.name, author.ai, k, text, suggestions) catch {};
+    }
+}
+
+/// Journals what the game printed since it last waited for input, as `raw`
+/// holds it, followed by the room the player is in (object `room`, named
+/// `room_name`) if it is not the one before.
+pub fn noteGame(g: *Group, raw: []const u8, room: u16, room_name: []const u8) void {
+    g.lock();
+    defer g.unlock();
+    g.journal.addGame(g.gpa, g.world.now(), raw) catch {};
+    g.journal.addRoom(g.gpa, g.world.now(), room, room_name) catch {};
+}
+
+/// Journals that the game's random number generator was seeded.
+pub fn noteSeed(g: *Group, seed: u64, random: bool) void {
+    g.lock();
+    defer g.unlock();
+    var buf: [40]u8 = undefined;
+    const text = std.fmt.bufPrint(&buf, "{d}{s}", .{ seed, if (random) " (random)" else "" }) catch return;
+    g.journal.add(g.gpa, g.world.now(), null, false, .seed, text, &.{}) catch {};
+}
+
+/// The sequence number of the latest journal entry, or 0.
+pub fn lastJournal(g: *Group) u64 {
+    g.lock();
+    defer g.unlock();
+    return g.journal.last();
+}
+
+/// The journal's entries after `since`, copied into `arena`.
+pub fn journalSince(g: *Group, arena: Allocator, since: u64) Allocator.Error!protocol.Journal {
+    g.lock();
+    defer g.unlock();
+    var entries: std.ArrayList(protocol.JournalEntry) = .empty;
+    for (g.journal.entries.items) |e| {
+        if (e.seq <= since) continue;
+        const suggestions = try arena.alloc([]const u8, e.suggestions.len);
+        for (e.suggestions, suggestions) |text, *out| out.* = try arena.dupe(u8, text);
+        try entries.append(arena, .{
+            .seq = e.seq,
+            .time = e.time,
+            .turn = e.turn,
+            .ai = e.ai,
+            .author = try arena.dupe(u8, e.author orelse if (e.kind == .game or e.kind == .room or e.kind == .seed) "game" else "console"),
+            .kind = @tagName(e.kind),
+            .room = e.room,
+            .text = try arena.dupe(u8, e.text),
+            .suggestions = suggestions,
+        });
+    }
+    return .{ .last = g.journal.last(), .entries = entries.items };
 }
 
 pub const LeaderError = error{ NotLeader, UnknownPlayer, CannotKick, OutOfMemory };

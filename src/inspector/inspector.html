@@ -15,6 +15,7 @@
 #ws .edge { stroke: var(--edge); stroke-width: 1.6; fill: none; }
 #ws .edge.vertical { stroke-dasharray: 5 4; }
 #ws .edge.unknown { stroke-dasharray: 2 4; }
+#ws .edge.conditional { stroke-dasharray: 8 3 2 3; }
 #ws .edge-label {
   fill: var(--muted); font: 600 10px var(--mono); text-anchor: middle; dominant-baseline: middle;
   paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round;
@@ -84,7 +85,9 @@
         <button id="zoom-in" aria-label="Zoom in" title="Zoom in"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9M8 3.5v9"/></svg></button>
       </div>
       <button class="toggle theme" id="recenter" aria-label="Fit the map" title="Fit the map, or center on the current room, and follow the player again"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg></button>
-      <button class="toggle theme" id="erase-map" aria-label="Reset the map" title="Erase the map and start it again from the current room"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.8-3.8M13 2.5v2.8h-2.8"/></svg></button>
+      <button class="toggle theme" id="rearrange" aria-label="Rearrange the map" title="Lay the rooms out afresh, to follow the directions with fewer crossings"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5h2.5c3 0 3 7 6 7h2.5M2.5 11.5h2.5c1 0 1.7-.7 2.3-1.7M13.5 4.5H11c-1 0-1.7.7-2.3 1.7M11.5 2.5l2 2-2 2M11.5 9.5l2 2-2 2"/></svg></button>
+      <button class="toggle theme" id="undo-layout" disabled aria-label="Undo the rearrangement" title="Put the rooms back where they were before the last rearrangement"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 7h6.5a3.5 3.5 0 0 1 0 7H6M3 7l3-3M3 7l3 3"/></svg></button>
+      <button class="toggle theme" id="erase-map" aria-label="Reset the map" title="Erase the map and start it again from the current room"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.2h11M6.2 4.2V2.8h3.6v1.4M4 4.2l.6 8.6a1 1 0 0 0 1 .9h4.8a1 1 0 0 0 1-.9l.6-8.6M6.6 6.6v4.2M9.4 6.6v4.2"/></svg></button>
     </div>
       <svg id="map"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="arrowhead" d="M0,0 L10,5 L0,10 z"/></marker><filter id="shadow-blur" x="-50%" y="-100%" width="200%" height="300%"><feGaussianBlur stdDeviation="10"/></filter></defs><g id="viewport"><g id="edges"></g><g id="rooms"></g></g></svg>
       <div class="map-empty" id="map-empty">The map fills in as you explore.</div>
@@ -92,6 +95,7 @@
     <div class="pane" id="globals-pane"><div id="globals"></div></div>
     <div class="pane" id="history-pane">
     <div class="pane-title"><span></span>
+      <button class="toggle theme" id="download-session" aria-label="Download the session" title="Download the whole session as markdown: game text, commands, thoughts and messages, with maps"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v7.5M5 7.2l3 3 3-3M3 12.8h10"/></svg></button>
       <button class="toggle theme" id="copy-history" aria-label="Copy the commands" title="Copy the commands, one per line"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.8" width="8" height="8" rx="1.5"/><path d="M10.5 3.8v-.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h.5"/></svg></button>
     </div>
     <ol id="history"></ol>
@@ -533,6 +537,7 @@ function renderMap() {
     let cls = "edge";
     if (list.some((e) => !DIRS[e.dir] && e.dir !== "unknown")) cls += " vertical";
     else if (list.every((e) => e.dir === "unknown")) cls += " unknown";
+    if (list.some((e) => e.conditional)) cls += " conditional";
     line.setAttribute("class", cls);
     if (oneWay) line.setAttribute("marker-end", "url(#arrow)");
     // Where the line passes under a room it doesn't connect, that room's
@@ -833,8 +838,37 @@ let dragged = false;
     applyView();
   };
   $("recenter").addEventListener("click", fit);
+  // Rearranging pins every room where the server's search put it. The
+  // pins before are kept for one undo.
+  let undoPins = null;
+  const setUndo = (previous) => {
+    undoPins = previous;
+    $("undo-layout").disabled = !previous;
+  };
+  $("rearrange").addEventListener("click", async () => {
+    if (!state || erasing) return;
+    const cells = await fetch("/rearrange", { method: "POST" }).then((res) => (res.ok ? res.json() : null), () => null);
+    if (!cells) return;
+    loadPins();
+    // Rooms the page already shows but the server's snapshot lacks stay
+    // where they are now.
+    freezeLayout();
+    setUndo(new Map(pins));
+    for (const { id, x, y } of cells) pins.set(id, [x, y]);
+    savePins();
+    renderMap();
+    fit();
+  });
+  $("undo-layout").addEventListener("click", () => {
+    if (!undoPins) return;
+    pins = undoPins;
+    setUndo(null);
+    savePins();
+    renderMap();
+  });
   $("erase-map").addEventListener("click", async () => {
     if (!state) return;
+    setUndo(null);
     // Clear the map at once; the server erases its copy at the next turn.
     // Rooms placed by hand go too.
     erasing = true;
@@ -902,6 +936,20 @@ $("copy-history").addEventListener("click", async () => {
     area.remove();
   }
   toast(`Copied ${state.commands.length} commands`);
+});
+
+$("download-session").addEventListener("click", async () => {
+  const res = await fetch("/export.md").catch(() => null);
+  if (!res || !res.ok) { toast("No game to download yet"); return; }
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  const story = (state?.story || "session").replace(/[^\w.-]+/g, "-");
+  link.download = `${story}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.md`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 });
 
 window.onPaneShown = (id) => { if (id === "map-pane") applyView(); };

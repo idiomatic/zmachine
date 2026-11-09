@@ -133,3 +133,31 @@ test "notes, hidden input and a flashed bottom row" {
     try testing.expectEqual(t.height - 1, t.row);
     try testing.expectEqual(0, t.col);
 }
+
+test "resizing redraws the status line and the scroll region" {
+    var h: Harness = undefined;
+    h.init("", 30, 5);
+    defer h.deinit();
+    try h.screen.start();
+    try h.screen.drawStatus("West of House", "Score: 0");
+    try h.print("Hello.\n");
+    try h.screen.resize(40, 8);
+    try testing.expectEqual(@as(u16, 40), h.screen.width);
+    try testing.expectEqual(@as(u16, 8), h.screen.height);
+    try testing.expectEqual(@as(u16, 8), h.screen.lower_row);
+    h.screen.out.flush() catch unreachable;
+    const written = h.out.written();
+    // The region now ends at the new bottom row.
+    try testing.expect(std.mem.indexOf(u8, written, "\x1b[2;8r") != null);
+    // Only what follows the resize is drawn for the new size.
+    const after = written[std.mem.indexOf(u8, written, "\x1b[2;8r").?..];
+    var t: TestTerminal = .init(40, 8);
+    t.write(after);
+    var buf: [128]u8 = undefined;
+    try testing.expectEqualStrings(" West of House                 Score: 0", t.rowText(0, &buf));
+    // The same size again does nothing.
+    const len = h.out.written().len;
+    try h.screen.resize(40, 8);
+    h.screen.out.flush() catch unreachable;
+    try testing.expectEqual(len, h.out.written().len);
+}

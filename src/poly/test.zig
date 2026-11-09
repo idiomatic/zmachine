@@ -324,3 +324,49 @@ test "wrong guesses double the wait" {
     // Another address isn't slowed.
     try testing.expectEqual(Group.Login.wrong, try g.login(@splat(1), "test", "", "nope"));
 }
+
+test "the journal keeps what the discussion forgets" {
+    var fake: World.Fake = .{};
+    var g: Group = .init(testing.allocator, testing.io, .{ .fake = &fake });
+    defer g.deinit();
+    g.noteGame("ZORK I\nWest of House\n\n>", 64, "West of House");
+    g.heard(.console, "n", true);
+    g.noteGame("n\nNorth of House\n\n>", 137, "North of House");
+    try g.post(claude, .thought, "A house.", &.{"e"});
+    g.setPassword(Password.fromText("amber-otter-glide").?);
+    try g.changePassword(.console, "swordfish");
+    try g.clearDiscussion(.console);
+
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const j = try g.journalSince(arena.allocator(), 0);
+    const kinds = [_][]const u8{ "game", "room", "command", "game", "room", "thought" };
+    try testing.expectEqual(kinds.len, j.entries.len);
+    for (j.entries, kinds) |e, k| try testing.expectEqualStrings(k, e.kind);
+    try testing.expectEqualStrings("North of House", j.entries[3].text);
+    try testing.expectEqual(@as(u32, 1), j.entries[3].turn);
+    try testing.expectEqualStrings("game", j.entries[0].author);
+    try testing.expectEqualStrings("console", j.entries[2].author);
+    try testing.expectEqualStrings("Claude", j.entries[5].author);
+    // The password never reaches it.
+    for (j.entries) |e| try testing.expect(std.mem.indexOf(u8, e.text, "swordfish") == null);
+    // Only what is new after a sequence number.
+    const later = try g.journalSince(arena.allocator(), j.last - 1);
+    try testing.expectEqual(@as(usize, 1), later.entries.len);
+}
+
+test "the journal notes each seeding of the generator" {
+    var fake: World.Fake = .{};
+    var g: Group = .init(testing.allocator, testing.io, .{ .fake = &fake });
+    defer g.deinit();
+    g.noteSeed(1639877695, true);
+    g.noteSeed(5, false);
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const j = try g.journalSince(arena.allocator(), 0);
+    try testing.expectEqual(@as(usize, 2), j.entries.len);
+    try testing.expectEqualStrings("seed", j.entries[0].kind);
+    try testing.expectEqualStrings("1639877695 (random)", j.entries[0].text);
+    try testing.expectEqualStrings("5", j.entries[1].text);
+    try testing.expectEqualStrings("game", j.entries[1].author);
+}

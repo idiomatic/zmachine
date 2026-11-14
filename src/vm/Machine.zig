@@ -52,6 +52,8 @@ user_seed: ?u64 = null,
 /// random (`--seed` with it replays the game).
 seed: u64,
 seed_random: bool = true,
+/// The seed a restart starts from again, or null to draw a fresh one.
+restart_seed: ?u64,
 /// When nonzero, `random` counts 1, 2, ... up to this value (spec §2.4).
 predictable_range: u16 = 0,
 predictable_next: u16 = 0,
@@ -153,6 +155,7 @@ pub fn init(gpa: Allocator, io: Io, story: []const u8, display: Display, storage
         .storage = storage,
         .rng_state = seed,
         .seed = seed,
+        .restart_seed = seed,
         .save_name = save_name,
     };
     if (m.static_base > story.len or m.static_base < 64) return error.InvalidStory;
@@ -1224,6 +1227,7 @@ pub fn startTranscript(m: *Machine, name: []const u8) void {
 pub fn seedRandom(m: *Machine, seed: u64) void {
     m.rng_state = seed;
     m.user_seed = seed;
+    m.restart_seed = seed;
     m.seed = seed;
     m.seed_random = false;
     m.seeded();
@@ -1232,10 +1236,24 @@ pub fn seedRandom(m: *Machine, seed: u64) void {
 /// Draws a fresh random seed, and keeps drawing one at each restart.
 pub fn randomizeSeed(m: *Machine) void {
     m.user_seed = null;
+    m.restart_seed = null;
     m.seed = randomSeed(m.io);
     m.seed_random = true;
     m.rng_state = m.seed;
     m.seeded();
+}
+
+/// Puts the generator back in random mode for a restart, from the seed the
+/// game started with, so a replay matches `dfrotz -s`, or from a fresh one
+/// after `seed random`.
+fn reseed(m: *Machine) void {
+    m.predictable_range = 0;
+    const seed = m.restart_seed orelse randomSeed(m.io);
+    const changed = seed != m.seed or m.seed_random != (m.user_seed == null);
+    m.seed = seed;
+    m.seed_random = m.user_seed == null;
+    m.rng_state = seed;
+    if (changed) m.seeded();
 }
 
 fn seeded(m: *Machine) void {
@@ -1264,6 +1282,7 @@ fn restart(m: *Machine) !void {
     m.memory[0x11] = (m.memory[0x11] & ~@as(u8, 0x03)) | flags2;
     try m.display.eraseWindow(-1);
     m.reset();
+    m.reseed();
     if (m.on_restart) |c| c.call(c.context);
 }
 

@@ -176,6 +176,26 @@ test "restart after the end runs the story again" {
     try testing.expectEqualStrings("hi" ++ prompt ++ "RESTART\nhi" ++ prompt ++ "quit\n", display.text.items);
 }
 
+test "restart starts the generator again from the seed, in random mode" {
+    const s = story(&.{
+        0xe7, 0x7f, 0x64, 0x00, // random 100 -> sp
+        0xe6, 0xbf, 0x00, // print_num sp
+        0xe7, 0x3f, 0xff, 0xfb, 0x10, // random -5 -> g0 (predictable)
+        0xba, // quit
+    });
+    var display: RecordingDisplay = .init(testing.allocator, &.{ "restart", "quit" });
+    defer display.deinit();
+    display.interactive = true;
+    var cwd: Storage.Cwd = .init(testing.allocator, testing.io);
+    defer cwd.deinit();
+    const m = try Machine.init(testing.allocator, testing.io, &s, display.display(), cwd.storage(), "test.qzl");
+    defer m.deinit();
+    m.seedRandom(1);
+    try m.run();
+    const prompt = "\n[The game has ended. Type RESTART, RESTORE, or QUIT.]\n";
+    try testing.expectEqualStrings("47" ++ prompt ++ "restart\n47" ++ prompt ++ "quit\n", display.text.items);
+}
+
 test "SEED at the end sets the seed and asks again" {
     const s = story(&.{0xba});
     var display: RecordingDisplay = .init(testing.allocator, &.{ "seed 42", "SEED x", "SEED random", "quit" });

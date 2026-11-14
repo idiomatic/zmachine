@@ -46,6 +46,18 @@ test "print, new_line and quit" {
     try testing.expectEqualStrings("hi\n", text);
 }
 
+test "je with fewer than two operands never branches" {
+    const text = try run(testing.allocator, &.{
+        0xc1, 0xff, 0xc5, // je ?(skip the next print)
+        0xb2, 0xb5, 0xc5, // print "hi"
+        0xc1, 0x7f, 0x05, 0xc5, // je 5 ?(skip the next print)
+        0xb2, 0xb5, 0xc5, // print "hi"
+        0xba, // quit
+    }, &.{});
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("hihi", text);
+}
+
 test "aread stores lowercased input" {
     const text = try run(testing.allocator, &.{
         0xe4, 0x5f, 0x80, 0x00, 0x00, // aread 0x80 0 -> sp

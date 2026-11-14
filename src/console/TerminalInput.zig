@@ -39,7 +39,18 @@ fn waiting(_: *anyopaque) void {}
 /// The next line, without its line ending, or null at the end.
 fn readLine(t: *TerminalInput, buf: []u8) InputSource.Error!?[]u8 {
     const raw = t.in.takeDelimiter('\n') catch |err| switch (err) {
-        error.StreamTooLong => t.in.buffered(),
+        // Longer than the reader's buffer: keep what fits and drop the
+        // rest of the line, so the next read starts on the next line.
+        error.StreamTooLong => {
+            const head = t.in.buffered();
+            const n = @min(head.len, buf.len);
+            @memcpy(buf[0..n], head[0..n]);
+            _ = t.in.discardDelimiterInclusive('\n') catch |e| switch (e) {
+                error.EndOfStream => {},
+                error.ReadFailed => return error.ReadFailed,
+            };
+            return buf[0..n];
+        },
         else => return error.ReadFailed,
     };
     const line = std.mem.trimEnd(u8, raw orelse return null, "\r");
@@ -75,4 +86,15 @@ fn takeKeyboardByte(context: *anyopaque) ?u8 {
 
 fn webPending(_: *anyopaque) bool {
     return false;
+}
+
+test "a line longer than the reader's buffer is cut, and the next line follows" {
+    const testing = std.testing;
+    var buffer: [8]u8 = undefined;
+    var reader: testing.Reader = .init(&buffer, &.{.{ .buffer = "abcdefghijklmnop\nlook\n" }});
+    var t: TerminalInput = .{ .in = &reader.interface };
+    var buf: [64]u8 = undefined;
+    try testing.expectEqualStrings("abcdefgh", (try readLine(&t, &buf)).?);
+    try testing.expectEqualStrings("look", (try readLine(&t, &buf)).?);
+    try testing.expectEqual(null, try readLine(&t, &buf));
 }

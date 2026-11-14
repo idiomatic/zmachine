@@ -594,6 +594,8 @@ fn invalid(m: *Machine) Error {
 
 fn exec2op(m: *Machine, op: u8, ops: []const u16) !void {
     if (ops.len < 2 and op != 1) return m.invalid();
+    // A `je` with nothing to compare never branches, as with one operand.
+    if (ops.len == 0) return m.branch(false);
     const a = ops[0];
     const b = if (ops.len > 1) ops[1] else 0;
     switch (op) {

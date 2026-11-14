@@ -9,6 +9,7 @@ Keep this file up to date with every specification.
 * `save`/`restore` (portable Quetzal, default `<story>.qzl`), `script` (writes `transcript.txt`), `-t <file>` (transcript from the start), `undo` in version 5.
 * When the story ends (its `quit`) on a terminal, `[The game has ended. Type RESTART, RESTORE, or QUIT.]` is shown and input continues: `restart` (same seed) and `restore` play on, `seed <n>` sets the seed and `seed random` (or `randomseed`) draws a fresh one at each restart, `quit` or end of input exits, anything else repeats the prompt. Piped input exits at the story's end.
 * A restart clears the game text kept for players (`/transcript`, MCP `read_recent`); offsets stay valid. `save`/`restore` carry no text.
+* Beyond Zork (by release and serial) draws code page 437's arrows (24, 25) and box lines (179–218), which it prints for an IBM PC without pictures, as Unicode.
 * `--seed <n>`: Frotz's generator, so transcripts match `dfrotz -s <n> -I 6 -T`.
 * `-h`/`--help`; `--version` prints `build.zig.zon`'s version (0.4.2).
 
@@ -125,4 +126,4 @@ Keep this file up to date with every specification.
 * Tool code is Zig 0.17.0 or later, standard library only, never libc directly, `zig fmt`-clean; except `tools/screenshots/` (README screenshot scripts) and costly-to-recreate Python tools.
 * Never commit story files, manuals, maps, walkthrough scripts, manifests or transcripts, or copy-protection notes; they live in `games-local/`, `manuals-local/`, `maps-local/`, `journals-local/` (downloaded sessions) and `tests/walkthroughs-local/`. Exceptions: `tests/walkthroughs/` (written for this project) and Zork I–III (downloaded into `games/`, not committed).
 * External specifications are collected in [docs/specifications](docs/specifications/README.md).
-* References allowed: MojoZork, zvm, xyppy, Frotz, Z-Machine Standards Document 1.1, Reisinger's annotated Standard 1.1.
+* References allowed: MojoZork, zvm, xyppy, Frotz, Z-Machine Standards Document 1.1, Reisinger's annotated Standard 1.1, The Infocom Files (the games' ZIL source).

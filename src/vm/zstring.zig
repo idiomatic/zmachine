@@ -207,14 +207,52 @@ pub const default_unicode_table: [69]u21 = blk: {
     break :blk table;
 };
 
+/// Code page 437's arrows and box lines, which Beyond Zork prints on an IBM
+/// PC without pictures (interpreter number 6, Flags 2 bit 3 clear): 24 and
+/// 25, then 179-218.
+const ibm_arrows = [2]u21{ '↑', '↓' };
+const ibm_lines: [40]u21 = blk: {
+    const text = "│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌";
+    @setEvalBranchQuota(10000);
+    var table: [40]u21 = undefined;
+    var it = std.unicode.Utf8View.initComptime(text).iterator();
+    var i: usize = 0;
+    while (it.nextCodepoint()) |cp| : (i += 1) table[i] = cp;
+    if (i != table.len) @compileError("ibm_lines length mismatch");
+    break :blk table;
+};
+
+/// Beyond Zork's releases and serials, which print code page 437 graphics.
+const beyond_zork = [_]struct { u16, *const [6]u8 }{
+    .{ 1, "870412" },
+    .{ 1, "870715" },
+    .{ 47, "870915" },
+    .{ 49, "870917" },
+    .{ 51, "870923" },
+    .{ 57, "871221" },
+    .{ 60, "880610" },
+};
+
+fn isBeyondZork(memory: []const u8) bool {
+    if (memory.len < 0x18) return false;
+    const release = readWord(memory, 0x02);
+    for (beyond_zork) |story| {
+        if (story[0] == release and std.mem.eql(u8, story[1], memory[0x12..0x18])) return true;
+    }
+    return false;
+}
+
 /// Maps ZSCII codes 155 and up to Unicode using either the story's own
 /// translation table or the default one.
 pub const UnicodeMap = struct {
     table: []const u21,
     custom: [256]u21 = undefined,
+    /// Draws code page 437's arrows and box lines in place of ZSCII.
+    ibm_graphics: bool = false,
 
     pub fn load(map: *UnicodeMap, memory: []const u8, version: u8) void {
         map.table = &default_unicode_table;
+        map.ibm_graphics = isBeyondZork(memory);
         if (version < 5) return;
         const ext = readWord(memory, 0x36);
         if (ext == 0 or readWord(memory, ext) < 3) return;
@@ -226,6 +264,11 @@ pub const UnicodeMap = struct {
     }
 
     pub fn toUnicode(map: *const UnicodeMap, zscii: u16) ?u21 {
+        if (map.ibm_graphics) switch (zscii) {
+            24, 25 => return ibm_arrows[zscii - 24],
+            179...218 => return ibm_lines[zscii - 179],
+            else => {},
+        };
         return switch (zscii) {
             0 => null,
             9 => '\t',
@@ -255,6 +298,24 @@ const TestSink = struct {
         s.len += 1;
     }
 };
+
+test "Beyond Zork's code page 437 graphics" {
+    var memory: [0x40]u8 = @splat(0);
+    memory[0] = 5;
+    std.mem.writeInt(u16, memory[0x02..0x04], 57, .big);
+    @memcpy(memory[0x12..0x18], "871221");
+    var map: UnicodeMap = undefined;
+    map.load(&memory, 5);
+    try std.testing.expectEqual('↑', map.toUnicode(24));
+    try std.testing.expectEqual('│', map.toUnicode(179));
+    try std.testing.expectEqual('┌', map.toUnicode(218));
+    try std.testing.expectEqual('a', map.toUnicode('a'));
+
+    @memcpy(memory[0x12..0x18], "880429");
+    map.load(&memory, 5);
+    try std.testing.expectEqual(null, map.toUnicode(24));
+    try std.testing.expectEqual('Ú', map.toUnicode(179));
+}
 
 test "encode and decode round trip" {
     const words = encode(&default_alphabets, 3, "mailbox");

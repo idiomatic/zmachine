@@ -14,5 +14,6 @@ journals-local/
 tools/screenshots/run/
 tests/walkthroughs-local/
 runs-local/
+compat-local/
 
 *.draft.md

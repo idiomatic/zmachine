@@ -111,19 +111,20 @@ Keep this file up to date with every specification.
 ## Build and release
 
 * Builds and runs on Linux, macOS and Windows, x86_64 and aarch64 (six targets).
-* `zig build stories` (`tools/fetch.zig`): downloads Zork I–III (MIT, Microsoft) from historicalsource at pinned commits, checked by pinned SHA-256 and cached, into `games/` as `zork1.r119-880429.z3` etc. Only `stories` and `walkthrough` download; `-Dstories=false` skips.
+* `zig build stories` (`tools/fetch.zig`): downloads Zork I–III (MIT, Microsoft) from historicalsource at pinned commits, checked by pinned SHA-256 and cached, into `games/` as `zork1.r119-880429.z3` etc. Only `stories`, `walkthrough` and `compat` download; `-Dstories=false` skips.
 * `zig build tools` builds `bot` (plays a tool-calling model through `/mcp/simple`), `relay` (plays a model without tool use), `metrics` and `save` (a run's commands as a local walkthrough) into `zig-out/bin/`.
 * `zig build walkthrough` (`tools/walkthrough.zig`) plays `tests/walkthroughs-local/walkthroughs.zon` and `tests/walkthroughs/walkthroughs.zon` entries (script, story path or `zork1`–`zork3`, seeds, an expected line).
     * Scripts are named `<story>.r<release>-<serial>[.<topic>].txt`; another release fails.
     * Each seed (or one unseeded run) plays with and without `--web`; outputs must match each other and the saved `<script name>.seed<n>.expected`.
     * `-Dwalkthrough=<name>` plays that name or names starting `<name>.`; `-Dupdate-walkthroughs` saves transcripts; anything missing is skipped and passes.
     * `tests/walkthroughs/` is checked out without line-ending conversion (`.gitattributes`).
+* `zig build compat` (`tools/compat.zig`): downloads the Obsessively Complete Infocom Catalog's story files (all but version 6) into `compat-local/` (SHA-256s recorded at first download, then checked), plays each with the same few commands and seed 1 (in `compat-local/runs/`), and compares its transcript with `dfrotz -I 6`'s (`-Dfrotz`, else `dfrotz` on the path, else none), ignoring whitespace and the interpreter version letter; fails where zmachine errors or hangs and dfrotz doesn't. `-Dcompat=<prefix>` plays only those.
 * GitHub Actions: formatting, build, unit tests and walkthroughs on each target; then stripped ReleaseSafe archives (with README and LICENSE), published as a release by a `v<version>` tag matching `build.zig.zon`.
 
 ## Rules
 
 * Modules, one folder each under `src/` and declared in `build.zig`: `vm` (`std` only), `protocol`, `poly`, `console`, `hub`, `inspector`, `web` and `mcp` (imports only `protocol`), with `src/main.zig` as the app; imports go one way, and `zig build test` tests each module on its own.
 * Tool code is Zig 0.17.0 or later, standard library only, never libc directly, `zig fmt`-clean; except `tools/screenshots/` (README screenshot scripts) and costly-to-recreate Python tools.
-* Never commit story files, manuals, maps, walkthrough scripts, manifests or transcripts, or copy-protection notes; they live in `games-local/`, `manuals-local/`, `maps-local/`, `journals-local/` (downloaded sessions) and `tests/walkthroughs-local/`. Exceptions: `tests/walkthroughs/` (written for this project) and Zork I–III (downloaded into `games/`, not committed).
+* Never commit story files, manuals, maps, walkthrough scripts, manifests or transcripts, or copy-protection notes; they live in `games-local/`, `manuals-local/`, `maps-local/`, `journals-local/` (downloaded sessions), `compat-local/` and `tests/walkthroughs-local/`. Exceptions: `tests/walkthroughs/` (written for this project) and Zork I–III (downloaded into `games/`, not committed).
 * External specifications are collected in [docs/specifications](docs/specifications/README.md).
-* References allowed: MojoZork, zvm, xyppy, Frotz, Z-Machine Standards Document 1.1, Reisinger's annotated Standard 1.1, The Infocom Files (the games' ZIL source).
+* References allowed: MojoZork, zvm, xyppy, Frotz, Z-Machine Standards Document 1.1, Reisinger's annotated Standard 1.1, The Infocom Files (the games' ZIL source), the Obsessively Complete Infocom Catalog (story files, sources, ZAP documentation) and Infocom's interpreter sources.

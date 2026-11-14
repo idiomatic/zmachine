@@ -91,6 +91,27 @@ pub fn build(b: *std.Build) void {
     // One at a time, so their reports don't interleave.
     walkthroughs[1].step.dependOn(&walkthroughs[0].step);
 
+    // Compatibility: every story in the Obsessively Complete Infocom Catalog
+    // (but version 6), downloaded once into compat-local/ (ignored by git),
+    // played briefly and compared with dfrotz when there is one.
+    const compat = b.addExecutable(.{
+        .name = "compat",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/compat.zig"),
+            .target = b.graph.host,
+        }),
+    });
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .name = "compat", .root_module = compat.root_module })).step);
+    const compat_step = b.step("compat", "Play every catalog story briefly and compare with dfrotz (downloads into compat-local/)");
+    const compat_run = b.addRunArtifact(compat);
+    compat_run.setCwd(b.path("."));
+    compat_run.has_side_effects = true;
+    compat_run.addArtifactArg(exe);
+    compat_run.addArg("compat-local");
+    compat_run.addArgs(&.{ "--frotz", b.option([]const u8, "frotz", "dfrotz to compare with in `compat` (default: dfrotz on the path, if any)") orelse "dfrotz" });
+    if (b.option([]const u8, "compat", "Play only the catalog stories whose names start with this")) |prefix| compat_run.addArgs(&.{ "--only", prefix });
+    compat_step.dependOn(&compat_run.step);
+
     // Tools for evaluating models as players: `zig build tools` builds
     // them into zig-out/bin; their tests run with `zig build test`.
     const tools_step = b.step("tools", "Build the evaluation tools: bot, relay, metrics, save");

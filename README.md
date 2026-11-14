@@ -489,6 +489,7 @@ module imports only those listed in `build.zig`.
 | `src/mcp/mcp.zig` | MCP service (sessions behind `POST /mcp`) that lets an AI partner play through the web server |
 | `tools/walkthrough.zig` | Plays the walkthroughs for `zig build walkthrough` |
 | `tools/fetch.zig` | Downloads a pinned file for the build, such as the open-source Zork stories |
+| `tools/compat.zig` | Plays every catalog story briefly for `zig build compat`, and compares with dfrotz |
 | `tools/screenshots/` | Scripts and notes for retaking this README's screenshots and phone animations |
 | `tests/walkthroughs/` | Walkthroughs and expected transcripts for Zork I-III |
 | [`docs/specifications/`](docs/specifications/README.md) | The Z-machine, Quetzal, MCP, and cookie specifications it follows |
@@ -547,6 +548,25 @@ releases, each with several seeds, sit side by side.
 `-Dwalkthrough=zork1` plays every script whose name starts with `zork1.`;
 `-Dwalkthrough=zork1.r88-840726` plays just that one. A missing manifest, script or
 story is skipped, and the step still passes.
+
+### Compatibility
+
+`zig build compat` plays every story file in [the Obsessively Complete
+Infocom Catalog](https://eblong.com/infocom/) (all but version 6, about
+200 releases, betas and samplers among them) with the same few commands,
+and compares each transcript with dfrotz's, ignoring whitespace (Frotz
+wraps its transcript) and the interpreter's version letter (`Z`, `F`).
+The stories are downloaded once into `compat-local/`, which git ignores;
+their SHA-256s are recorded there at first download and checked after.
+Builds of Frotz's dumb front end (`make dumb` in a Frotz checkout) give
+`dfrotz`; `-Dfrotz=<path>` names one not on the path, and without one
+zmachine plays alone. `-Dcompat=zork1` plays only the stories whose names
+start with `zork1`.
+
+The step fails where zmachine stops with an error or hangs and dfrotz
+plays on; other differences are reported. A few catalog files are broken
+(both interpreters stop), and some Zork Zero development builds use
+version 6 opcodes in a version 5 story.
 
 ## How it was made
 

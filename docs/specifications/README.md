@@ -17,6 +17,7 @@ External specifications zmachine relies on.
 
 | Title | Source | Why it applies |
 | --- | --- | --- |
+| The Z-Machine Standard 1.1, annotated (Jared Reisinger) | <https://zspec.jaredreisinger.com/> | Clarifications of the Standard and complete opcode tables, for `src/vm`; its source has no license, so it isn't copied. |
 | RFC 9110: HTTP Semantics | <https://www.rfc-editor.org/rfc/rfc9110> | Status codes, `Host`, `Origin`, and long-polling replies in `src/web`. |
 | JSON-RPC 2.0 | <https://www.jsonrpc.org/specification> | The message format MCP uses. |
 | EFF short word list 1 | <https://www.eff.org/dice> | The generated password's words; kept as `src/poly/eff_short_wordlist_1.txt` (CC BY 3.0). |

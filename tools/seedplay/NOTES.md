@@ -5,12 +5,12 @@ walkthrough script for each seed.
 
 ## Ground rules
 
-- Clean: know only what the game prints. Never read `games-local/`
-  walkthroughs or Invisiclues, `tests/walkthroughs-local/` scripts, maps,
+- Clean: know only what the game prints. Never read `local/stories/lost-treasures/`
+  walkthroughs or Invisiclues, `local/walkthroughs/zmachine/` scripts, maps,
   story source, or the inspector.
 - Open stories (Zork I r119, II r63, III r25 from `zig build stories`) go
-  in `tests/walkthroughs/` and may be committed; anything else stays in
-  `tests/walkthroughs-local/`.
+  in [`tests/walkthroughs/`](../../tests/walkthroughs/) and may be committed; anything else stays in
+  `local/walkthroughs/zmachine/`.
 - One command per line. Multi-object commands (`take book and candles`,
   `put all except lamp in case`) count as one; never chain commands with
   `.` or `then`.

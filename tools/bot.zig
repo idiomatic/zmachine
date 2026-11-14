@@ -6,7 +6,7 @@
 //! usage: bot <model> <tag> <turns> [--new] [--text] [--noask] [--reset]
 //!            [--ollama <url>] [--game <url>] [--dir <dir>]
 //!
-//! State is kept in `<dir>/<tag>.json` (default dir `runs-local`), so a
+//! State is kept in `<dir>/<tag>.json` (default dir `local/runs/zmachine`), so a
 //! later run with the same tag goes on with the same conversation and
 //! MCP session; `--new` starts a fresh one. The log, `<dir>/<tag>.log.jsonl`,
 //! is one JSON object per line (`init`, then `call`, `prose`, or `http`),
@@ -60,7 +60,7 @@ const Options = struct {
     reset: bool = false,
     ollama: []const u8 = "http://monolith:11434",
     game: []const u8 = "http://127.0.0.1:9675",
-    dir: []const u8 = "runs-local",
+    dir: []const u8 = "local/runs/zmachine",
 };
 
 fn parseArgs(args: []const []const u8) ?Options {

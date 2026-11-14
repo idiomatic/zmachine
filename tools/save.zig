@@ -12,7 +12,7 @@ const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
-const default_out = "tests/walkthroughs-local/dumberbots";
+const default_out = "local/walkthroughs/zmachine/dumberbots";
 
 /// The story's name: its file name up to the first dot.
 pub fn storyName(file: []const u8) []const u8 {

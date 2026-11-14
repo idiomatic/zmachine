@@ -435,7 +435,7 @@ test "ports default to 9675" {
 }
 
 test "the story name drops the directory and extension" {
-    try std.testing.expectEqualStrings("zork1.r119-880429", storyName("games/zork1.r119-880429.z3"));
+    try std.testing.expectEqualStrings("zork1.r119-880429", storyName("local/stories/historicalsource/zork1.r119-880429.z3"));
     try std.testing.expectEqualStrings("zork1", storyName("zork1"));
     try std.testing.expectEqualStrings(".z3", storyName("/x/.z3"));
 }

@@ -1,19 +1,18 @@
-*~
+# Build output
 .zig-cache/
 zig-out/
+
+# Editors and the system
+*~
+.DS_Store
+
+# What runs leave behind
 *.qzl
 transcript.txt
-.DS_Store
-copy-protection.md
-games/
-games-local/
-manuals/
-manuals-local/
-maps-local/
-journals-local/
 tools/screenshots/run/
-tests/walkthroughs-local/
-runs-local/
-compat-local/
 
-*.draft.md
+# Local resources, never committed: local/<kind>/<source>/; but local/'s
+# Zig and ZON files, the build that fetches what can be had again, are
+/local/*
+!/local/*.zig
+!/local/*.zon

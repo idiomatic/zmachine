@@ -1,0 +1,52 @@
+// What `zig build` in local/ fetches, and the root build's `zig build
+// stories`: each file at a pinned address and SHA-256, except the catalog,
+// whose hashes are recorded at first download.
+.{
+    // Zork I-III, open source (MIT, Copyright (c) 2025 Microsoft), from
+    // https://github.com/historicalsource at pinned commits.
+    .historicalsource = .{
+        .{ .name = "zork1", .version = "r119-880429", .commit = "97b7b3d68c075dd9af7da499c3e9690ada3471fd", .sha256 = "37084966477dff679282de42974b2077156b1bd68fad92a65d4ea94d8eb64d79" },
+        .{ .name = "zork2", .version = "r63-860811", .commit = "3da9661098809788a99cef00f00c865c6c204f96", .sha256 = "3ae7d5558943e9721f3e4b273c8a7faec1a03a604e1ae4ee1cde472c21cb24ac" },
+        .{ .name = "zork3", .version = "r25-860811", .commit = "3ec9ed412b5f3cafe65d83c727d07db1fe4a86a8", .sha256 = "b637a242865d059890184164ce8dec28554cc80901dcbf26c740b2d1ed0d4eb8" },
+    },
+    // The Obsessively Complete Infocom Catalog's story files (all but
+    // version 6), listed by its index page.
+    .eblong = "https://eblong.com/infocom/",
+    // Manuals from the Infocom Documentation Project, by their paths there.
+    .infodoc = "https://infodoc.plover.net/manuals/",
+    .manuals = .{
+        .{ .path = "amfv.pdf", .sha256 = "ef555a51c6e649a48b88abd0957aa0808f1c0c5f4750f986ceb4230401a16c06" },
+        .{ .path = "temp/arthur.pdf", .sha256 = "ee5eb0f0ff1865a8bae1b2be021a281e95732c1ad1c27598f327d236bfd7b71a" },
+        .{ .path = "temp/ballyhoo.pdf", .sha256 = "c2476956cad8eae9f746aba8ffa207e3315a1378c9620f4d4b24da5a186f3944" },
+        .{ .path = "beyondzo.pdf", .sha256 = "8ffac8044c01d31c2c4ec44bcbf0c946a90d6ec52f6667e0c19f537628937285" },
+        .{ .path = "temp/borderzo.pdf", .sha256 = "66ba1e98b9513730130a716f4b46342f6aaf65f8f5bdcc8e1b66e2290e824726" },
+        .{ .path = "bureaucr.pdf", .sha256 = "689439d5b63625ad77a5242b64b1d7a3fcd8494a88b26d64f91b0c987382b4ec" },
+        .{ .path = "temp/cutthroa.pdf", .sha256 = "fbf631886df1d37c83e7f2e3c52604d672aa707f626845be48afb2db9d6c3d0a" },
+        .{ .path = "temp/deadline.pdf", .sha256 = "304cc90de305c7a821dc9e457b6d9ae8824200f797b7b387971f518c9c8358db" },
+        .{ .path = "temp/enchante.pdf", .sha256 = "bbcf42b180e1d8076e8c2e1d24f7f1083f16825b429b6f03b02dab5051603ce6" },
+        .{ .path = "temp/hollywoo.pdf", .sha256 = "33a47f21d687c369e5e742b51535737cdc21f3f2e827a9956bc500b43ad6b2bc" },
+        .{ .path = "temp/infidel.pdf", .sha256 = "9fc673b1a3b40ffd9d3871c0523b1fecf04cddff77a35cc473d402c3c6a515e4" },
+        .{ .path = "temp/journey.pdf", .sha256 = "1c1b69042fca4ed716b0f6bf98da0ad93fc63c96b4fb7c3239295fdfea367bb2" },
+        .{ .path = "leather.pdf", .sha256 = "4a5e62ab5c94bfdd8a8a3c0355c39e3dd7afe092d81cefab4ebdebe77f116717" },
+        .{ .path = "temp/lurking.pdf", .sha256 = "a5a61151ea834a5948e0d4187b2228fe47afc430d5a9888baca7d3ba4e0ca865" },
+        .{ .path = "temp/moonmist.pdf", .sha256 = "67e9f37f0de8e25615470d49878dc9798e0f886f69f1924c3f740ee93b5503e8" },
+        .{ .path = "temp/nordandb.pdf", .sha256 = "b13fac428019736944ebcf1668c88d4a89a6f45f66a1fcf2488015ed6a8768d6" },
+        .{ .path = "planetfa.pdf", .sha256 = "3d9e8bcba61c02bc15803fbb38c0dd96b78f994d41fc96fe6fcc83f28425e657" },
+        .{ .path = "temp/plundere.pdf", .sha256 = "0ca88a01d501c8ac5a707ecc63c11c2b4c96362deaf7761dac38e9f842b09864" },
+        .{ .path = "temp/seastalk.pdf", .sha256 = "729e775149e957f49ac8bcf5797b0c4388e4837cd3519b68477754c521b597c6" },
+        .{ .path = "temp/sherlock.pdf", .sha256 = "1a1bcd5f5d2e987a3bce758f6079ab692f7a8be1091214b641529c413ffde569" },
+        .{ .path = "temp/sorcerer.pdf", .sha256 = "226b663fddab09492b8554d257bdfea98db8e659614e531332c1638feb5bd421" },
+        .{ .path = "temp/spellbre.pdf", .sha256 = "4228f3f4d9b033bd06ac7c25de0c14b7cd4603d864743c1154683f1fc66bdc1e" },
+        .{ .path = "temp/starcros.pdf", .sha256 = "99f423bc965bd1d737cb93a18eb40851f6160d5e8a16eaaa5b096828b1f1da08" },
+        .{ .path = "stationf.pdf", .sha256 = "0a92e76cd406280d0e26a603e682d3f0da4c16dcbdd79a5d416924f3c33193d4" },
+        .{ .path = "temp/suspect.pdf", .sha256 = "728c66febba35d476a963baf308b3f8cac8e58f3659056d7bebb29844f90548c" },
+        .{ .path = "temp/suspende.pdf", .sha256 = "a2f71008fc383c9d39ca249ec5891180f3d200dcb9cc1edd98f57ecc276176c9" },
+        .{ .path = "temp/trinity.pdf", .sha256 = "0d093ba18e953bd3b82ca8fad495e36fa5405fd3b5a0db902c49c9d6f4fe553c" },
+        .{ .path = "wishbrin.pdf", .sha256 = "5de91125a06586524eb7faa47c90b45d82f2a2d31f2fa611fbb94ae189b2e982" },
+        .{ .path = "temp/witness.pdf", .sha256 = "f31eb9928fd9bc1284edd300349b8f5921f62b7c7f9f323c69133907e3e20fed" },
+        .{ .path = "temp/zork0.pdf", .sha256 = "ad3e28baf0af072ad5576a03a89f65fb76b5370643333e8a44fc3175d3c67088" },
+        .{ .path = "zork1.pdf", .sha256 = "770e0a5122b363e0d9769b706f152a9bda2bce90391799968edee8eae7144d4a" },
+        .{ .path = "zork2.pdf", .sha256 = "df6de57736aed2819e7fb720658240e34aa2fc17a545925e759474d9c71c3a94" },
+        .{ .path = "zork3.pdf", .sha256 = "07982b64b070d98e1b86e774eeda22356d03ff330194206ace5d6faebd680767" },
+    },
+}

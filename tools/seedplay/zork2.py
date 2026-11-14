@@ -1,5 +1,5 @@
 # The Zork II plan for play.py: steps and the text each must print.
-STORY = 'games/zork2.r63-860811.z3'
+STORY = 'local/stories/historicalsource/zork2.r63-860811.z3'
 W = lambda d: f'walk through {d} wall'
 STEPS = [
     # The gazebo's tea things.

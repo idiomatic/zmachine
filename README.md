@@ -459,39 +459,39 @@ module imports only those listed in `build.zig`.
 
 | File | Contents |
 | --- | --- |
-| `src/main.zig` | Command line, setup and signal handling |
-| `src/commands.zig` | Console commands: `/lead`, `/clear`, `/mode`, `/password`, `/showpassword`, `/help`, `/who`, `/promote`, `/kick`, `/grant`, `/revoke`, `/say`, `/log` and `/invite` |
-| `src/vm/Machine.zig` | Processor: memory, stack, instruction decoding and opcodes; runs until input or a step limit |
-| `src/vm/ObjectTable.zig` | Object tree and property tables |
-| `src/vm/zstring.zig` | Z-string decoding, dictionary encoding, ZSCII/Unicode |
-| `src/vm/quetzal.zig` | Quetzal save files |
-| `src/vm/Display.zig` | What the machine draws on and reads from |
-| `src/vm/Storage.zig` | Where it keeps saved games and the transcript (the working directory) |
-| `src/vm/RecordingDisplay.zig`, `src/vm/test.zig` | Tests that run tiny assembled stories |
-| `src/console/Screen.zig` | Terminal windows, status line, styles and input |
-| `src/console/terminal.zig` | Window size, raw keys and Ctrl-C on POSIX and Windows |
-| `src/console/InputSource.zig` | Where the screen's input comes from |
-| `src/console/TerminalInput.zig` | Input straight from standard input, without `--web` |
-| `src/console/TestTerminal.zig`, `src/console/test.zig` | Tests of what the screen draws, through a small terminal emulator |
-| `src/hub/Hub.zig` | One game, many inputs: the keyboard and web commands, their replies, and the game text and status line players see |
-| `src/poly/Group.zig` | The rules of playing together: players, the leader, modes, kicks and inspector access |
-| `src/poly/Players.zig`, `Discussion.zig`, `Access.zig`, `AuditLog.zig` | Its parts: the players, the discussion, remote sessions and password guesses, the audit log |
-| `src/poly/world.zig` | The time and randomness the rules see, faked in tests |
-| `src/poly/Password.zig` | Passwords for remote players: three words from the EFF short word list |
-| `src/poly/eff_short_wordlist_1.txt` | The EFF short word list, embedded in the binary |
-| `src/protocol/root.zig` | The JSON the routes speak: each reply's type, shared by the server and the MCP server |
-| `src/inspector/Inspector.zig` | Map tracking and JSON snapshots for the web page |
-| `src/inspector/routes.zig` | Its routes: the page, snapshots and erasing the map |
-| `src/inspector/inspector.html` | The inspector's panels (a fragment the play page loads), embedded in the binary |
-| `src/web/web.zig` | Embedded HTTP server: who is asking, access rules, playing together, remote access and the audit log; other modules' routes (the inspector's) handed to it |
-| `src/web/play.html` | The play page, with the audit log panel and the inspector's dock, embedded in the binary |
-| `src/web/login.html` | The password page for remote players, embedded in the binary |
-| `src/mcp/mcp.zig` | MCP service (sessions behind `POST /mcp`) that lets an AI partner play through the web server |
-| `tools/walkthrough.zig` | Plays the walkthroughs for `zig build walkthrough` |
-| `tools/fetch.zig` | Downloads a pinned file for the build, such as the open-source Zork stories |
-| `tools/compat.zig` | Plays every catalog story briefly for `zig build compat`, and compares with dfrotz |
-| `tools/screenshots/` | Scripts and notes for retaking this README's screenshots and phone animations |
-| `tests/walkthroughs/` | Walkthroughs and expected transcripts for Zork I-III |
+| [`src/main.zig`](src/main.zig) | Command line, setup and signal handling |
+| [`src/commands.zig`](src/commands.zig) | Console commands: `/lead`, `/clear`, `/mode`, `/password`, `/showpassword`, `/help`, `/who`, `/promote`, `/kick`, `/grant`, `/revoke`, `/say`, `/log` and `/invite` |
+| [`src/vm/Machine.zig`](src/vm/Machine.zig) | Processor: memory, stack, instruction decoding and opcodes; runs until input or a step limit |
+| [`src/vm/ObjectTable.zig`](src/vm/ObjectTable.zig) | Object tree and property tables |
+| [`src/vm/zstring.zig`](src/vm/zstring.zig) | Z-string decoding, dictionary encoding, ZSCII/Unicode |
+| [`src/vm/quetzal.zig`](src/vm/quetzal.zig) | Quetzal save files |
+| [`src/vm/Display.zig`](src/vm/Display.zig) | What the machine draws on and reads from |
+| [`src/vm/Storage.zig`](src/vm/Storage.zig) | Where it keeps saved games and the transcript (the working directory) |
+| [`src/vm/RecordingDisplay.zig`](src/vm/RecordingDisplay.zig), [`src/vm/test.zig`](src/vm/test.zig) | Tests that run tiny assembled stories |
+| [`src/console/Screen.zig`](src/console/Screen.zig) | Terminal windows, status line, styles and input |
+| [`src/console/terminal.zig`](src/console/terminal.zig) | Window size, raw keys and Ctrl-C on POSIX and Windows |
+| [`src/console/InputSource.zig`](src/console/InputSource.zig) | Where the screen's input comes from |
+| [`src/console/TerminalInput.zig`](src/console/TerminalInput.zig) | Input straight from standard input, without `--web` |
+| [`src/console/TestTerminal.zig`](src/console/TestTerminal.zig), [`src/console/test.zig`](src/console/test.zig) | Tests of what the screen draws, through a small terminal emulator |
+| [`src/hub/Hub.zig`](src/hub/Hub.zig) | One game, many inputs: the keyboard and web commands, their replies, and the game text and status line players see |
+| [`src/poly/Group.zig`](src/poly/Group.zig) | The rules of playing together: players, the leader, modes, kicks and inspector access |
+| [`src/poly/Players.zig`](src/poly/Players.zig), [`Discussion.zig`](src/poly/Discussion.zig), [`Access.zig`](src/poly/Access.zig), [`AuditLog.zig`](src/poly/AuditLog.zig) | Its parts: the players, the discussion, remote sessions and password guesses, the audit log |
+| [`src/poly/world.zig`](src/poly/world.zig) | The time and randomness the rules see, faked in tests |
+| [`src/poly/Password.zig`](src/poly/Password.zig) | Passwords for remote players: three words from the EFF short word list |
+| [`src/poly/eff_short_wordlist_1.txt`](src/poly/eff_short_wordlist_1.txt) | The EFF short word list, embedded in the binary |
+| [`src/protocol/root.zig`](src/protocol/root.zig) | The JSON the routes speak: each reply's type, shared by the server and the MCP server |
+| [`src/inspector/Inspector.zig`](src/inspector/Inspector.zig) | Map tracking and JSON snapshots for the web page |
+| [`src/inspector/routes.zig`](src/inspector/routes.zig) | Its routes: the page, snapshots and erasing the map |
+| [`src/inspector/inspector.html`](src/inspector/inspector.html) | The inspector's panels (a fragment the play page loads), embedded in the binary |
+| [`src/web/web.zig`](src/web/web.zig) | Embedded HTTP server: who is asking, access rules, playing together, remote access and the audit log; other modules' routes (the inspector's) handed to it |
+| [`src/web/play.html`](src/web/play.html) | The play page, with the audit log panel and the inspector's dock, embedded in the binary |
+| [`src/web/login.html`](src/web/login.html) | The password page for remote players, embedded in the binary |
+| [`src/mcp/mcp.zig`](src/mcp/mcp.zig) | MCP service (sessions behind `POST /mcp`) that lets an AI partner play through the web server |
+| [`tools/walkthrough.zig`](tools/walkthrough.zig) | Plays the walkthroughs for `zig build walkthrough` |
+| [`local/build.zig`](local/build.zig), [`local/fetch.zig`](local/fetch.zig), [`local/sources.zon`](local/sources.zon) | Fetch what `local/` holds that can be had again: Zork I–III, the catalog, manuals; the root build's `zig build stories` uses them |
+| [`tools/compat.zig`](tools/compat.zig) | Plays every catalog story briefly for `zig build compat`, and compares with dfrotz |
+| [`tools/screenshots/`](tools/screenshots/) | Scripts and notes for retaking this README's screenshots and phone animations |
+| [`tests/walkthroughs/`](tests/walkthroughs/) | Walkthroughs and expected transcripts for Zork I-III |
 | [`docs/specifications/`](docs/specifications/README.md) | The Z-machine, Quetzal, MCP, and cookie specifications it follows |
 
 ## Testing
@@ -504,12 +504,13 @@ Zork I, II and III are [open source](https://opensource.microsoft.com/blog/2025/
 under the MIT license (Copyright (c) 2025 Microsoft). `zig build stories`
 downloads their compiled story files from
 [historicalsource](https://github.com/historicalsource/zork1) at a pinned
-commit, checks each against a pinned SHA-256, and puts them in `games/`,
-named for their release and serial number:
+commit, checks each against a pinned SHA-256, and puts them in
+`local/stories/historicalsource/`, named for their release and serial
+number:
 
 ```
 zig build stories
-./zig-out/bin/zmachine games/zork1.r119-880429.z3
+./zig-out/bin/zmachine local/stories/historicalsource/zork1.r119-880429.z3
 ```
 
 ### Walkthroughs
@@ -519,15 +520,15 @@ Zork I-III, written for this project, are in `tests/walkthroughs/` with
 their expected transcripts; the build downloads the stories for them
 (`-Dstories=false` skips that, as when offline). Others you keep
 locally, since most story files and walkthroughs can't be shared here:
-put the stories in `games-local/` and the scripts in
-`tests/walkthroughs-local/`, and list them in
-`tests/walkthroughs-local/walkthroughs.zon`:
+put the stories in `local/stories/<source>/` and the scripts in
+`local/walkthroughs/zmachine/`, and list them in
+`local/walkthroughs/zmachine/walkthroughs.zon`:
 
 ```zig
 .{
     .{
-        .script = "zork1.r88-840726.txt", // in tests/walkthroughs-local/
-        .story = "games-local/zork1-r88.z3",
+        .script = "zork1.r88-840726.txt", // in local/walkthroughs/zmachine/
+        .story = "local/stories/collection/zork1-r88.z3",
         .seeds = .{15},
         .expect = "Your score is 350 (total of 350 points)",
     },
@@ -556,8 +557,11 @@ Infocom Catalog](https://eblong.com/infocom/) (all but version 6, about
 200 releases, betas and samplers among them) with the same few commands,
 and compares each transcript with dfrotz's, ignoring whitespace (Frotz
 wraps its transcript) and the interpreter's version letter (`Z`, `F`).
-The stories are downloaded once into `compat-local/`, which git ignores;
-their SHA-256s are recorded there at first download and checked after.
+`zig build eblong` in `local/` downloads the stories into
+`local/stories/eblong/`, which git ignores, recording their SHA-256s at
+first download and checking them after; [`local/build.zig`](local/build.zig)
+fetches Zork I–III and some manuals too. Each run's transcripts are in
+`local/runs/compat/`.
 Builds of Frotz's dumb front end (`make dumb` in a Frotz checkout) give
 `dfrotz`; `-Dfrotz=<path>` names one not on the path, and without one
 zmachine plays alone. `-Dcompat=zork1` plays only the stories whose names
@@ -567,6 +571,16 @@ The step fails where zmachine stops with an error or hangs and dfrotz
 plays on; other differences are reported. A few catalog files are broken
 (both interpreters stop), and some Zork Zero development builds use
 version 6 opcodes in a version 5 story.
+
+### Local files
+
+What can't be committed, mostly Infocom's copyrighted stories, manuals and
+maps, lives in `local/<kind>/<source>/`, which git ignores but for its
+Zig and ZON files: [`local/build.zig`](local/build.zig) fetches what can
+be had again (`zig build` there, or one source:
+`zig build historicalsource`, `eblong`, `infodoc`), each file checked
+against a SHA-256 in [`local/sources.zon`](local/sources.zon) or recorded
+at its first download.
 
 ## How it was made
 

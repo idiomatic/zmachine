@@ -20,7 +20,7 @@ alt text when the content changes.
 ## Ground rules
 
 - Use the open Zork I, release 119 (`zig build stories` puts it in
-  `games/`), never the local Infocom collection.
+  `local/stories/historicalsource/`), never the local Infocom collection.
 - Names are Ana (the person), Claude and Gemini. The password is
   `demo-only-words` via `ZMACHINE_PASSWORD`; it never appears on screen.
 - Desktop shots listen on 127.0.0.1 only. The phone GIFs join over this
@@ -31,7 +31,7 @@ alt text when the content changes.
 - Recordings (see the memory note on pacing): start from a freshly
   started game, type into the command box at a human pace (never tap
   suggestion buttons), and pause at least 1 second before sending.
-- `maps-local/` may guide routes and the inspector layout; never use it
+- `local/maps/zmachine/` may guide routes and the inspector layout; never use it
   while playing as a partner.
 - Stop every demo game afterward: `pkill -f "zmachine --seed 1"` and
   `pkill -f "sleep 100000"`.
@@ -67,9 +67,9 @@ done
 for f in out/*.png; do cwebp -quiet -q 85 "$f" -o ../docs/screenshots/$(basename "$f" .png).webp; done
 ```
 
-`inspector-js.txt` pins the 19 surface rooms as Infocom's map draws them
-(`zork1.r119-880429.surface-pins.json`, room numbers in
-`maps-local/NOTES.md`), widens the map panel and fits the whole map. If
+[`inspector-js.txt`](inspector-js.txt) pins the 19 surface rooms as Infocom's map draws them
+([`zork1.r119-880429.surface-pins.json`](zork1.r119-880429.surface-pins.json), room numbers in
+`local/maps/zmachine/NOTES.md`), widens the map panel and fits the whole map. If
 room numbers change with another release, rebuild the pins.
 
 ## Phone GIFs

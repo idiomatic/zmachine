@@ -1,6 +1,12 @@
 # Specifications
 
-External specifications zmachine relies on.
+The specifications zmachine relies on: its own, and the external ones it follows.
+
+## Written for zmachine
+
+| Title | Where | Why it applies |
+| --- | --- | --- |
+| Z-machine specification, with a discrepancy register | [zspec](zspec/README.md) | The Standard restated in diagrams and tables, beside what Frotz, MojoZork, zvm, xyppy, and Infocom's games do, and zmachine's status for each item. |
 
 ## Collected
 

@@ -120,7 +120,7 @@ Keep this file up to date with every specification.
     * `-Dwalkthrough=<name>` plays that name or names starting `<name>.`; `-Dupdate-walkthroughs` saves transcripts; anything missing is skipped and passes.
     * [`tests/walkthroughs/`](tests/walkthroughs/) is checked out without line-ending conversion ([`.gitattributes`](.gitattributes)).
 * `zig build compat` ([`tools/compat.zig`](tools/compat.zig)): plays each story in `local/stories/eblong/` with the same few commands and seed 1 (in `local/runs/compat/`), and compares its transcript with `dfrotz -I 6`'s (`-Dfrotz`, else `dfrotz` on the path, else none), ignoring whitespace and the interpreter version letter; fails where zmachine errors or hangs and dfrotz doesn't. `-Dcompat=<prefix>` plays only those.
-* GitHub Actions: formatting, build, unit tests, and walkthroughs on each target; then stripped ReleaseSafe archives (with [README](README.md) and [LICENSE](LICENSE)), published as a release by a `v<version>` tag matching [`build.zig.zon`](build.zig.zon).
+* GitHub Actions (not for pushes changing only `*.md`, `docs/`, or `LICENSE`; tags always): formatting, build, unit tests, and walkthroughs on each target; then stripped ReleaseSafe archives (with [README](README.md) and [LICENSE](LICENSE)), published as a release by a `v<version>` tag matching [`build.zig.zon`](build.zig.zon).
 
 ## Rules
 

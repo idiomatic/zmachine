@@ -5,7 +5,7 @@
 ### Added
 
 * Reference specifications (Z-machine, Quetzal, MCP, cookies) collected in [docs/specifications](docs/specifications/README.md).
-* Map: a conditional exit (one direction, several destinations) is drawn dashed; the map model and layout move into `Map.zig` ahead of a markdown export of the game with progressive maps.
+* Map: a conditional exit (one direction, several destinations) is drawn dashed; the map model and layout move into [`Map.zig`](src/inspector/Map.zig) ahead of a markdown export of the game with progressive maps.
 * Console: resizing the terminal refits the display at once (SIGWINCH), instead of keeping the size at startup.
 * Session journal (`GET /journal`): game text, commands, thoughts, messages, changes among players, and rooms entered, in order and never cleared, ahead of a markdown export.
 * Session markdown: commands as `### n · author · `command` · +m:ss` headings over the game's text as a quote, thoughts and messages as a chat log, events as quoted italics, times since the game began.

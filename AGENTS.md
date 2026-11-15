@@ -11,7 +11,7 @@ Keep this file up to date with every specification.
 * A restart clears the game text kept for players (`/transcript`, MCP `read_recent`); offsets stay valid. `save`/`restore` carry no text.
 * Beyond Zork (by release and serial) draws code page 437's arrows (24, 25) and box lines (179–218), which it prints for an IBM PC without pictures, as Unicode.
 * `--seed <n>`: Frotz's generator, so transcripts match `dfrotz -s <n> -I 6 -T`.
-* `-h`/`--help`; `--version` prints `build.zig.zon`'s version (0.4.2).
+* `-h`/`--help`; `--version` prints [`build.zig.zon`](build.zig.zon)'s version (0.4.2).
 
 ## Terminal
 
@@ -35,7 +35,7 @@ Keep this file up to date with every specification.
 
 * The current room is global variable 0.
 * Live object tree and details (one Objects tab; a draggable boundary resizes them, remembered), attributes, properties and globals with recent changes highlighted, command history (with a Copy button for its commands), and a map of visited rooms laid out by direction.
-* The map model and grid layout live in `src/inspector/Map.zig`, for the page and later the markdown export. A direction from a room that has led to more than one place marks those moves conditional (dashed).
+* The map model and grid layout live in [`src/inspector/Map.zig`](src/inspector/Map.zig), for the page and later the markdown export. A direction from a room that has led to more than one place marks those moves conditional (dashed).
 * Map: pan, zoom, Fit (all, or follow the player), Rearrange (`POST /rearrange`: a repeatable search, from the automatic layout, for few direction violations, crossings, lines under rooms, and short lines; the result pins every room; one Undo), Reset (erase and restart from the current room; `POST /erase-map`, logged); its controls are symbolic buttons in the tab bar (− and + joined).
     * One line per pair of rooms; an arrowhead if traveled one way only; faded gradually where it passes under a room it doesn't connect.
     * A move is labeled with its direction at its starting end: up, down, in and out always; compass directions only where the layout disagrees.

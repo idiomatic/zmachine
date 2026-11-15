@@ -29,7 +29,7 @@ walkthrough script for each seed.
    since a wrong truncation silently loses earlier commands.
 2. When something random goes wrong, insert `wait`s before the step, or
    earlier, rather than accepting a death. Write the route as a plan of
-   steps with the text each must print (`play.py` and `zork2.py` here), so
+   steps with the text each must print ([`play.py`](play.py) and [`zork2.py`](zork2.py) here), so
    other seeds can be played by the same plan.
 3. For each seed, search variants: the base route, alternatives (where an
    item is picked up), and a few extra `look`s or attack lines at random

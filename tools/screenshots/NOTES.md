@@ -8,11 +8,11 @@ their files in `run/` (ignored by git).
 
 | Image | Made by |
 | --- | --- |
-| `terminal.webp`, `style-*.webp` | The user's own Terminal screenshots; ask for new ones |
-| `play-{light,dark}.webp` | Headless Brave, `stage.py play` + `capture.py` |
-| `inspector-{light,dark}.webp` | Headless Brave, `stage.py inspector` + `capture.py` + `inspector-js.txt` |
-| `log-{light,dark}.webp` | Headless Brave, `stage.py log` + `capture.py` |
-| `phone-{light,dark}.gif` | iPhone 17 simulator, recorded, then `retime.py` |
+| [`terminal.webp`](../../docs/screenshots/terminal.webp), `style-*.webp` | The user's own Terminal screenshots; ask for new ones |
+| `play-{light,dark}.webp` | Headless Brave, `stage.py play` + [`capture.py`](capture.py) |
+| `inspector-{light,dark}.webp` | Headless Brave, `stage.py inspector` + [`capture.py`](capture.py) + [`inspector-js.txt`](inspector-js.txt) |
+| `log-{light,dark}.webp` | Headless Brave, `stage.py log` + [`capture.py`](capture.py) |
+| `phone-{light,dark}.gif` | iPhone 17 simulator, recorded, then [`retime.py`](retime.py) |
 
 Each light/dark pair sits in a `<picture>` in the README; update the
 alt text when the content changes.
@@ -46,7 +46,7 @@ and Gemini (`X-Player` with `zmachine-mcp/<version>`).
 - `play` (port 9080): mailbox, window, Living Room; three thoughts and
   Ana's "Agreed, lamp first."
 - `inspector` (port 9082): the whole surface walkthrough
-  (`tests/walkthroughs/zork1.r119-880429.surface.txt`).
+  ([`tests/walkthroughs/zork1.r119-880429.surface.txt`](../../tests/walkthroughs/zork1.r119-880429.surface.txt)).
 - `log` (port 9081): commands, the lead passed to Claude and back, Ana
   opening the inspector and granting it to Claude, Claude reading it.
 
@@ -99,7 +99,7 @@ room numbers change with another release, rebuild the pins.
    (`--fade=black` for dark). Repeat with `./phone-reset.sh dark`, and
    put the simulator back with `xcrun simctl ui booted appearance light`.
 
-`retime.py` turns the recording (frames only on change, at the pace the
+[`retime.py`](retime.py) turns the recording (frames only on change, at the pace the
 tools ran) into a GIF89a at 390 px: it reads the text in the command and
 message boxes, so typing plays at about 0.22 s a character, a box that
 empties is a send with 1.5 s before it, a reply gets 1.8 s to read, cursor

@@ -379,7 +379,7 @@ The first prints only what the game printed; the second reprints the latest game
 
 > You are playing a text adventure game such as Zork. Each turn, reply with exactly one JSON object and nothing else: {"command": "open mailbox", "thought": "why you chose it"}. The command is one short game command, a verb and an object. I will answer with what the game printed. If a command is not understood, use simpler words. If you forget what happened, reply {"command": "look"}.
 
-The program (`tools/relay.zig`, built with `zig build tools`; `relay <model> --turns 50`) parses the reply, sends the `command`, and sends the `thought` (optional) as a `kind: "thought"` post to `POST /say` so the others can follow.
+The program ([`tools/relay.zig`](tools/relay.zig), built with `zig build tools`; `relay <model> --turns 50`) parses the reply, sends the `command`, and sends the `thought` (optional) as a `kind: "thought"` post to `POST /say` so the others can follow.
 
 ### Web routes
 
@@ -454,8 +454,8 @@ cannot send commands or read the game.
 
 ## Layout
 
-Each folder under `src/` is a Zig module, built and tested on its own; a
-module imports only those listed in `build.zig`.
+Each folder under [`src/`](src/) is a Zig module, built and tested on its own; a
+module imports only those listed in [`build.zig`](build.zig).
 
 | File | Contents |
 | --- | --- |
@@ -518,7 +518,7 @@ zig build stories
 ### Walkthroughs
 
 `zig build walkthrough` plays two sets of walkthroughs. Short ones for
-Zork I-III, written for this project, are in `tests/walkthroughs/` with
+Zork I-III, written for this project, are in [`tests/walkthroughs/`](tests/walkthroughs/) with
 their expected transcripts; the build downloads the stories for them
 (`-Dstories=false` skips that, as when offline). Others you keep
 locally, since most story files and walkthroughs can't be shared here:
@@ -544,9 +544,9 @@ walkthrough -Dupdate-walkthroughs`.
 
 A script is named for its story, the release and serial number it was
 written for (the game prints them at the start), and optionally what it
-covers: `zork1.r88-840726.txt`, `zork1.r119-880429.opening.txt`. Playing
+covers: `zork1.r88-840726.txt`, [`zork1.r119-880429.opening.txt`](tests/walkthroughs/zork1.r119-880429.opening.txt). Playing
 it on another release fails. Its transcripts add the seed, such as
-`zork1.r119-880429.opening.seed1.expected`, so scripts for several
+[`zork1.r119-880429.opening.seed1.expected`](tests/walkthroughs/zork1.r119-880429.opening.seed1.expected), so scripts for several
 releases, each with several seeds, sit side by side.
 `-Dwalkthrough=zork1` plays every script whose name starts with `zork1.`;
 `-Dwalkthrough=zork1.r88-840726` plays just that one. A missing manifest, script or
@@ -593,5 +593,5 @@ zmachine was written with [Claude](https://claude.com/).
 [BSD 3-Clause](LICENSE)
 
 The [EFF short word list](https://www.eff.org/dice)
-(`src/poly/eff_short_wordlist_1.txt`) is by the Electronic Frontier Foundation,
+([`src/poly/eff_short_wordlist_1.txt`](src/poly/eff_short_wordlist_1.txt)) is by the Electronic Frontier Foundation,
 under [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/us/).

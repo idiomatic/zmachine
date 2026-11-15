@@ -13,6 +13,7 @@ What's planned for zmachine, and what playing it with small models has shown. Wh
 | 5 | Rerun the evaluation, then script it | [Evaluating small models](#evaluating-small-models) |
 | Any time | The style popover's remaining items, minimum panel sizes | [Web app](#web-app) |
 | Any time | The debugger | [Inspector](#inspector) |
+| Any time | Interpreter fixes and decisions; plain output and timed input | [Interpreter](#interpreter) |
 | Later | HTTPS, saves per player, a route table, other frontends | [Later](#later) |
 
 ## Thinking together
@@ -153,6 +154,14 @@ The debugger, under the inspector's rules for AI partners:
 1. A read-only view of the stack, locals, and program counter, captured whenever the game waits for input.
 2. Pause and step through instructions, with a disassembly from the VM's decoder; pausing stops the game for everyone, so it's posted to the discussion.
 3. Breakpoints; perhaps memory edits.
+
+## Interpreter
+
+Open entries in the spec's [register](docs/specifications/zspec/Discrepancies.md), each described there:
+
+- **Fixes:** D9.2 (`restart` keeps styles, colors, and the window; a V3 `restore` keeps the upper window), D10.2 (stream 3 stores ZSCII 0 and undefined codes), D10.3 (`read_char` returns raw UTF-8 bytes), D3.1 (a one-character shift survives a space), D7.1 (object 0 is fatal), and `erase_window −2` resetting the cursors, which the Standard asks only of version 6 ([§9.3](docs/specifications/zspec/09_Screen_model.md#93-window-opcodes)).
+- **Decisions,** since they change how games behave: D8.1 (`?` in typed input, as in Zork I's `grue?`), D8.2 (undo in versions 1–4), and D2.2 (checking the game's writes to the header).
+- **Larger work:** plain output that shows the status line and upper window (D9.5, [§9.9](docs/specifications/zspec/09_Screen_model.md#99-zmachines-plain-output)), and timed input, for D10.4 and real-time games.
 
 ## Later
 

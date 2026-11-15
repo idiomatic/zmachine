@@ -14,6 +14,7 @@ What's planned for zmachine, and what playing it with small models has shown. Wh
 | Any time | The style popover's remaining items, minimum panel sizes | [Web app](#web-app) |
 | Any time | The debugger | [Inspector](#inspector) |
 | Any time | Interpreter fixes and decisions; plain output and timed input | [Interpreter](#interpreter) |
+| 6 | Version 6: text first, then pictures on the play page | [Version 6](#version-6) |
 | Later | HTTPS, saves per player, a route table, other frontends | [Later](#later) |
 
 ## Thinking together
@@ -162,6 +163,57 @@ Open entries in the spec's [register](docs/specifications/zspec/Discrepancies.md
 - **Fixes:** D9.2 (`restart` keeps styles, colors, and the window; a V3 `restore` keeps the upper window), D10.2 (stream 3 stores ZSCII 0 and undefined codes), D10.3 (`read_char` returns raw UTF-8 bytes), D3.1 (a one-character shift survives a space), D7.1 (object 0 is fatal), and `erase_window −2` resetting the cursors, which the Standard asks only of version 6 ([§9.3](docs/specifications/zspec/09_Screen_model.md#93-window-opcodes)).
 - **Decisions,** since they change how games behave: D8.1 (`?` in typed input, as in Zork I's `grue?`), D8.2 (undo in versions 1–4), and D2.2 (checking the game's writes to the header).
 - **Larger work:** plain output that shows the status line and upper window (D9.5, [§9.9](docs/specifications/zspec/09_Screen_model.md#99-zmachines-plain-output)), and timed input, for D10.4 and real-time games.
+
+## Version 6
+
+Infocom's graphical games, which zmachine refuses today (`UnsupportedVersion`). Text first, as dfrotz plays them; then pictures on the play page.
+
+### Stories and media
+
+| Item | Rule |
+| --- | --- |
+| Stories | The PC releases (Masterpieces, or LTOI2 for Shogun): Zork Zero r393-s890714, Shogun r322-s890706, Journey r83-s890706, Arthur r74-s890714; ZipTest r12 and r13 (Infocom's yzip tests) |
+| Catalog | `eblong` fetches `.z6` files too ([`local/fetch.zig`](local/fetch.zig): `isStoryName`), so `zig build compat` plays them against dfrotz |
+| Pictures | The IF Archive's Blorb files (`infocom/media/blorb/`: `ZorkZero.blb`, `Shogun.blb`, `Journey.blb`, `Arthur.blb`): a new `ifarchive` source in [`local/sources.zon`](local/sources.zon), at pinned SHA-256s, into `local/media/ifarchive/` |
+| Finding them | `--blorb <file>`, else `<story>.blb` beside the story; none means no pictures, and the header says so |
+| Specifications | Collected into [docs/specifications](docs/specifications/README.md): Infocom's `spec-yzip.txt` and `zip-xzip-yzip-1989.pdf` (from the catalog), Blorb 2.0 (with the Infocom extension), and the BPAL extension if palettes are used; [AGENTS.md](AGENTS.md)'s references gain Blorb |
+
+### The machine
+
+| Item | Rule |
+| --- | --- |
+| Loading | Packed addresses with the routine and string offsets (0x28, 0x2A); start by calling the main routine at 0x06; V6's header fields, the font width and height (0x26, 0x27) included |
+| Opcodes | Every V6 opcode and V6 form: `set_window`, `split_window`, `erase_window`, `erase_line`, `set_cursor` (−1 and −2), `get_cursor`, `set_colour` and `set_font` with a window, `pull` with a stack, `push_stack`, `pop_stack`, `move_window`, `window_size`, `window_style`, `get_wind_prop`, `put_wind_prop`, `scroll_window`, `set_margins`, `print_form`, `output_stream 3` with a width, `read_mouse`, `mouse_window`, `make_menu` (no menus: doesn't branch), `buffer_screen`, and the picture opcodes ([D5.4](docs/specifications/zspec/Discrepancies.md)'s stand-ins become V5-only) |
+| Windows in the VM | The eight windows, their 16 properties, cursors, margins, wrapping, line counts for `[MORE]`, and newline interrupts live in `vm`, so the game behaves the same with and without `--web` and on any display |
+| Fixed pitch | Every character is one font width, so layout never waits on a frontend |
+| Display | `Display` gains drawing primitives in the manner of Frotz's `os_*` layer: a text run at a window position, fill, scroll an area, draw and measure a picture, read the mouse; V1–5, 7, and 8 keep today's calls |
+| Interpreter number | 6 (IBM PC), as for other versions ([D2.1](docs/specifications/zspec/Discrepancies.md)), which suits the PC releases; Frotz picks one per release (`fastmem.c`: `restart_header`) |
+| Per-game behavior | Only what the PC releases need, each a register row: Zork Zero r393 counts newline interrupts after the line (`screen.c`: `screen_new_line`); Frotz's other cases are for Mac, Amiga, and development releases (`screen.c`: `update_attributes`, `z_get_wind_prop`, `z_put_wind_prop`; `fastmem.c`) |
+| Pictures | A Blorb reader in `vm` (`std` only), since `picture_data` needs sizes: `Pict` resources, PNG and JPEG sizes, `Reso` scaling, `RelN`; picture 0 reports the count and release; Frotz's border pieces (`screen.c`: `mapper`) checked against these files |
+| Save and undo | Quetzal as now; V6's `save` and `restore` with a table save that table |
+
+### Units and frontends
+
+| Item | Rule |
+| --- | --- |
+| Without pictures | One unit is one character cell (font 1×1, as dfrotz); the screen is the terminal's size at start; Flags 1 bit 1 and Flags 2 bit 3 clear |
+| With pictures | Units are pixels of the Blorb's standard window (`Reso`), at a font size measured from Infocom's MS-DOS yzip interpreter; chosen at start, only with `--web` and a Blorb |
+| Console | Draws each window in cells (x ÷ font width, y ÷ font height), scrolling a window by redrawing it unless it spans the screen's width; pictures as their description where the Blorb has one (Journey's), else nothing |
+| Play page | The Game tab draws the windows to scale, pictures from `GET /picture/<n>` (PNG from the Blorb; local and logged-in clients); at 860 px wide or less, the text view without pictures |
+| Players' text | `/transcript`, the journal, and MCP replies take windows with the transcript attribute; the Game tab's status line takes the text windows above them, decided per game |
+| Mouse | Flags 2 bit 5 clear at first; later, clicks on the play page reach `read_mouse` and `read` terminators 253 and 254 (Journey's and Zork Zero's menus) |
+| Timed input | From [Interpreter](#interpreter), where a game needs it |
+| Terminal pictures | Later: kitty, iTerm2, or sixel graphics |
+
+### Steps
+
+1. **Specification:** collect the specifications above; expand the zspec's V6 items from brief to full, with a register row for each question, and drop "version 6 is kept brief" from [its AGENTS.md](docs/specifications/zspec/AGENTS.md).
+2. **Text-only machine:** loading, the opcodes, the windows in cells, no pictures; ZipTest's yzip tests pass what applies, and `zig build compat` matches dfrotz on the catalog's `.z6` files.
+3. **Console:** the windows, styles, colors, `[MORE]`, and resizing as for other versions.
+4. **Walkthroughs:** one script per game in `local/walkthroughs/zmachine/`, from the walkthroughs in `local/stories/lost-treasures/`, each ending on the game's final text, with and without `--web`; the inspector's map checked (the current room as global 0).
+5. **Playing together:** the players' text, the status line, and MCP replies for each game.
+6. **Pictures:** the Blorb reader, pixel units, the play page's drawing, and `GET /picture/<n>`.
+7. **Later:** the mouse, terminal pictures, and other releases (Mac and Amiga, with Frotz's cases for them).
 
 ## Later
 

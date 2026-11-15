@@ -38,7 +38,7 @@ Players rate each other's thoughts and messages so good ideas surface; independe
 | Item | Rule |
 | --- | --- |
 | Votes | 👍 or 👎 on a thought or message: one per player per post, changeable or withdrawn, never on one's own |
-| Route | `POST /vote` with the post's number and `up`, `down` or `none`; `/discussion` posts carry `votes` (name and direction) |
+| Route | `POST /vote` with the post's number and `up`, `down`, or `none`; `/discussion` posts carry `votes` (name and direction) |
 | Records | Logged; a kick removes the kicked player's votes, a leaver's stay |
 | Play page | Buttons under each post, the tally (`+n −m`) between, one's own vote highlighted, voters in the tooltip; suggestion buttons show their post's tally, the best-rated gets ★; wraps at phone width; positive tallies stand out, negative ones fade |
 | Leader | Weighs the ratio, as guidance, not a rule |
@@ -57,7 +57,7 @@ Checks: server tests (one vote per voter and post, a revote replaces it, `none` 
 | `--quit ignore` | A web `quit` never exits; for solo play with nobody to restart the server |
 | Console | A `quit` typed at the console always exits |
 | History | A restart gets an entry in the inspector's History |
-| End prompt | `undo` joins `restart`, `restore` and `quit` |
+| End prompt | `undo` joins `restart`, `restore`, and `quit` |
 | Map | Clearing it on restart: deferred |
 
 ## AI partners
@@ -106,7 +106,7 @@ What the [evaluation](#what-the-runs-show) suggests:
 
 ### Out of bounds
 
-- **Rejected:** anything that solves the story or stands in for the discussion: verb lists in `get_help`, dropping others' posts from replies, derived results, repeat warnings, "tried here" lists, exit names, verb hints from the dictionary. A model short of memory, vocabulary or a way forward asks the others.
+- **Rejected:** anything that solves the story or stands in for the discussion: verb lists in `get_help`, dropping others' posts from replies, derived results, repeat warnings, "tried here" lists, exit names, verb hints from the dictionary. A model short of memory, vocabulary, or a way forward asks the others.
 - **Not in scope:** remote AI partners on other machines; changing the full profile's behavior.
 
 ### Three vocabularies
@@ -125,7 +125,7 @@ A model must keep each pair apart:
 | Discussion | `/lead`, `/mode`, `/password`, `/showpassword` | Console only, never commands |
 | Tools | `send_command`, simple and full | The same job; the simple one also takes a thought |
 | Tools | `read_recent` / game `look` | The tool reads without moving; `look` is a move |
-| Tools | `read_recent` / `read_game` / `wait_for_player` | `read_game` adds status, leadership and players; `wait_for_player` is `read_game` after waiting |
+| Tools | `read_recent` / `read_game` / `wait_for_player` | `read_game` adds status, leadership, and players; `wait_for_player` is `read_game` after waiting |
 | Tools | `tell_players` / `share_thoughts` | `share_thoughts` attaches up to 8 suggested commands |
 | Tools | `get_help` / `introduce_self` | Game commands, or naming yourself (full profile only) |
 
@@ -150,7 +150,7 @@ The per-part tweaks are built (see [AGENTS.md](AGENTS.md)); what remains:
 
 The debugger, under the inspector's rules for AI partners:
 
-1. A read-only view of the stack, locals and program counter, captured whenever the game waits for input.
+1. A read-only view of the stack, locals, and program counter, captured whenever the game waits for input.
 2. Pause and step through instructions, with a disassembly from the VM's decoder; pausing stops the game for everyone, so it's posted to the discussion.
 3. Breakpoints; perhaps memory edits.
 
@@ -220,7 +220,7 @@ Three runs each, coached from vague hints to specific ones to exact commands.
 - **Hints:** vague ones worked about 4 times in 10, specific ones usually, exact commands unless the model wasn't where the hint assumed. Hints naming the room to expect after each step were followed; long routes weren't.
 - **Asking pays:** qwen3:14b, qwen3:8b and gpt-oss asked in most runs and got help within a batch; the others looped 40 to 100 moves first.
 - **Memory is short:** `bot` sends the last 16 messages (8,192 tokens), so a persistent model keeps about 8 actions, and after a restart it repeated its early mistakes. A post reaches a model only in its next reply, so a try's first move is made without it.
-- **Vocabulary:** `use`, `wield`, `shine`, `inspect`, `look at`, `go upstairs` and `climb stairs` failed; refusals differ in wording and were rarely read.
+- **Vocabulary:** `use`, `wield`, `shine`, `inspect`, `look at`, `go upstairs`, and `climb stairs` failed; refusals differ in wording and were rarely read.
 - **Reasoning models:** deepseek-r1 never called a tool and wrote long plans; qwen3:14b took up to 90 seconds a turn in the dark.
 - **Self-direction:** gpt-oss restarted the game itself twice after dying; Knowitall's gemma4 typed `restart` at the troll, gave up on it until told to keep attacking, and was twice blocked from the platinum bar by "Your load is too heavy".
 - **Plain text works:** `relay gemma3:12b` played 50 turns with no parse failure, but scored 0 and never left West of House.

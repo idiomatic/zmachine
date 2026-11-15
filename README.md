@@ -1,7 +1,7 @@
 # zmachine
 
 A Z-machine interpreter written in Zig 0.17, using only the standard library.
-It plays Infocom-format story files (versions 1–5, 7 and 8) in the terminal
+It plays Infocom-format story files (versions 1–5, 7, and 8) in the terminal
 and can serve a live object inspector and map of the explored world.
 
 <img src="docs/screenshots/terminal.webp" width="700"
@@ -12,7 +12,7 @@ zig build
 ./zig-out/bin/zmachine path/to/zork1.z3
 ```
 
-Prebuilt binaries for Linux, macOS and Windows are on the
+Prebuilt binaries for Linux, macOS, and Windows are on the
 [releases page](https://github.com/idiomatic/zmachine/releases).
 
 > [!NOTE]
@@ -28,7 +28,7 @@ Prebuilt binaries for Linux, macOS and Windows are on the
 
 | Option | Meaning |
 | --- | --- |
-| `-w`, `--web [port]` | Play together on `http://127.0.0.1:<port>/`, with the discussion, audit log and inspector as tabs beside the game; the port defaults to 9675 |
+| `-w`, `--web [port]` | Play together on `http://127.0.0.1:<port>/`, with the discussion, audit log, and inspector as tabs beside the game; the port defaults to 9675 |
 | `--listen <address>` | Also let players on other machines join with a password (see [Players on other machines](#players-on-other-machines)); implies `--web` |
 | `--mode <debate\|turns>` | Start in that playing mode (default `debate`); implies `--web` |
 | `--grant-inspector` | Let every AI partner read the inspector (see [Web inspector](#web-inspector)); implies `--web` |
@@ -40,7 +40,7 @@ Prebuilt binaries for Linux, macOS and Windows are on the
 
 When stdout is a terminal, the interpreter draws full-screen with
 xterm-256color escape sequences: a colored status line, a scrolling lower
-window, an upper window for version 4+ stories, text styles, colors and a
+window, an upper window for version 4+ stories, text styles, colors, and a
 `[MORE]` prompt.
 
 When input is piped in, commands are echoed so the output
@@ -73,8 +73,8 @@ third being typed:
 
 | | `default` | `mono` | `light` |
 | --- | --- | --- | --- |
-| Light terminal | <img src="docs/screenshots/style-default-light.webp" alt="The default style on a light terminal: blue status line, earlier commands in teal, the command being typed in bold teal."> | <img src="docs/screenshots/style-mono-light.webp" alt="The mono style on a light terminal: reverse-video status line, earlier commands, prompt and the command being typed all in bold black."> | <img src="docs/screenshots/style-light-light.webp" alt="The light style on a light terminal: blue status line, earlier commands in blue, the command being typed in bold blue."> |
-| Dark terminal | <img src="docs/screenshots/style-default-dark.webp" alt="The default style on a dark terminal: blue status line, earlier commands in teal, the command being typed in bold teal."> | <img src="docs/screenshots/style-mono-dark.webp" alt="The mono style on a dark terminal: reverse-video status line, earlier commands, prompt and the command being typed all in bold white."> | <img src="docs/screenshots/style-light-dark.webp" alt="The light style on a dark terminal: blue status line, earlier commands in blue, which is harder to read on the dark background, and the command being typed in bold blue."> |
+| Light terminal | <img src="docs/screenshots/style-default-light.webp" alt="The default style on a light terminal: blue status line, earlier commands in teal, the command being typed in bold teal."> | <img src="docs/screenshots/style-mono-light.webp" alt="The mono style on a light terminal: reverse-video status line, earlier commands, prompt, and the command being typed all in bold black."> | <img src="docs/screenshots/style-light-light.webp" alt="The light style on a light terminal: blue status line, earlier commands in blue, the command being typed in bold blue."> |
+| Dark terminal | <img src="docs/screenshots/style-default-dark.webp" alt="The default style on a dark terminal: blue status line, earlier commands in teal, the command being typed in bold teal."> | <img src="docs/screenshots/style-mono-dark.webp" alt="The mono style on a dark terminal: reverse-video status line, earlier commands, prompt, and the command being typed all in bold white."> | <img src="docs/screenshots/style-light-dark.webp" alt="The light style on a dark terminal: blue status line, earlier commands in blue, which is harder to read on the dark background, and the command being typed in bold blue."> |
 
 | Part | What it styles |
 | --- | --- |
@@ -94,7 +94,7 @@ A look is attributes and a color joined by `+`:
 
 - attributes: `bold`, `dim`, `italic`, `underline`, `reverse`, or `plain`
   for none
-- color: `fg`, `fg/bg` or `/bg`, each one of
+- color: `fg`, `fg/bg`, or `/bg`, each one of
   - a theme color: `black`, `red`, `green`, `yellow`, `blue`, `magenta`,
     `cyan`, `white`, or `bright-<name>`
   - a 256-color number, such as `222`
@@ -200,8 +200,8 @@ name, which the others see beside your messages and commands. A name is 1
 to 32 printable characters, unique among those playing. `you` and
 `console` are taken.
 
-The page is a tiling workspace of tabs: the game, the discussion and the
-audit log, which you can drag to rearrange, split or close. The discussion has everyone's thoughts, messages and commands, each
+The page is a tiling workspace of tabs: the game, the discussion, and the
+audit log, which you can drag to rearrange, split, or close. The discussion has everyone's thoughts, messages, and commands, each
 player in their own color, with suggested commands as buttons that send
 them. You can also keep playing in the terminal; everyone sees the same
 game, and late joiners get all of it. Under the Discussion header, a strip
@@ -231,7 +231,7 @@ The page remembers its layout in your browser:
 - **A shrinks and A enlarges** the game text, from 8 to 64 pixels
   (14 at first).
 - **The theme button** (◐ system, ☀︎ light, ☾ dark) cycles between them;
-  `?theme=auto`, `?theme=light` or `?theme=dark` overrides it.
+  `?theme=auto`, `?theme=light`, or `?theme=dark` overrides it.
 
 ### The leader and the modes
 
@@ -274,13 +274,13 @@ so after a second kick the page suggests choosing a new password.
 - **The password:** it is three random words from the [EFF short word
   list](https://www.eff.org/dice), such as `amber-otter-glide`, unless
   `ZMACHINE_PASSWORD` sets one.
-  - Case, hyphens and spaces don't matter.
+  - Case, hyphens, and spaces don't matter.
   - Wrong guesses are slowed down, and are logged.
 - **Invite links:** ⚭ in the Discussion header copies a link such as
   `http://203.0.113.69:9675/?password=amber-otter-glide`. On this machine
   it works for anyone; on another machine, for the leader if they are a
   person.
-  - Opening the link gives its password, sets the cookie and redirects to
+  - Opening the link gives its password, sets the cookie, and redirects to
     `/`, so the password leaves the address bar.
   - The link's address is the `--listen` address if you named one.
     Otherwise it is the one the opener used, or the address this machine
@@ -333,7 +333,7 @@ claude mcp add --transport http zmachine http://127.0.0.1:9675/mcp
 
 For a smaller model, use `http://127.0.0.1:9675/mcp/simple` (an `Mcp-Profile: simple`
 header also works). It then sees four tools: `send_command(command,
-thought)`, `read_recent`, `tell_players` and `get_help`, names itself after the client, and
+thought)`, `read_recent`, `tell_players`, and `get_help`, names itself after the client, and
 gets short plain-text replies.
 
 Any other AI can join the same way with its own MCP client. AI partners
@@ -346,17 +346,17 @@ them apart; the simple profile's `send_command` also takes a `thought`.
 
 | Tool | What it does |
 | --- | --- |
-| `introduce_self` | Say the name it goes by; its thoughts, messages and commands appear under it |
+| `introduce_self` | Say the name it goes by; its thoughts, messages, and commands appear under it |
 | `get_story_info` | The story's file, Z-machine version, release, serial number, the random seed, and the mode |
 | `read_game` | The game text since it last looked, the status line, the mode, who leads and plays, and messages and thoughts from the others |
 | `send_command` | Send a command and get the game's response (in debate, only when it leads) |
 | `share_thoughts` | Show its thinking beside the game, under its name, with suggested commands as buttons |
-| `wait_for_player` | Wait for a move, message, thought or other change from someone else |
+| `wait_for_player` | Wait for a move, message, thought, or other change from someone else |
 | `pass_leadership` | Leader only: pass the lead to a player, or to `console` |
 | `set_mode` | Leader only: `debate` or `turns` |
 | `kick_player` | Leader only: kick a remote player or AI partner, with a reason posted to the discussion |
 | `new_password` | Leader only: make three new random words. The AI never sees them, so it announces the change |
-| `read_inspector` | Only when let: the room it's in with everything in it, what changed this turn and the map; one object's details; or the globals |
+| `read_inspector` | Only when let: the room it's in with everything in it, what changed this turn, and the map; one object's details; or the globals |
 
 The instructions ask partners to use the leader's powers with discretion:
 
@@ -407,12 +407,12 @@ curl -d 'open mailbox' http://127.0.0.1:9675/command
 | `POST /erase-map` | Erase the inspector's map, starting it again from the current room (this machine only; logged). |
 | `POST /grant-inspector`, `POST /revoke-inspector` | Let the AI partner the body names read the inspector, or stop it (people on this machine; posted and logged). |
 | `GET /me` | Who the server takes you for, and whether you lead. |
-| `POST /login` | A remote player gives the password; `204` sets the session cookie, `401` is wrong and `429` is too soon. |
+| `POST /login` | A remote player gives the password; `204` sets the session cookie, `401` is wrong, and `429` is too soon. |
 | `POST /join` | A person chooses a name (the body); `409` if it is taken. |
 | `POST /command` | (`?format=text` replies with only the game text.) Send the body as one line of input (or, when the story reads single keys, its keys in turn; an empty body is Return) and wait for the reply. If the game does not answer within 20 seconds, the reply is `202` with `"pending":true` and the text appears in `/transcript`. In debate mode, a command from anyone but the leader gets `409`. |
-| `GET /transcript?since=<offset>` | (`&format=text` returns only the game text, its last 4,000 bytes.) The game text since an offset, as a player sees it, with the status line, the mode, the next `offset` and whether the game is `waiting` for input. Add `&wait=1` to hold the request until there is new text. |
+| `GET /transcript?since=<offset>` | (`&format=text` returns only the game text, its last 4,000 bytes.) The game text since an offset, as a player sees it, with the status line, the mode, the next `offset`, and whether the game is `waiting` for input. Add `&wait=1` to hold the request until there is new text. |
 | `POST /say` | Add to the discussion: `{"kind":"thought","text":"...","suggestions":["..."]}`. The kind is `thought` or `message`; at most 8 suggestions, each one line. |
-| `GET /discussion?since=<n>` | The mode, the leader (`console` for this machine), the players, and the posts after `n`. Posts include thoughts, messages, commands, mode and leader changes, joins, leaves, kicks and password changes, each with its author. Add `&wait=1` to hold the request until there is one. |
+| `GET /discussion?since=<n>` | The mode, the leader (`console` for this machine), the players, and the posts after `n`. Posts include thoughts, messages, commands, mode and leader changes, joins, leaves, kicks, and password changes, each with its author. Add `&wait=1` to hold the request until there is one. |
 | `POST /mode` | The leader sets `debate` (the default) or `turns`; others get `403`. |
 | `POST /lead` | Pass the leadership to the named player, or to `console`. The console's machine can always take it back. |
 | `POST /kick` | The leader kicks the named remote player or AI partner. |
@@ -441,10 +441,10 @@ Who is asking:
 
 The audit log, open to every player, lists every command sent with `POST /command` and every line
 typed at the keyboard. It also lists joins and leaves, the leadership,
-kicks, and password logins, changes, invite links and reveals. It never shows the password. It flags as
+kicks, and password logins, changes, invite links, and reveals. It never shows the password. It flags as
 suspicious anything a player could not see: opening the object inspector,
-reading its snapshots (the object tree, attributes and globals), wrong
-passwords and refused requests. Each entry names the client by its
+reading its snapshots (the object tree, attributes, and globals), wrong
+passwords, and refused requests. Each entry names the client by its
 `User-Agent`, after the player's name, such as
 `Claude via zmachine-mcp/0.4.2`.
 
@@ -459,31 +459,31 @@ module imports only those listed in [`build.zig`](build.zig).
 
 | File | Contents |
 | --- | --- |
-| [`src/main.zig`](src/main.zig) | Command line, setup and signal handling |
-| [`src/commands.zig`](src/commands.zig) | Console commands: `/lead`, `/clear`, `/mode`, `/password`, `/showpassword`, `/help`, `/who`, `/promote`, `/kick`, `/grant`, `/revoke`, `/say`, `/log` and `/invite` |
-| [`src/vm/Machine.zig`](src/vm/Machine.zig) | Processor: memory, stack, instruction decoding and opcodes; runs until input or a step limit |
+| [`src/main.zig`](src/main.zig) | Command line, setup, and signal handling |
+| [`src/commands.zig`](src/commands.zig) | Console commands: `/lead`, `/clear`, `/mode`, `/password`, `/showpassword`, `/help`, `/who`, `/promote`, `/kick`, `/grant`, `/revoke`, `/say`, `/log`, and `/invite` |
+| [`src/vm/Machine.zig`](src/vm/Machine.zig) | Processor: memory, stack, instruction decoding, and opcodes; runs until input or a step limit |
 | [`src/vm/ObjectTable.zig`](src/vm/ObjectTable.zig) | Object tree and property tables |
 | [`src/vm/zstring.zig`](src/vm/zstring.zig) | Z-string decoding, dictionary encoding, ZSCII/Unicode |
 | [`src/vm/quetzal.zig`](src/vm/quetzal.zig) | Quetzal save files |
 | [`src/vm/Display.zig`](src/vm/Display.zig) | What the machine draws on and reads from |
 | [`src/vm/Storage.zig`](src/vm/Storage.zig) | Where it keeps saved games and the transcript (the working directory) |
 | [`src/vm/RecordingDisplay.zig`](src/vm/RecordingDisplay.zig), [`src/vm/test.zig`](src/vm/test.zig) | Tests that run tiny assembled stories |
-| [`src/console/Screen.zig`](src/console/Screen.zig) | Terminal windows, status line, styles and input |
-| [`src/console/terminal.zig`](src/console/terminal.zig) | Window size, raw keys and Ctrl-C on POSIX and Windows |
+| [`src/console/Screen.zig`](src/console/Screen.zig) | Terminal windows, status line, styles, and input |
+| [`src/console/terminal.zig`](src/console/terminal.zig) | Window size, raw keys, and Ctrl-C on POSIX and Windows |
 | [`src/console/InputSource.zig`](src/console/InputSource.zig) | Where the screen's input comes from |
 | [`src/console/TerminalInput.zig`](src/console/TerminalInput.zig) | Input straight from standard input, without `--web` |
 | [`src/console/TestTerminal.zig`](src/console/TestTerminal.zig), [`src/console/test.zig`](src/console/test.zig) | Tests of what the screen draws, through a small terminal emulator |
 | [`src/hub/Hub.zig`](src/hub/Hub.zig) | One game, many inputs: the keyboard and web commands, their replies, and the game text and status line players see |
-| [`src/poly/Group.zig`](src/poly/Group.zig) | The rules of playing together: players, the leader, modes, kicks and inspector access |
+| [`src/poly/Group.zig`](src/poly/Group.zig) | The rules of playing together: players, the leader, modes, kicks, and inspector access |
 | [`src/poly/Players.zig`](src/poly/Players.zig), [`Discussion.zig`](src/poly/Discussion.zig), [`Access.zig`](src/poly/Access.zig), [`AuditLog.zig`](src/poly/AuditLog.zig) | Its parts: the players, the discussion, remote sessions and password guesses, the audit log |
 | [`src/poly/world.zig`](src/poly/world.zig) | The time and randomness the rules see, faked in tests |
 | [`src/poly/Password.zig`](src/poly/Password.zig) | Passwords for remote players: three words from the EFF short word list |
 | [`src/poly/eff_short_wordlist_1.txt`](src/poly/eff_short_wordlist_1.txt) | The EFF short word list, embedded in the binary |
 | [`src/protocol/root.zig`](src/protocol/root.zig) | The JSON the routes speak: each reply's type, shared by the server and the MCP server |
 | [`src/inspector/Inspector.zig`](src/inspector/Inspector.zig) | Map tracking and JSON snapshots for the web page |
-| [`src/inspector/routes.zig`](src/inspector/routes.zig) | Its routes: the page, snapshots and erasing the map |
+| [`src/inspector/routes.zig`](src/inspector/routes.zig) | Its routes: the page, snapshots, and erasing the map |
 | [`src/inspector/inspector.html`](src/inspector/inspector.html) | The inspector's panels (a fragment the play page loads), embedded in the binary |
-| [`src/web/web.zig`](src/web/web.zig) | Embedded HTTP server: who is asking, access rules, playing together, remote access and the audit log; other modules' routes (the inspector's) handed to it |
+| [`src/web/web.zig`](src/web/web.zig) | Embedded HTTP server: who is asking, access rules, playing together, remote access, and the audit log; other modules' routes (the inspector's) handed to it |
 | [`src/web/play.html`](src/web/play.html) | The play page, with the audit log panel and the inspector's dock, embedded in the binary |
 | [`src/web/login.html`](src/web/login.html) | The password page for remote players, embedded in the binary |
 | [`src/mcp/mcp.zig`](src/mcp/mcp.zig) | MCP service (sessions behind `POST /mcp`) that lets an AI partner play through the web server |
@@ -502,7 +502,7 @@ Run the unit tests with `zig build test`.
 
 ### Open-source stories
 
-Zork I, II and III are [open source](https://opensource.microsoft.com/blog/2025/11/20/preserving-code-that-shaped-generations-zork-i-ii-and-iii-go-open-source/)
+Zork I, II, and III are [open source](https://opensource.microsoft.com/blog/2025/11/20/preserving-code-that-shaped-generations-zork-i-ii-and-iii-go-open-source/)
 under the MIT license (Copyright (c) 2025 Microsoft). `zig build stories`
 downloads their compiled story files from
 [historicalsource](https://github.com/historicalsource/zork1) at a pinned

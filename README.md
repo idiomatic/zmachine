@@ -493,6 +493,8 @@ module imports only those listed in `build.zig`.
 | [`tools/screenshots/`](tools/screenshots/) | Scripts and notes for retaking this README's screenshots and phone animations |
 | [`tests/walkthroughs/`](tests/walkthroughs/) | Walkthroughs and expected transcripts for Zork I-III |
 | [`docs/specifications/`](docs/specifications/README.md) | The Z-machine, Quetzal, MCP, and cookie specifications it follows |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | How it's put together: modules, interfaces, threads, and tests |
+| [`DEVELOPMENT.md`](DEVELOPMENT.md) | Playing with small models, and plans |
 
 ## Testing
 

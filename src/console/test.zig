@@ -161,3 +161,15 @@ test "resizing redraws the status line and the scroll region" {
     h.screen.out.flush() catch unreachable;
     try testing.expectEqual(len, h.out.written().len);
 }
+
+test "erasing the whole screen clears to the background, not reversed" {
+    var h: Harness = undefined;
+    h.init("", 20, 5);
+    defer h.deinit();
+    try h.screen.start();
+    try h.screen.setColor(9, 3); // white on red
+    try h.screen.setStyle(1); // reverse
+    try h.screen.eraseWindow(-1);
+    try h.screen.out.flush();
+    try testing.expect(std.mem.indexOf(u8, h.out.written(), "\x1b[0m\x1b[48;5;160m\x1b[2J") != null);
+}

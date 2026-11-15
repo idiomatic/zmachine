@@ -552,7 +552,12 @@ pub fn eraseWindow(s: *Screen, which: i16) Error!void {
                 s.upper_rows = 0;
                 if (s.ansi) try s.applyRegion();
             }
-            if (s.ansi) try s.out.writeAll("\x1b[0m\x1b[2J");
+            // Cleared to the current background, never reversed.
+            if (s.ansi) {
+                try s.out.writeAll("\x1b[0m");
+                if (s.bg >= 2) try s.out.print("\x1b[48;5;{d}m", .{palette[s.bg - 2]});
+                try s.out.writeAll("\x1b[2J");
+            }
             s.lower_row = if (s.version >= 5) s.topRows() + 1 else s.height;
             s.col = 0;
             s.upper_row = 1;

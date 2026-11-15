@@ -772,7 +772,15 @@ fn execVar(m: *Machine, op: u8, ops: []const u16) !void {
             if (ops.len == 0) return m.invalid();
             try m.call(ops[0], ops[1..], try m.fetchByte());
         },
-        13 => try m.display.eraseWindow(signed(arg(ops, 0))), // erase_window
+        13 => { // erase_window
+            const which = signed(arg(ops, 0));
+            try m.display.eraseWindow(which);
+            // -1 also unsplits the screen and selects the lower window.
+            if (which == -1) {
+                m.window = 0;
+                try m.display.setWindow(0);
+            }
+        },
         14 => if (arg(ops, 0) == 1) try m.display.eraseLine(), // erase_line
         15 => try m.display.setCursor(arg(ops, 0), arg(ops, 1)), // set_cursor
         16 => { // get_cursor
@@ -853,8 +861,14 @@ fn execExt(m: *Machine, op: u8, ops: []const u16) !void {
         9 => try m.saveUndo(), // save_undo
         10 => try m.restoreUndo(), // restore_undo
         11 => try m.printUnicode(a), // print_unicode
-        12 => try m.store(if (m.unicode.fromUnicode(a) != null or a >= 0xa0) 3 else 0), // check_unicode
+        12 => try m.store(m.checkUnicode(a)), // check_unicode
         13 => {}, // set_true_colour
+        // Version 6's picture opcodes, which some version 5 development
+        // builds call: there are no pictures.
+        5, 7, 8, 28 => {}, // draw_picture, erase_picture, set_margins, picture_table
+        6 => try m.branch(false), // picture_data
+        // EXT:29-255 are to be ignored, not halted on.
+        29...255 => {},
         else => return m.invalid(),
     }
 }
@@ -928,8 +942,21 @@ pub fn printAscii(m: *Machine, text: []const u8) !void {
 
 fn printUnicode(m: *Machine, cp: u16) !void {
     if (m.unicode.fromUnicode(cp)) |z| return m.printZscii(z);
-    if (m.memory_stream_depth > 0) return m.printZscii('?');
-    if (m.screen_stream) try m.display.print(std.math.cast(u21, cp) orelse '?');
+    if (m.memory_stream_depth > 0 or !printable(cp)) return m.printZscii('?');
+    if (m.screen_stream) try m.display.print(cp);
+    if (m.memory[0x11] & 0x01 != 0 and m.window == 0) try m.transcribe(cp);
+}
+
+/// Whether a Unicode character can be shown: not a control character.
+fn printable(cp: u16) bool {
+    return cp >= 0x20 and !(cp >= 0x7f and cp <= 0x9f);
+}
+
+/// `check_unicode`: bit 0 if the character can be printed, bit 1 if it can
+/// also be typed (only characters with a ZSCII code reach the game).
+fn checkUnicode(m: *const Machine, cp: u16) u16 {
+    if (!printable(cp)) return 0;
+    return if (m.unicode.fromUnicode(cp) != null) 3 else 1;
 }
 
 pub fn printZscii(m: *Machine, zscii: u16) !void {
@@ -1389,7 +1416,9 @@ fn saveUndo(m: *Machine) !void {
 
 fn restoreUndo(m: *Machine) !void {
     const u = m.undo orelse return m.store(0);
+    const flags2 = m.memory[0x11] & 0x03;
     @memcpy(m.memory[0..m.static_base], u.memory);
+    m.memory[0x11] = (m.memory[0x11] & ~@as(u8, 0x03)) | flags2;
     @memcpy(m.stack[0..u.stack.len], u.stack);
     @memcpy(m.frames[0..u.frames.len], u.frames);
     m.sp = @intCast(u.stack.len);

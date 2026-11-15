@@ -571,8 +571,8 @@ start with `zork1`.
 
 The step fails where zmachine stops with an error or hangs and dfrotz
 plays on; other differences are reported. A few catalog files are broken
-(both interpreters stop), and some Zork Zero development builds use
-version 6 opcodes in a version 5 story.
+(both interpreters stop); some Zork Zero development builds call version 6's
+picture opcodes, which zmachine answers as having no pictures.
 
 ### Local files
 

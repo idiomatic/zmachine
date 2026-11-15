@@ -58,6 +58,69 @@ test "je with fewer than two operands never branches" {
     try testing.expectEqualStrings("hihi", text);
 }
 
+test "restore_undo keeps the transcript bit" {
+    const s = story(&.{
+        0xbe, 0x09, 0xff, 0x10, // save_undo -> g0
+        0x41, 0x10, 0x02, 0xcc, // je g0 2 ?(after the quit below)
+        0xe2, 0x57, 0x11, 0x00, 0x01, // storeb 0x11 0 1: transcript on
+        0xbe, 0x0a, 0xff, 0x11, // restore_undo -> g1
+        0xba, // quit
+        0xba, // quit (after the undo)
+    });
+    var display: RecordingDisplay = .init(testing.allocator, &.{});
+    defer display.deinit();
+    var cwd: Storage.Cwd = .init(testing.allocator, testing.io);
+    defer cwd.deinit();
+    const m = try Machine.init(testing.allocator, testing.io, &s, display.display(), cwd.storage(), "test.qzl");
+    defer m.deinit();
+    try m.run();
+    try testing.expectEqual(1, m.memory[0x11] & 0x01);
+}
+
+test "erase_window -1 selects the lower window" {
+    const s = story(&.{
+        0xeb, 0x7f, 0x01, // set_window 1
+        0xed, 0x3f, 0xff, 0xff, // erase_window -1
+        0xba, // quit
+    });
+    var display: RecordingDisplay = .init(testing.allocator, &.{});
+    defer display.deinit();
+    var cwd: Storage.Cwd = .init(testing.allocator, testing.io);
+    defer cwd.deinit();
+    const m = try Machine.init(testing.allocator, testing.io, &s, display.display(), cwd.storage(), "test.qzl");
+    defer m.deinit();
+    try m.run();
+    try testing.expectEqual(0, m.window);
+}
+
+test "unknown and picture EXT opcodes don't halt" {
+    const text = try run(testing.allocator, &.{
+        0xbe, 0x1d, 0xff, // EXT:29, ignored
+        0xbe, 0x80, 0xff, // EXT:128, ignored
+        0xbe, 0x06, 0x5f, 0x01, 0x00, 0xc5, // picture_data 1 0 ?(skip the print): no pictures
+        0xb2, 0xb5, 0xc5, // print "hi"
+        0xbe, 0x05, 0x7f, 0x01, // draw_picture 1: nothing
+        0xba, // quit
+    }, &.{});
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("hi", text);
+}
+
+test "check_unicode and print_unicode" {
+    const text = try run(testing.allocator, &.{
+        0xbe, 0x0c, 0x3f, 0x00, 0xe9, 0x00, // check_unicode U+00E9 -> sp: in the table
+        0xe6, 0xbf, 0x00, // print_num sp
+        0xbe, 0x0c, 0x3f, 0x26, 0x03, 0x00, // check_unicode U+2603 -> sp: printable only
+        0xe6, 0xbf, 0x00, // print_num sp
+        0xbe, 0x0c, 0x3f, 0x00, 0x07, 0x00, // check_unicode U+0007 -> sp: neither
+        0xe6, 0xbf, 0x00, // print_num sp
+        0xbe, 0x0b, 0x3f, 0x00, 0x07, // print_unicode U+0007: shown as ?
+        0xba, // quit
+    }, &.{});
+    defer testing.allocator.free(text);
+    try testing.expectEqualStrings("310?", text);
+}
+
 test "aread stores lowercased input" {
     const text = try run(testing.allocator, &.{
         0xe4, 0x5f, 0x80, 0x00, 0x00, // aread 0x80 0 -> sp
